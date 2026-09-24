@@ -1,0 +1,6 @@
+{
+  "name": "Personal Health Coach",
+  "description": "A quiet, warm, single-page personal health companion and decision journal for what to eat, how to move, and how the body changes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
