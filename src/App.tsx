@@ -25,7 +25,8 @@ import { ForecastBand } from './components/ForecastBand';
 import { ProfileSheet } from './components/ProfileSheet';
 import { formatAbs } from './domain/format';
 import { validateWeightMeasurement } from './domain/weight';
-import { healthRepository } from './services/repository';
+import { healthRepository, repositoryKind } from './services/repository';
+import { SignIn } from './components/SignIn';
 import { toRepositoryError } from './services/healthRepository';
 import {
   CreateDailyStateInput,
@@ -52,6 +53,8 @@ export default function App() {
   const [todayData, setTodayData] = useState<TodayData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** 云端模式且未登录 → 显示登录页（静态本地版永不进入此态）。 */
+  const [needsSignIn, setNeedsSignIn] = useState(false);
 
   // Modals
   const [recordSheetOpen, setRecordSheetOpen] = useState(false);
@@ -89,9 +92,14 @@ export default function App() {
       setLoadError(null);
       const today = await healthRepository.getToday();
       setTodayData(today);
+      setNeedsSignIn(false);
     } catch (err) {
       const error = toRepositoryError(err);
       console.error('Failed to load health diary:', error);
+      if (error.code === 'auth' && repositoryKind === 'supabase') {
+        setNeedsSignIn(true);
+        return;
+      }
       setLoadError(
         error.code === 'not_implemented'
           ? '云库（Supabase）既配而后端之法未通：请去 .env 中 VITE_SUPABASE_* 之项，或补其实作。'
@@ -105,6 +113,13 @@ export default function App() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  /** 云端登录：发送 magic link（点击邮件后回跳并建立会话）。 */
+  const handleSendLoginLink = (email: string) =>
+    runMutation(async () => {
+      await healthRepository.signIn(email, '');
+      showToast('登录链接已发出 · 请查收邮件');
+    }, '登录链接未发出');
 
   // Open Quick Record
   const handleOpenRecord = (tab: RecordTab = 'meal') => {
@@ -213,6 +228,27 @@ export default function App() {
       showToast('手记已复其初');
     }, '复其初未成');
   };
+
+  if (needsSignIn) {
+    return (
+      <div className="min-h-screen text-ink selection:bg-accentsoft selection:text-ink">
+        <AnimatePresence>
+          {toastMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-ink text-white text-xs font-medium shadow-md flex items-center gap-1.5"
+            >
+              <Check className="w-3.5 h-3.5 text-accentbright stroke-[2.5]" />
+              <span>{toastMessage}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <SignIn onSendLink={handleSendLoginLink} />
+      </div>
+    );
+  }
 
   if (isLoading || !todayData) {
     if (loadError) {

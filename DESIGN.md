@@ -145,7 +145,7 @@
 - Test/screenshot expectations: 改动前后必跑 `npm test`（四套）、`npm run lint`、`npm run build`、`.shots/e2e.mjs`；版式用 `.shots/layout-probe.mjs <url> <width>` 断言横线同 y、标题左缘、`overflow=0`；截图 `.shots/shot.mjs <url> <width> <out.png>` 并人工复核。
 
 ## Open questions
-- [ ] **云端数据路径未实作**：`SupabaseHealthRepository` 是 fail-fast 壳；需补 `@supabase/supabase-js` + 24 个方法 + magic link 登录界面（表结构与 RLS 已就绪，见 `supabase/schema.sql`）。Owner: 实现 / 影响: 跨设备同步。
+- [x] **云端数据路径已实作**（零依赖 fetch 直连；表结构与 RLS 见 `supabase/schema.sql`，逐步启用见 `docs/deploy.md`）。遗留：本机 localStorage → 云端的一次性导入尚未提供。Owner: 实现 / 影响: 老数据迁移。
 - [ ] BMI 分不清肌肉与脂肪：已用腰围作第二证据，是否再加体脂率（需设备测量）待定。Owner: 用户 / 影响: 判定精度。
 - [ ] `共列网格` 的名列定宽 84px 意味着标签限 5 字以内；若未来出现更长指标名，需要新的网格变体或允许折行。
 - [ ] 名录式条目的点线引导在中列伸缩（标题越长点线越短）；是否改为「点线定长 + 标题截断」待定。

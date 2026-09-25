@@ -1,10 +1,9 @@
 # 部署步骤（Cloudflare Pages + Supabase 免费档）
 
 > 结论先说清楚：
-> **① 静态演示版现在就能部署**（零配置、本机 localStorage、无需后端）。
-> **② 云端同步版还差一步**：`SupabaseHealthRepository` 是**故意保留的 fail-fast 壳**
-> （24 个方法全部抛 `not_implemented`，绝不静默返回空数据），需要补实作 + 安装官方客户端。
-> 下面两节分别给出可直接照做的步骤，以及第 ② 节的缺口清单。
+> **① 静态版**：零配置、本机 localStorage，推上去就能用。
+> **② 云端同步版**：数据层**已实作**（零依赖，浏览器直连 Supabase Auth + REST），
+> 只需三步：跑建表 SQL → 配置 Supabase 邮件登录 → 在 Pages 填两个环境变量。
 
 ---
 
@@ -64,8 +63,8 @@ npm run build          # 产物在 dist/
 | Root directory | 留空（仓库根就是项目根） |
 | 环境变量 | `NODE_VERSION` = `22.12.0`；`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` **留空** |
 
-> ⚠️ **两个环境变量现在千万不要填**：一旦填了，应用会切到尚未实作的云库壳，页面会显示
-> 「云库（Supabase）既配而后端之法未通」。静态版必须留空。
+> **只想要静态版就留空**：留空 = 本机 localStorage（零配置即可用）。
+> 填上两项 = 切换到 Supabase 云端同步（见第二节，已实作）。
 
 **路径 B：面板给的是 Worker（新版 UI 有时如此）**
 
@@ -165,7 +164,7 @@ npm run build          # 产物在 dist/
    删除：forsale.hugedomainsdns.com
    ```
 
-   ⚠️ 每家分配的两台不同，以你自己的面板显示为准；**必须两台都填、旧的都删**。
+   每家分配的两台不同，以你自己的面板显示为准；**必须两台都填、旧的都删**。
 3. 保存。生效通常 5 分钟–24 小时（极端 48 小时）；Cloudflare 会发「域名已激活」邮件。
    在此之前的 NS 变更不会导致停机，但两次查询可能拿到不同的解析结果。
 
@@ -176,7 +175,7 @@ Cloudflare 在添加域名时会**自动扫描并导入**原有记录，但有�
 | 记录 | 为什么重要 | 怎么做 |
 |---|---|---|
 | `MX` / `TXT`（SPF、DKIM、DMARC、验证记录） | 一旦丢失，**该域名的邮箱立刻收不到信** | 核对是否与注册商/DNS 商处的原记录一致；缺了就手工补 |
-| `A` / `AAAA` 指向 hugedomains 停放页的 | 会让人访问到「域名出售」页而不是你的手记 | 删掉这些停放记录，交给下一步的 Pages 自定义域自动接管 |
+| `A` / `AAAA` 指向 hugodomains 停放页的 | 会让人访问到「域名出售」页而不是你的手记 | 删掉这些停放记录，交给下一步的 Pages 自定义域自动接管 |
 
 ### 3. 在 Pages 项目里绑定
 
@@ -240,20 +239,45 @@ curl "$PROJECT_URL/rest/v1/weight_records?select=*" \
 页面里的错误提示已为此准备好：若两项填了但客户端未装/未实作，界面会明确显示
 「云库（Supabase）既配而后端之法未通」，**不会**给出一个看起来正常的空应用。
 
-### 4. 还差什么才能开云端版（缺口清单）
+### 4. 页面侧：填环境变量并重新部署
 
-| # | 缺口 | 具体做法 |
+在 Pages 项目 → Settings → Environment variables 加两项（Production 与 Preview 都加）：
+
+| 变量 | 值 |
+|---|---|
+| `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | anon public key |
+
+改环境变量后**必须重新部署一次**才会生效（Deployments → Retry deployment，或推一个新提交）。
+
+### 5. 首次进入：登录 + 建档
+
+1. 打开站点 → 显示**登录页**（不是空白页：未登录时数据方法会抛 `auth`，页面据此切到登录页）。
+2. 填邮箱 → 「发登录链接」 → 到**同一浏览器**打开邮件里的链接 → 自动回到站点并建立会话。
+3. 首次进入没有档案 → 显示「体征档 · 未建档」→ 点「立档」填身高/性别/出生年/活动水平/腰围/目标。
+4. 此后所有记录直接落到你的 Supabase 库；换设备用同一邮箱登录即可看到同一份数据。
+
+### 6. 数据层实现方式（便于排错）
+
+| 关注点 | 现状 |
+|---|---|
+| 依赖 | **零新增依赖**：`src/services/supabaseRest.ts` 用 `fetch` 直连 Auth 与 PostgREST（因此不需要官方客户端，也不会影响 `npm ci`） |
+| 派生计算 | 与本地版**共用同一段** `src/services/todayAssembly.ts`；契约测试断言两条路径产出的 `TodayData` 逐字节相同 |
+| 会话 | 存 localStorage（`phc_supabase_session_v1`），到期前 60 秒自动用 refresh token 续期；退出即清除 |
+| 演示数据 | 云端**不灌任何演示数据**，首次进入就是「未建档」（本地版才带记录） |
+| 「复其初」 | 云端**显式拒绝**（`not_implemented`），因为它是本地演示用的清库动作 |
+| 本地数据迁移 | 暂未提供「本机 localStorage 一键导入云端」（本地那份是演示数据，直接重新建档即可） |
+
+### 7. 排错
+
+| 现象 | 原因 | 处置 |
 |---|---|---|
-| 1 | 官方客户端 | 在能联网的机器上 `npm i @supabase/supabase-js`（本机沙箱把 npm 缓存设为只读，未能安装；**代码里目前没有任何 supabase 依赖，也没有半成品调用**） |
-| 2 | 实作 `SupabaseHealthRepository` | 替换 `src/services/supabaseHealthRepository.ts` 的 24 个 `this.fail(...)`；行到域模型的映射见 `supabase/schema.sql` 的列名（snake_case 对 `src/types/health.ts`） |
-| 3 | 认证界面 | 邮箱 magic link 登录/登出（`signInWithOtp` / `onAuthStateChange`），未登录时显示登录页 |
-| 4 | 计算位置 | **不需要搬到服务端**：统计全部由 `src/domain/` 纯函数在浏览器现算（免费档无 server tier，这正好与现有架构一致） |
-| 5 | 旧数据 | 可选择一次性把本机 localStorage 的记录导入云端（按 `user_id` upsert）；演示种子只在无云配置时使用，云端**永不自灌演示数据** |
-| 6 | 免费档注意 | 500 MB 库 / 5 GB 带宽 / 50k MAU；单用户数据量极小。写放大来自误触「照准」连点——已由数据质量标记（`needs_review`）+ 逐条「掷还」+ 同日体重去重兜住 |
-
-> 也就是说：**第一节今天可上线**；第二节在补完上表 1–3 之后即可上线，数据库侧（表/RLS/索引）已经齐备。
-
----
+| 打开就是登录页，发信后点链接仍回登录页 | Supabase 的 Redirect URLs 没含当前域名 | Authentication → URL Configuration 把站点域名加进 **Redirect URLs** 与 **Site URL** |
+| 提示「网络不可达」 | URL 写错或没联网 | 核对 `VITE_SUPABASE_URL` 是否 `https://xxx.supabase.co`（含 https、无尾斜杠） |
+| 提示「未登录或会话过期」 | 令牌失效且刷新失败 | 重新走一次邮箱登录 |
+| 收不到登录邮件 | Supabase 免费档内置 SMTP 有频率限制（约每小时数封） | 等一会儿再发；长期使用可在 Authentication → SMTP 配自己的发信 |
+| 写入报 409 / 冲突 | 同日重复写（如体重同日两条） | 同日体重走的是「更新当日之数」，一般不会冲突；若自定义过 schema 需核对主键 |
+| 看到别人的数据 | RLS 没生效 | 立即停止使用并重跑第 2 节越权自测与 `schema.sql` 的 policy 段 |
 
 ## 三、两条路径的差异一览
 
@@ -265,4 +289,5 @@ curl "$PROJECT_URL/rest/v1/weight_records?select=*" \
 | 计算 | 浏览器 `src/domain/` | 同左（一致） |
 | 演示数据 | 首次进入带记录（不含任何人的体征档） | 不灌演示数据；首次进入即「未建档」→ 立档 |
 | 需要环境变量 | 否 | `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` |
-| 迁移 | 读旧形态时自动升级字段（`src/domain/migrate.ts`，只补表单不改数值） | 同左（本地→云端需第 4 节可选导入） |
+| 迁移 | 读旧形态时自动升级字段（`src/domain/migrate.ts`，只补表单不改数值） | 库表结构即最终形态；本地记录暂不自动导入 |
+| 登录 | 无 | 邮箱 magic link（会话存本机并自动续期） |

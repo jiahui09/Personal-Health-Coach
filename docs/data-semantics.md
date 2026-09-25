@@ -184,14 +184,21 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 
 ---
 
-## 10. 版面与文案纪律（与数据层的分工）
+## 10. 数据路径（本地与云端）
+
+- 唯一组装点：`src/services/todayAssembly.ts` 的 `assembleToday(snapshot, now)` —— 输入是六种原始记录，输出是整个 `TodayData`。
+- 本地：`MockHealthRepository` 读 localStorage 后调用它；云端：`SupabaseHealthRepository` 取 PostgREST 行、经 `supabaseMappers` 映射为域模型后调用**同一个**函数。
+- 因此两条路径的统计口径不可能分叉；`src/tests/supabaseContract.test.ts` 用同一批记录分别走两条路径，断言产出逐字节相同。
+- 云端会话：邮箱 magic link，令牌存本机并在到期前 60 秒自动续期；未登录时数据方法抛 `auth`，页面显示登录页而不是空数据。
+
+## 11. 版面与文案纪律（与数据层的分工）
 
 - 页面只呈现**事实 + 一句短批**：方法学、阈值理由、模型出处一律不进正文（README「术语与口径」与「推演所据」面板承接）；刊头不重复「录一笔」、页脚不写「存于本机 / 不假模型」之类自我说明，决策痕迹留在数据层。
 - 所有统计行走 `.inkrow` 共列网格（名｜中列｜值），计量条与点线引导同列 → 全页同起同止；`.inklist-row` 只保证首尾对齐。
 - 线条三级：L1 2px 墨（章节题双线/刊头/页脚）、L2 1px 实线（分组、动作脚注）、L3 1px 点线（名录行、引导线）。
 - 可执行门槛：`.shots/layout-probe.mjs --check`（条 Δ=0、值列不折行、章节行数上限）与 `src/tests/layoutContract.test.ts`（禁方法学文案、禁 linesoft 骨架、双线章节题）。
 
-## 11. 遗留与开放问题
+## 12. 遗留与开放问题
 
 - `UserProfile.currentWeight` 仍是「最近一次测量」的缓存（供引擎入参）；页面显示已全部改读 `WeightSummary.latest`，但字段本身尚未移除。
 - 预测尚未落库为 `WeightPrediction` 记录，因此「上周推演 vs 本周实测」的误差复验（spec §9）只做了纯函数与出处标注，未做持久化复盘。

@@ -183,9 +183,10 @@ npm run build
 ## 4. 部署方案：Cloudflare Pages + Supabase Free
 
 > **逐步操作见 `docs/deploy.md`，数据库建表脚本见 `supabase/schema.sql`。**
-> 现状：**静态版（本机 localStorage）今天即可部署**；**云端同步版**的表结构与 RLS 已就绪，
-> 但 `SupabaseHealthRepository` 仍是**故意 fail-fast 的壳**（24 个方法抛 `not_implemented`，
-> 绝不返回空数据），需要补实作 + `npm i @supabase/supabase-js`（本机 npm 缓存只读,未能安装）。
+> 两条路径都已可用：
+> **静态版**（零配置、本机 localStorage）与 **云端同步版**（Supabase 邮箱 magic link + PostgREST），
+> 后者为**零新增依赖**实现（`src/services/supabaseRest.ts` 用 fetch 直连），两条路径共用同一段
+> 派生逻辑 `src/services/todayAssembly.ts`，跨路径一致性由 `src/tests/supabaseContract.test.ts` 锁定。
 
 **已定方案**：静态托管 Pages + 数据/鉴权 Supabase 免费档，**不引入任何服务端应用层**。
 
@@ -279,6 +280,14 @@ npm run build
     - **诚实优先**：未建档时页面显示「未建档」且不出现任何人体数字，`f_meal` 直接返回 `unavailable` 并要求先建档；删除演示档案（种子只给记录），`migrateProfile` 不再与默认档案合并——空档案就是空档案。
     - **验证**：新增 `src/tests/body.test.ts`（BMI 边界 18.5/25/30、PAL、RMR/TDEE、目标与地板、建议相悖、处方、未建档路径），测试增至 **8 套**；e2e 改为「清空档案 → 未建档不显示人体数字 → 立档 → 派生出现 → 记录照常」；探针新增「配对行无大块留白（≤110px）」与「同一轴内三列全等」，1440/1024/390 全 PASS。
     - **部署**：新增 `supabase/schema.sql`（6 表 + 全表 RLS `auth.uid() = user_id` + 索引 + 越权自测）与 `docs/deploy.md`（静态版今天可上线；云端版缺口 1–6 逐条列出）。
+
+19. **云端同步实作（Supabase，零新增依赖）**（本轮）：
+    - **抽出共用组装层**：`src/services/todayAssembly.ts` 成为「原始记录 → TodayData」的唯一实现，`MockHealthRepository` 与 `SupabaseHealthRepository` 都只负责取数，两条路径不可能算出不同结果（契约测试断言逐字节相同）。
+    - **零依赖直连**：新增 `src/services/supabaseRest.ts`（邮箱 magic link 发送/回跳/hash 换会话/到期前 60 秒自动续期/退出）与 `src/services/supabaseMappers.ts`（6 表行到域模型的映射，能吃 Postgres 的 numeric 字符串与 `HH:MM:SS`），从而**不需要 `@supabase/supabase-js`**，云端 `npm ci` 的确定性不被破坏。
+    - **仓库实作**：24 个方法全部落地（含「同日体重走 PATCH 不新增事实」「档案 upsert」「删除同时限定 id 与 user_id」「云端拒绝复其初」）；未登录时一律抛 `RepositoryError('auth')`，**绝不静默返回空数据**。
+    - **登录界面**：云端模式未登录时显示邮箱登录页（`src/components/SignIn.tsx`），静态版本不受影响。
+    - **验证**：新增 `src/tests/supabaseContract.test.ts`（14 项：映射往返、**跨路径一致性**、magic link 端点与回跳、令牌刷新、错误码映射 401/403/404/409/5xx/断网、未登录抛 auth、写入语义），测试增至 **9 套**；`tsc`（含未用检查）+ `build` + e2e + 三档探针 + 扫描器全绿。
+    - **排错**：`docs/deploy.md` 第 2 节给出 Supabase 配置、越权自测、环境变量、首次登录建档流程与 6 类常见故障对照。
 
 ### 仍待补齐（真实项目的下一步）
 
