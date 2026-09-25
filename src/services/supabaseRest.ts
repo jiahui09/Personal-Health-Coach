@@ -194,6 +194,50 @@ export class SupabaseRest {
   }
 
   /**
+   * 邮箱 + 密码登录：POST /auth/v1/token?grant_type=password。
+   * 多端同步的正路：一个账号在每台设备登一次,之后会话自动续期,不发邮件、不受发信限额。
+   */
+  async signInWithPassword(email: string, password: string): Promise<SupabaseSession> {
+    const response = await this.request('/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      auth: false,
+      body: { email, password },
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      if (/invalid login credentials|invalid_grant/i.test(text)) {
+        throw new SupabaseError('auth', '邮箱或密码不正确', response.status);
+      }
+      if (/email not confirmed/i.test(text)) {
+        throw new SupabaseError(
+          'auth',
+          '该账号尚未确认：Supabase → Authentication → Users 里把它标为已确认',
+          response.status
+        );
+      }
+      throw mapStatus(response.status, text);
+    }
+    const data = (text ? JSON.parse(text) : null) as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      user?: { id: string; email?: string | null };
+    } | null;
+    if (!data?.access_token || !data.refresh_token || !data.user?.id) {
+      throw new SupabaseError('unknown', '密码登录未返回会话');
+    }
+    const session: SupabaseSession = {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresAt: this.now() + (data.expires_in ?? 3600) * 1000,
+      userId: data.user.id,
+      email: data.user.email ?? null,
+    };
+    this.writeSession(session);
+    return session;
+  }
+
+  /**
    * 匿名登录：POST /auth/v1/signup（不带邮箱与密码）→ GoTrue 建一个匿名用户并直接返回会话。
    * 自用场景下比邮箱 magic link 少一步、且不受邮件限额影响。
    * 前提：Supabase → Authentication 里打开 Allow anonymous sign-ins。

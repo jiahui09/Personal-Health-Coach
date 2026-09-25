@@ -321,6 +321,56 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
   ok('匿名登录：一键建立会话；未开启时提示去 Supabase 打开发开关');
 }
 
+// 邮箱+密码登录（多端同步）
+{
+  const storage = memoryStorage();
+  const { fetchImpl, calls } = makeFetch([
+    { method: 'POST', match: (u) => u.includes('grant_type=password'), body: sessionBody },
+  ]);
+  const rest = new SupabaseRest(cfg, { fetchImpl, storage });
+  const session = await rest.signInWithPassword('me@example.com', 'secret123');
+  assert(session.userId === UID && session.accessToken === 'at-1', '密码登录建立会话');
+  assert(calls[0].url.includes('grant_type=password'), '走 token?grant_type=password 端点');
+  assert(JSON.stringify(calls[0].body).includes('secret123'), '载荷带密码');
+  assert(storage.dump()['phc_supabase_session_v1'] !== undefined, '会话持久化（换设备各登一次即可）');
+
+  // 密码错误 → auth（而不是笼统的 unknown）
+  const bad = makeFetch([
+    { method: 'POST', match: (u) => u.includes('grant_type=password'), status: 400, body: { error: 'invalid_grant', error_description: 'Invalid login credentials' } },
+  ]);
+  try {
+    await new SupabaseRest(cfg, { fetchImpl: bad.fetchImpl, storage: memoryStorage() }).signInWithPassword('me@example.com', 'wrong');
+    assert(false, '密码错误应当抛出');
+  } catch (err) {
+    assert(err instanceof SupabaseError && err.kind === 'auth' && /密码/.test(err.message), '密码错误 → auth 且文案可读');
+  }
+
+  // 仓库：signIn 带密码走密码登录；不带密码仍走 magic link
+  const repoRoutes = makeFetch([
+    { method: 'POST', match: (u) => u.includes('grant_type=password'), body: sessionBody },
+    { method: 'POST', match: (u) => u.includes('/auth/v1/otp'), body: {} },
+  ]);
+  const repo = new SupabaseHealthRepository(cfg, {
+    fetchImpl: repoRoutes.fetchImpl,
+    storage: memoryStorage(),
+  });
+  const user = await repo.signIn('me@example.com', 'secret123');
+  assert(user.id === UID, '仓库 signIn 带密码 → 直接返回已登录身份');
+  assert(repoRoutes.calls.some((c) => c.url.includes('grant_type=password')), '带密码时用密码端点');
+
+  const repo2Routes = makeFetch([
+    { method: 'POST', match: (u) => u.includes('/auth/v1/otp'), body: {} },
+  ]);
+  const repo2 = new SupabaseHealthRepository(cfg, {
+    fetchImpl: repo2Routes.fetchImpl,
+    storage: memoryStorage(),
+  });
+  const pending = await repo2.signIn('me@example.com', '');
+  assert(pending.id === 'pending', '不带密码 → 发 magic link（返回待确认身份）');
+  assert(repo2Routes.calls.some((c) => c.url.includes('/auth/v1/otp')), '不带密码时用 OTP 端点');
+  ok('多端同步：邮箱+密码登录（不发邮件）,并与 magic link 共存');
+}
+
 // hasSession：区分「从未登录」与「有身份但失效」
 {
   const fresh = new SupabaseRest(cfg, { fetchImpl: makeFetch([]).fetchImpl, storage: memoryStorage() });

@@ -27,6 +27,7 @@ import { formatAbs } from './domain/format';
 import { validateWeightMeasurement } from './domain/weight';
 import { healthRepository, repositoryKind } from './services/repository';
 import { AuthGate } from './components/AuthGate';
+import { SyncSheet } from './components/SyncSheet';
 import { toRepositoryError } from './services/healthRepository';
 import {
   CreateDailyStateInput,
@@ -68,6 +69,8 @@ export default function App() {
   const [recordSheetOpen, setRecordSheetOpen] = useState(false);
   const [recordTab, setRecordTab] = useState<RecordTab>('meal');
   const [profileSheetOpen, setProfileSheetOpen] = useState(false);
+  /** 多端同步：把本机身份换成固定账号。 */
+  const [syncSheetOpen, setSyncSheetOpen] = useState(false);
 
   // Subtle toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -208,6 +211,23 @@ export default function App() {
           : `登录链接未发出（${error.code}）`,
         false
       );
+      return false;
+    }
+  };
+
+  /** 多端同步：用邮箱+密码登录到同一账号（不发邮件、不受发信限额）。 */
+  const handleSyncToAccount = async (email: string, password: string): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      await healthRepository.signIn(email, password);
+      await loadData();
+      showToast('已同步到你的账号');
+      return true;
+    } catch (err) {
+      const error = toRepositoryError(err);
+      console.error('[App] 同步未成:', error);
+      setIsLoading(false);
+      showToast(error.code === 'auth' ? '邮箱或密码不正确' : `同步未成（${error.code}）`, false);
       return false;
     }
   };
@@ -556,14 +576,23 @@ export default function App() {
             <span>个人健康手记</span>
           </div>
 
-          <button
-            onClick={handleResetData}
-            className="btn-link"
-            title="复为初始演示之数"
-          >
-            <RotateCcw className="w-3 h-3" />
-            <span>复其初</span>
-          </button>
+          <div className="flex items-center gap-4">
+            {repositoryKind === 'supabase' && (
+              <button onClick={() => setSyncSheetOpen(true)} className="btn-link">
+                <span>同步到我的账号</span>
+              </button>
+            )}
+            {repositoryKind === 'mock' && (
+              <button
+                onClick={handleResetData}
+                className="btn-link"
+                title="复为初始演示之数"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>复其初</span>
+              </button>
+            )}
+          </div>
         </footer>
         </div>
         </div>
@@ -592,6 +621,14 @@ export default function App() {
         }}
         defaults={recordDefaults}
         weightWarningFor={weightWarningFor}
+      />
+
+      {/* 多端同步：登录到我的账号 */}
+      <SyncSheet
+        isOpen={syncSheetOpen}
+        anonymous={repositoryKind === 'supabase' && healthRepository.hasSession()}
+        onSync={handleSyncToAccount}
+        onClose={() => setSyncSheetOpen(false)}
       />
 
       {/* 体征档：建档 / 改档 */}

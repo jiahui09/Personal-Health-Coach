@@ -133,8 +133,17 @@ export class SupabaseHealthRepository implements HealthRepository {
     return user ? { id: user.id, email: user.email, isDemo: false } : null;
   }
 
-  /** 发送 magic link（signIn 与 signUp 同一入口：首次点击即注册）。 */
-  async signIn(email: string, _password: string): Promise<AuthUser> {
+  /**
+   * 登录：给了密码 → 邮箱+密码直接建立会话（多端同步用这个）；
+   * 没给密码 → 发 magic link（点邮件后由 hash 建立会话）。
+   */
+  async signIn(email: string, password: string): Promise<AuthUser> {
+    if (password) {
+      const session = await guard(() => this.rest.signInWithPassword(email, password));
+      this.cachedProfile = null;
+      this.emitAuth(session);
+      return { id: session.userId, email: session.email, isDemo: false };
+    }
     const redirectTo = typeof window === 'undefined' ? '' : window.location.origin;
     await guard(() => this.rest.sendMagicLink(email, redirectTo));
     // 点击邮件后才真正建立会话；此处返回「待确认」身份，由 App 提示查收邮件
