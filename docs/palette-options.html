@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <!-- deslop-ignore-file 09 33 34 35 —— 比选稿(设计研究稿)体例:链接下划线、系统 UI 字体栈、色值用等宽、标题用衬线;均为有意保留 -->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>色组方案 · 个人健康手记</title>
+<style>
+  :root{
+    --paper:#f4f0e8; --surface:#fffdf8; --surface2:#f1ece1; --surface3:#e7e0d1;
+    --line:#e3dccc; --linesoft:#ece6da; --linehover:#cec5b1; --hair:#cdc4b3;
+    --ink:#16120e; --ink2:#57534e; --ink3:#6f675e; --ink4:#736b61;
+    --seal:#a63a2b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:32px 24px 72px; background-color:var(--paper); color:var(--ink);
+    font-family:'Plus Jakarta Sans',system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='fiber'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65 0.95' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23fiber)' opacity='0.06'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cfilter id='mottle'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='480' height='480' filter='url(%23mottle)' opacity='0.07'/%3E%3C/svg%3E");
+  }
+  h1,h2,h3,.serif{font-family:'Newsreader','Noto Serif SC','Songti SC','Source Han Serif SC',Georgia,serif}
+  .wrap{max-width:1080px;margin:0 auto;border:2px solid var(--ink);padding:28px 32px 40px;background:transparent}
+  .rule{border:0;border-top:2px solid var(--ink);margin:14px 0 6px}
+  .hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+  .dash{border:0;border-top:1px dashed var(--linehover);margin:14px 0}
+  .lede{color:var(--ink2);font-size:13.5px;line-height:1.75;max-width:74ch}
+  .meta{font-size:12px;color:var(--ink3);letter-spacing:.06em}
+
+  .anchors{display:flex;gap:28px;flex-wrap:wrap;margin-top:18px}
+  .anchor{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px}
+  .anchor .sw{width:52px;height:52px;border-radius:6px;border:1px solid var(--hair)}
+  .anchor b{font-size:14px}
+  .anchor span{display:block;font-size:12px;color:var(--ink3);margin-top:3px}
+
+  .scheme{margin-top:34px;border-top:1px solid var(--linehover);padding-top:22px}
+  .scheme-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .scheme-head h2{font-size:23px;margin:0}
+  .tag{font-size:11px;letter-spacing:.14em;color:var(--ink3);border:1px solid var(--linehover);border-radius:8px;padding:2px 8px}
+  .why{margin:8px 0 0;font-size:13px;line-height:1.7;color:var(--ink2);max-width:78ch}
+  .why em{font-style:normal;color:var(--ink);font-weight:600}
+
+  .chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .chip{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:132px}
+  .chip .sw{height:30px;border-radius:5px;border:1px solid rgba(0,0,0,.10)}
+  .chip .nm{font-size:11.5px;color:var(--ink2);margin-top:6px}
+  .chip .hx{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--ink)}
+  .chip .rt{font-size:10.5px;color:var(--ink3);margin-top:2px}
+
+  .demo{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px 20px}
+  .demo-t{font-size:11px;letter-spacing:.14em;color:var(--ink3);margin-bottom:12px}
+  .row{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+  .task{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--ink);padding:7px 0;border-bottom:1px dotted var(--linehover);width:100%;max-width:460px}
+  .cb{width:18px;height:18px;border-radius:4px;border:1px solid var(--control,#8f8574);display:grid;place-items:center;flex:none}
+  .cb.on{background:var(--a);border-color:var(--a);color:#fff;font-size:12px}
+  .pill{font-size:13px;font-weight:600;padding:5px 12px;border-radius:8px}
+  .btn{font-size:13px;font-weight:600;color:#fff;background:var(--ink);border-radius:8px;padding:9px 18px;border:0}
+  .ghost{font-size:13px;color:var(--ink2);background:transparent;border:1px solid var(--linehover);border-radius:8px;padding:8px 14px}
+  .link{font-size:13px;color:var(--ink2);text-decoration:underline;text-decoration-color:var(--linehover);text-underline-offset:3px}
+  .field{font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--control,#8f8574);border-radius:8px;padding:8px 12px;min-width:180px}
+  .field.focus{border-color:var(--a);outline:2px solid var(--ink);outline-offset:2px}
+  .chartline{width:190px;height:52px}
+  .demo .t2{color:var(--t2);font-weight:600}
+  .demo .dg{color:var(--d);font-weight:600}
+  .demo .ac{color:var(--a);font-weight:700}
+  .note{font-size:12px;color:var(--ink3);margin-top:12px;line-height:1.7}
+  .verdict{display:flex;gap:14px;margin-top:14px;font-size:12.5px}
+  .verdict div{flex:1;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;line-height:1.65;color:var(--ink2)}
+  .verdict b{color:var(--ink);display:block;margin-bottom:3px;font-size:12px;letter-spacing:.08em}
+  footer{max-width:1080px;margin:22px auto 0;font-size:12px;color:var(--ink3);line-height:1.8}
+  @media (max-width:720px){ .wrap{padding:20px 16px 28px} .row{gap:12px} }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="meta">个人健康手记 · 色组研究</div>
+  <h1 style="font-size:34px;margin:6px 0 0">色组方案 · 五版备选</h1>
+  <hr class="rule" />
+  <p class="lede">
+    两处<strong>已定</strong>：古书纸色（纸底一整套暖白纸系）与批朱红（刊头印章）。其余功能色——
+    唯一强调色 <code>accent</code>（状态 / 达标 / 图表）、次级证据色 <code>tier2</code>、危险色 <code>danger</code>、
+    控件边框 <code>control</code> 与三档浅色调——在下列五版中成组变化。每版色值均已按
+    <code>src/tests/contrast.test.ts</code> 的门槛实测：正文色对纸 ≥4.5:1、白字压底 ≥4.5:1、控件边框 ≥3:1。
+  </p>
+
+  <div class="anchors">
+    <div class="anchor">
+      <div class="sw" style="background:#f4f0e8"></div>
+      <div><b>古书色 · 纸</b><span>#f4f0e8 · 面 #fffdf8 · 线 #e3dccc（全套固定）</span></div>
+    </div>
+    <div class="anchor">
+      <div class="sw" style="background:#a63a2b"></div>
+      <div><b>批朱红 · 印</b><span>#a63a2b · 对纸 5.66:1 · 白字 6.44:1（固定）</span></div>
+    </div>
+    <div class="anchor">
+      <div class="sw" style="background:#16120e"></div>
+      <div><b>墨 · 四档</b><span>#16120e / #57534e / #6f675e / #736b61（中性，随方案不动）</span></div>
+    </div>
+  </div>
+
+  <!-- ============ 方案一 ============ -->
+  <section class="scheme" style="--a:#147a3a;--t2:#a54d08;--d:#b91c1c;--control:#8f8574">
+    <div class="scheme-head">
+      <h2>其一 · 松烟墨绿</h2><span class="tag">现状延续 · 改动最小</span>
+    </div>
+    <p class="why">
+      强调色即现行 <em>#147a3a</em>（松烟绿）。绿与朱红在色环上互补，朱只作印章、绿只作状态，
+      两色互不抢位；健康语义直给（达标＝绿）。整版只把 <em>danger</em> 收深、<em>control</em> 略提，
+      其余与线上完全一致，切换成本≈0。
+    </p>
+    <div class="chips">
+      <div class="chip"><div class="sw" style="background:#147a3a"></div><div class="nm">accent 松烟绿</div><div class="hx">#147a3a</div><div class="rt">纸 4.77 · 白 5.42</div></div>
+      <div class="chip"><div class="sw" style="background:#f0fdf4"></div><div class="nm">accentsoft</div><div class="hx">#f0fdf4</div><div class="rt">选中底</div></div>
+      <div class="chip"><div class="sw" style="background:#dcfce7"></div><div class="nm">accentline</div><div class="hx">#dcfce7</div><div class="rt">徽标边</div></div>
+      <div class="chip"><div class="sw" style="background:#4ade80"></div><div class="nm">accentbright</div><div class="hx">#4ade80</div><div class="rt">压墨 10.69</div></div>
+      <div class="chip"><div class="sw" style="background:#a54d08"></div><div class="nm">tier2 赭石</div><div class="hx">#a54d08</div><div class="rt">纸 5.04</div></div>
+      <div class="chip"><div class="sw" style="background:#b91c1c"></div><div class="nm">danger 绛</div><div class="hx">#b91c1c</div><div class="rt">纸 5.69 · 白 6.47</div></div>
+      <div class="chip"><div class="sw" style="background:#8f8574"></div><div class="nm">control</div><div class="hx">#8f8574</div><div class="rt">纸 3.20（≥3）</div></div>
+    </div>
+    <div class="demo">
+      <div class="demo-t">应用预览 · 今日之事 / 状态 / 图表</div>
+      <div class="row">
+        <div class="task"><span class="cb">○</span>徒手自重轻量练习<span style="margin-left:auto;color:var(--ink3);font-size:12px">16分</span></div>
+        <div class="task"><span class="cb on">✓</span>置办鲜蔬与优质蛋白食材<span style="margin-left:auto;color:var(--ink3);font-size:12px">20分</span></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <span class="pill" style="background:#f0fdf4;border:1px solid #dcfce7;color:#147a3a">✓ 合每周两日抗阻之议</span>
+        <span class="t2">缘由 · evidence_constrained</span>
+        <span class="dg">删除此记</span>
+        <span class="ac">近七日均重 ↓0.18 kg</span>
+        <button class="btn">依此录之</button>
+        <button class="ghost">缘由</button>
+        <span class="link">别录一品</span>
+        <span class="field focus">体重 68.4 公斤</span>
+        <svg class="chartline" viewBox="0 0 190 52"><path d="M0,30 L25,24 L50,33 L75,20 L100,27 L125,16 L150,22 L190,14 L190,52 L0,52 Z" fill="#147a3a" fill-opacity="0.10"/><path d="M0,30 L25,24 L50,33 L75,20 L100,27 L125,16 L150,22 L190,14" fill="none" stroke="#147a3a" stroke-width="2"/></svg>
+      </div>
+    </div>
+    <div class="verdict">
+      <div><b>优点</b>与朱红互补最清晰，健康「达标」语义最强；测试与截图全部现成，可零风险沿用。</div>
+      <div><b>顾虑</b>绿取自 Tailwind emerald 一系，略带「现代 UI 味」，与古书纸的矿物/草木质感有半档距离。</div>
+    </div>
+  </section>
+
+  <!-- ============ 方案二 ============ -->
+  <section class="scheme" style="--a:#357a5c;--t2:#8a5a12;--d:#8c1d18;--control:#877c69">
+    <div class="scheme-head">
+      <h2>其二 · 青竹石绿</h2><span class="tag">前一轮选定 · 灰绿 · 草木染（已被其五取代）</span>
+    </div>
+    <p class="why">
+      强调色换成 <em>#357a5c</em>（青竹绿）：把现行绿的明度压低、去饱和半档，成为国画<em>石绿</em>一系的沉静绿——
+      仍读作「达成」，却不再发光。次级改<em>深赭 #8a5a12</em>，危险改<em>栗 #8c1d18</em>（更深的绛，与朱印章拉开明度差）。
+    </p>
+    <div class="chips">
+      <div class="chip"><div class="sw" style="background:#357a5c"></div><div class="nm">accent 青竹绿</div><div class="hx">#357a5c</div><div class="rt">纸 4.52 · 白 5.13</div></div>
+      <div class="chip"><div class="sw" style="background:#edf6f1"></div><div class="nm">accentsoft</div><div class="hx">#edf6f1</div><div class="rt">纸混 6%</div></div>
+      <div class="chip"><div class="sw" style="background:#d9e7e0"></div><div class="nm">accentline</div><div class="hx">#d9e7e0</div><div class="rt">纸混 14%</div></div>
+      <div class="chip"><div class="sw" style="background:#6ee7b7"></div><div class="nm">accentbright</div><div class="hx">#6ee7b7</div><div class="rt">压墨 11.6</div></div>
+      <div class="chip"><div class="sw" style="background:#8a5a12"></div><div class="nm">tier2 深赭</div><div class="hx">#8a5a12</div><div class="rt">纸 5.20</div></div>
+      <div class="chip"><div class="sw" style="background:#8c1d18"></div><div class="nm">danger 栗绛</div><div class="hx">#8c1d18</div><div class="rt">纸 8.00 · 白 9.10</div></div>
+      <div class="chip"><div class="sw" style="background:#877c69"></div><div class="nm">control</div><div class="hx">#877c69</div><div class="rt">纸 3.61（≥3）</div></div>
+    </div>
+    <div class="demo">
+      <div class="demo-t">应用预览 · 今日之事 / 状态 / 图表</div>
+      <div class="row">
+        <div class="task"><span class="cb">○</span>徒手自重轻量练习<span style="margin-left:auto;color:var(--ink3);font-size:12px">16分</span></div>
+        <div class="task"><span class="cb on">✓</span>置办鲜蔬与优质蛋白食材<span style="margin-left:auto;color:var(--ink3);font-size:12px">20分</span></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <span class="pill" style="background:#edf6f1;border:1px solid #d9e7e0;color:#357a5c">✓ 合每周两日抗阻之议</span>
+        <span class="t2">缘由 · evidence_constrained</span>
+        <span class="dg">删除此记</span>
+        <span class="ac">近七日均重 ↓0.18 kg</span>
+        <button class="btn">依此录之</button>
+        <button class="ghost">缘由</button>
+        <span class="link">别录一品</span>
+        <span class="field focus">体重 68.4 公斤</span>
+        <svg class="chartline" viewBox="0 0 190 52"><path d="M0,30 L25,24 L50,33 L75,20 L100,27 L125,16 L150,22 L190,14 L190,52 L0,52 Z" fill="#357a5c" fill-opacity="0.10"/><path d="M0,30 L25,24 L50,33 L75,20 L100,27 L125,16 L150,22 L190,14" fill="none" stroke="#357a5c" stroke-width="2"/></svg>
+      </div>
+    </div>
+    <div class="verdict">
+      <div><b>优点</b>绿的语义全保留，但色相沉下来，和纸、墨、朱同属「矿物颜料」质感，最像一部书里的颜色。</div>
+      <div><b>顾虑</b>纸上 4.52:1，刚过 AA 线，余量小；后续若再调亮会立刻跌出 4.5，需由测试锁住。</div>
+    </div>
+  </section>
+
+  <!-- ============ 方案三 ============ -->
+  <section class="scheme" style="--a:#1d5c8a;--t2:#a54d08;--d:#991b1b;--control:#877c69">
+    <div class="scheme-head">
+      <h2>其三 · 花青题跋</h2><span class="tag">靛蓝 · 朱墨青三色</span>
+    </div>
+    <p class="why">
+      强调色用国画颜料<em>花青 #1d5c8a</em>。古籍题跋正是「墨书 + 朱批 + 青绿」三色并行，
+      朱与青在纸上天然分层：<em>朱＝人之所批</em>，<em>青＝系统所记</em>。状态、达标、折线全走冷色，
+      与暖纸形成温差，图表是五版里最清楚的。
+    </p>
+    <div class="chips">
+      <div class="chip"><div class="sw" style="background:#1d5c8a"></div><div class="nm">accent 花青</div><div class="hx">#1d5c8a</div><div class="rt">纸 6.26 · 白 7.12</div></div>
+      <div class="chip"><div class="sw" style="background:#eaf2f9"></div><div class="nm">accentsoft</div><div class="hx">#eaf2f9</div><div class="rt">纸混 6%</div></div>
+      <div class="chip"><div class="sw" style="background:#d7e6f2"></div><div class="nm">accentline</div><div class="hx">#d7e6f2</div><div class="rt">纸混 14%</div></div>
+      <div class="chip"><div class="sw" style="background:#7dd3fc"></div><div class="nm">accentbright</div><div class="hx">#7dd3fc</div><div class="rt">压墨 11.18</div></div>
+      <div class="chip"><div class="sw" style="background:#a54d08"></div><div class="nm">tier2 赭石</div><div class="hx">#a54d08</div><div class="rt">纸 5.04 · 冷暖平衡</div></div>
+      <div class="chip"><div class="sw" style="background:#991b1b"></div><div class="nm">danger 深绛</div><div class="hx">#991b1b</div><div class="rt">纸 7.31 · 白 8.31</div></div>
+      <div class="chip"><div class="sw" style="background:#877c69"></div><div class="nm">control</div><div class="hx">#877c69</div><div class="rt">纸 3.61（≥3）</div></div>
+    </div>
+    <div class="demo">
+      <div class="demo-t">应用预览 · 今日之事 / 状态 / 图表</div>
+      <div class="row">
+        <div class="task"><span class="cb">○</span>徒手自重轻量练习<span style="margin-left:auto;color:var(--ink3);font-size:12px">16分</span></div>
+        <div class="task"><span class="cb on">✓</span>置办鲜蔬与优质蛋白食材<span style="margin-left:auto;color:var(--ink3);font-size:12px">20分</span></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <span class="pill" style="background:#eaf2f9;border:1px solid #d7e6f2;color:#1d5c8a">✓ 合每周两日抗阻之议</span>
+        <span class="t2">缘由 · evidence_constrained</span>
+        <span class="dg">删除此记</span>
+        <span class="ac">近七日均重 ↓0.18 kg</span>
+        <button class="btn">依此录之</button>
+        <button class="ghost">缘由</button>
+        <span class="link">别录一品</span>
+        <span class="field focus">体重 68.4 公斤</span>
+        <svg class="chartline" viewBox="0 0 190 52"><path d="M0,30 L25,24 L50,33 L75,20 L100,27 L125,16 L150,22 L190,14 L190,52 L0,52 Z" fill="#1d5c8a" fill-opacity="0.10"/><path d="M0,30 L25,24 L50,33 L75,20 L100,27 L125,16 L150,22 L190,14" fill="none" stroke="#1d5c8a" stroke-width="2"/></svg>
+      </div>
+    </div>
+    <div class="verdict">
+      <div><b>优点</b>对比度最富余（6.26 / 7.12），冷暖分工让「朱批」与「系统状态」一眼分得开，最贴古籍题跋原型。</div>
+      <div><b>顾虑</b>放弃绿色＝放弃「达标＝绿」的直觉，状态需要靠勾形与文字补足；蓝色在健康类里稍显克制。</div>
+    </div>
+  </section>
+
+  <!-- ============ 方案四 ============ -->
+  <section class="scheme" style="--a:#8a5a12;--t2:#1d5c8a;--d:#7f1d1d;--control:#877c69">
+    <div class="scheme-head">
+      <h2>其四 · 赭石藤黄</h2><span class="tag">暖调同源 · 最「古」</span>
+    </div>
+    <p class="why">
+      强调色取<em>赭石 #8a5a12</em>，与纸底同属暖褐系，页面几乎不出现第二种色相，
+      只靠<em>花青 #1d5c8a</em> 作次级冷色兜住层次。整版像旧书上的虫蛀与茶渍——最沉、最旧、最不「设计」。
+    </p>
+    <div class="chips">
+      <div class="chip"><div class="sw" style="background:#8a5a12"></div><div class="nm">accent 赭石</div><div class="hx">#8a5a12</div><div class="rt">纸 5.20 · 白 5.91</div></div>
+      <div class="chip"><div class="sw" style="background:#f7efe0"></div><div class="nm">accentsoft</div><div class="hx">#f7efe0</div><div class="rt">纸混 6%</div></div>
+      <div class="chip"><div class="sw" style="background:#ead9bd"></div><div class="nm">accentline</div><div class="hx">#ead9bd</div><div class="rt">纸混 14%</div></div>
+      <div class="chip"><div class="sw" style="background:#fcd34d"></div><div class="nm">accentbright</div><div class="hx">#fcd34d</div><div class="rt">压墨 12.92</div></div>
+      <div class="chip"><div class="sw" style="background:#1d5c8a"></div><div class="nm">tier2 花青</div><div class="hx">#1d5c8a</div><div class="rt">纸 6.26 · 冷色分层</div></div>
+      <div class="chip"><div class="sw" style="background:#7f1d1d"></div><div class="nm">danger 紫檀绛</div><div class="hx">#7f1d1d</div><div class="rt">纸 8.82 · 白 10.02</div></div>
+      <div class="chip"><div class="sw" style="background:#877c69"></div><div class="nm">control</div><div class="hx">#877c69</div><div class="rt">纸 3.61（≥3）</div></div>
+    </div>
+    <div class="demo">
+      <div class="demo-t">应用预览 · 今日之事 / 状态 / 图表</div>
+      <div class="row">
+        <div class="task"><span class="cb">○</span>徒手自重轻量练习<span style="margin-left:auto;color:var(--ink3);font-size:12px">16分</span></div>
+        <div class="task"><span class="cb on">✓</span>置办鲜蔬与优质蛋白食材<span style="margin-left:auto;color:var(--ink3);font-size:12px">20分</span></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <span class="pill" style="background:#f7efe0;border:1px solid #ead9bd;color:#8a5a12">✓ 合每周两日抗阻之议</span>
+        <span class="t2">缘由 · evidence_constrained</span>
+        <span class="dg">删除此记</span>
+        <span class="ac">近七日均重 ↓0.18 kg</span>
+        <button class="btn">依此录之</button>
+        <button class="ghost">缘由</button>
+        <span class="link">别录一品</span>
+        <span class="field focus">体重 68.4 公斤</span>
+        <svg class="chartline" viewBox="0 0 190 52"><path d="M0,30 L25,24 L50,33 L75,20 L100,27 L125,16 L150,22 L190,14 L190,52 L0,52 Z" fill="#8a5a12" fill-opacity="0.10"/><path d="M0,30 L25,24 L50,33 L75,20 L100,27 L125,16 L150,22 L190,14" fill="none" stroke="#8a5a12" stroke-width="2"/></svg>
+      </div>
+    </div>
+    <div class="verdict">
+      <div><b>优点</b>与古书纸同源，全页零色相冲突，最像一部真实旧书；配花青次级后冷暖仍有骨架。</div>
+      <div><b>顾虑</b>赭＝中性，不自带「成功」语义，达标感最弱；且暖强调色与朱红同侧，印章的存在感会被稀释。</div>
+    </div>
+  </section>
+
+  <!-- ============ 方案五 ============ -->
+  <section class="scheme" style="--a:#a63a2b;--t2:#7a5a2e;--d:#7f1d1d;--control:#877c69">
+    <div class="scheme-head">
+      <h2>其五 · 朱墨双色</h2><span class="tag" style="border-color:#a63a2b;color:#a63a2b">★ 已选定 · 奏折朱墨</span>
+    </div>
+    <p class="why">
+      取消第三种色相：状态、达标、折线一律走<em>朱 #a63a2b</em>（与印章同源，<em>朱批＝批注＝重点</em>），
+      次级用<em>褐 #7a5a2e</em>，危险另走更深的<em>紫檀绛 #7f1d1d</em>。古籍里本就只有墨与朱两色，这版是它的直接还原。
+    </p>
+    <div class="chips">
+      <div class="chip"><div class="sw" style="background:#a63a2b"></div><div class="nm">accent 朱批</div><div class="hx">#a63a2b</div><div class="rt">纸 5.66 · 白 6.44</div></div>
+      <div class="chip"><div class="sw" style="background:#fbeee9"></div><div class="nm">accentsoft</div><div class="hx">#fbeee9</div><div class="rt">纸混 6%</div></div>
+      <div class="chip"><div class="sw" style="background:#f2d9d0"></div><div class="nm">accentline</div><div class="hx">#f2d9d0</div><div class="rt">纸混 14%</div></div>
+      <div class="chip"><div class="sw" style="background:#fda4af"></div><div class="nm">accentbright</div><div class="hx">#fda4af</div><div class="rt">压墨 9.85</div></div>
+      <div class="chip"><div class="sw" style="background:#7a5a2e"></div><div class="nm">tier2 褐</div><div class="hx">#7a5a2e</div><div class="rt">纸 5.55</div></div>
+      <div class="chip"><div class="sw" style="background:#7f1d1d"></div><div class="nm">danger 紫檀绛</div><div class="hx">#7f1d1d</div><div class="rt">纸 8.82 · 白 10.02</div></div>
+      <div class="chip"><div class="sw" style="background:#877c69"></div><div class="nm">control</div><div class="hx">#877c69</div><div class="rt">纸 3.61（≥3）</div></div>
+    </div>
+    <div class="demo">
+      <div class="demo-t">应用预览 · 今日之事 / 状态 / 图表</div>
+      <div class="row">
+        <div class="task"><span class="cb">○</span>徒手自重轻量练习<span style="margin-left:auto;color:var(--ink3);font-size:12px">16分</span></div>
+        <div class="task"><span class="cb on">✓</span>置办鲜蔬与优质蛋白食材<span style="margin-left:auto;color:var(--ink3);font-size:12px">20分</span></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <span class="pill" style="background:#fbeee9;border:1px solid #f2d9d0;color:#a63a2b">✓ 合每周两日抗阻之议</span>
+        <span class="t2">缘由 · evidence_constrained</span>
+        <span class="dg">删除此记</span>
+        <span class="ac">近七日均重 ↓0.18 kg</span>
+        <button class="btn">依此录之</button>
+        <button class="ghost">缘由</button>
+        <span class="link">别录一品</span>
+        <span class="field focus">体重 68.4 公斤</span>
+        <svg class="chartline" viewBox="0 0 190 52"><path d="M0,30 L25,24 L50,33 L75,20 L100,27 L125,16 L150,22 L190,14 L190,52 L0,52 Z" fill="#a63a2b" fill-opacity="0.10"/><path d="M0,30 L25,24 L50,33 L75,20 L100,27 L125,16 L150,22 L190,14" fill="none" stroke="#a63a2b" stroke-width="2"/></svg>
+      </div>
+    </div>
+    <div class="verdict">
+      <div><b>优点</b>色相最少、最克制，印章红即状态红，全站叙事统一为「墨书 + 朱批」。</div>
+      <div><b>顾虑</b>健康语境里红易被读成「超标/警告」，与 danger 只差明度；同时「朱印只压刊头」的既有约定需一并推翻。</div>
+    </div>
+  </section>
+
+  <hr class="dash" />
+  <p class="note">
+    说明：五版的 <span style="color:var(--ink)">纸色、面/线/墨四档、按钮墨底、圆角与版框</span> 完全相同，变的只有 accent 系、tier2、danger、control 四组。
+    每版数字为实测对比度（WCAG 2.1 相对亮度公式），正文色均 ≥4.5:1 对纸与面、白字压底均 ≥4.5:1、控件边框均 ≥3:1，与
+    <code>src/tests/contrast.test.ts</code> 的门槛一致；选定后把该版色值写回 <code>src/index.css @theme</code> 即可全站生效。
+  </p>
+</main>
+
+<footer>
+  生成于色组研究 · 供比选：其一 松烟墨绿 / 其二 青竹石绿 / 其三 花青题跋 / 其四 赭石藤黄 / 其五 朱墨双色。
+  <strong>已选定其五 · 朱墨双色</strong>（用户定为「皇帝批阅奏折」方向：墨＝臣工所书，朱＝御批），色值已写回 <code>src/index.css @theme</code>（contrast.test.ts 回归通过）；其二 · 青竹石绿为上一轮选定，现留档备查。
+  参考：<a href="https://zhongguose.com/">中国色</a> ·
+  <a href="https://chinesecoloratlas.com/zh-Hant/palettes">中國傳統色配色庫</a> ·
+  <a href="https://color-term.com/traditional-color-of-china/">526 Traditional Colors of China</a>
+</footer>
+</body>
+</html>

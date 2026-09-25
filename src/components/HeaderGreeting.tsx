@@ -1,45 +1,66 @@
+// Masthead (seal + wordmark) and the display greeting. deslop-ignore-file 07 08 33
 import React from 'react';
-import { motion } from 'motion/react';
-import { Sparkles, Calendar } from 'lucide-react';
+import { cnCount } from '../utils/cnCount';
+import type { TaskProgress } from '../domain/types';
 
 interface HeaderGreetingProps {
   displayDate: string;
   timeGreeting: string;
+  /** 与「其一 今日之事」同源：domain/calculateTaskProgress 的结果。 */
+  tasks: TaskProgress;
+  storageLabel: string;
   onOpenRecord: () => void;
 }
+
 
 export const HeaderGreeting: React.FC<HeaderGreetingProps> = ({
   displayDate,
   timeGreeting,
+  tasks,
+  storageLabel,
   onOpenRecord,
 }) => {
   return (
-    <header className="pt-8 pb-4 border-b border-[#e9e4dc] transition-all">
-      <div className="flex items-start justify-between gap-4">
+    <header>
+      {/* 刊头：印章 + 报头 + 录一笔 */}
+      <div className="flex items-center gap-3.5 pt-7 pb-4 border-b-2 border-ink">
+        <span className="w-8 h-8 shrink-0 grid place-items-center rounded-lg bg-seal text-white font-serif text-lg font-bold select-none">
+          记
+        </span>
+
         <div>
-          <div className="flex items-center gap-2 text-xs font-mono tracking-wider uppercase text-[#7c756b]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]"></span>
-            <span>Personal Health Coach</span>
-            <span className="text-[#c7bfb3]">·</span>
-            <span>Living Journal</span>
+          <div className="font-serif text-[17px] font-bold text-ink leading-tight tracking-[0.08em]">
+            个人健康手记
           </div>
-
-          <h1 className="text-3xl sm:text-4xl font-serif tracking-tight text-[#1c1917] mt-2 font-normal">
-            {timeGreeting}
-          </h1>
-
-          <p className="text-sm text-[#78716c] font-sans mt-1">
-            {displayDate}
-          </p>
+          <div className="text-[12px] font-semibold text-ink3 tracking-[0.2em] mt-1">
+            日省吾身
+          </div>
         </div>
 
-        <button
-          onClick={onOpenRecord}
-          className="shrink-0 text-xs font-medium text-[#44403c] bg-[#f5f2eb] hover:bg-[#ebe6dc] border border-[#e2dcd1] px-3.5 py-2 rounded-xl transition-all duration-200 cursor-pointer flex items-center gap-1.5 shadow-2xs"
-        >
-          <span className="text-[#15803d] font-bold">+</span>
-          <span>记一笔</span>
-        </button>
+        <div className="ml-auto flex items-center gap-4">
+          <span className="hidden sm:block text-[12px] font-semibold text-ink3 tracking-[0.14em]">
+            {storageLabel}
+          </span>
+          <button onClick={onOpenRecord} className="btn-primary">
+            录一笔
+          </button>
+        </div>
+      </div>
+
+      {/* 序：大字问候 + 干支日期 */}
+      <div className="pt-10 pb-8 border-b border-line">
+        <h1 className="font-serif font-bold text-ink text-[46px] sm:text-[68px] leading-[1.04] tracking-[0.02em]">
+          {timeGreeting}
+        </h1>
+        <div className="mt-4 font-serif text-[16px] text-ink2 tracking-[0.28em]">{displayDate}</div>
+        <div className="mt-2 text-[13.5px] text-ink3">
+          {tasks.total === 0
+            ? '今日未列事。'
+            : `凡${cnCount(tasks.total)}事，已成其${cnCount(tasks.completed)}。`}
+          {tasks.skipped > 0 && (
+            <span className="text-ink4"> （另略过 {tasks.skipped} 事）</span>
+          )}
+        </div>
       </div>
     </header>
   );

@@ -1,132 +1,211 @@
+// Serif for the section heading only; facts read as ruled journal rows. deslop-ignore-file 07
 import React, { useState } from 'react';
-import { TrendingDown, Dumbbell, Moon, Info, ChevronDown, ChevronUp } from 'lucide-react';
-import { WeightForecast, WeightTrendResult } from '../types/health';
+import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { MealRecord, WeightForecast } from '../types/health';
+import type {
+  NutritionSummary,
+  SleepSummary,
+  TrainingSummary,
+  WeightSummary,
+} from '../domain/types';
+import { formatAbs, round1, toPercent } from '../domain/format';
+import { SLEEP_REFERENCE_HOURS } from '../domain/policy';
+import { SectionHead } from './SectionHead';
+import { RuleMeter } from './RuleMeter';
+import { cnCount } from '../utils/cnCount';
 
 interface RecentSectionProps {
-  currentWeight: number;
-  weightTrend: WeightTrendResult;
-  weightForecast: WeightForecast;
-  workoutsThisWeek: number;
-  avgSleepHours: number;
+  /** 全部为 domain 派生结果；组件只负责措辞与排版。 */
+  weight: WeightSummary;
+  nutrition: NutritionSummary;
+  sleep: SleepSummary;
+  training: TrainingSummary;
+  forecast: WeightForecast;
+  /** 今日已入账的膳（供核对与逐条掷还）。 */
+  meals: MealRecord[];
+  onDeleteMeal: (id: string) => void;
 }
 
+const VALUE = 'inkrow-value text-[13px] text-ink';
+const LABEL = 'text-[12px] text-ink3 tracking-[0.1em] truncate';
+
+/** 单纯事实行：名 …… 值（点线引导落在中列,与计量条同轴） */
+const FactRow: React.FC<{ label: string; children: React.ReactNode }> = ({
+  label,
+  children,
+}) => (
+  <div className="inkrow inkrow-dotted">
+    <span className={LABEL}>{label}</span>
+    <span className="leader" aria-hidden="true" />
+    <span className={VALUE}>{children}</span>
+  </div>
+);
+
 export const RecentSection: React.FC<RecentSectionProps> = ({
-  currentWeight,
-  weightTrend,
-  weightForecast,
-  workoutsThisWeek,
-  avgSleepHours,
+  weight,
+  nutrition,
+  sleep,
+  training,
+  forecast,
+  meals,
+  onDeleteMeal,
 }) => {
   const [showForecastDetails, setShowForecastDetails] = useState(false);
+  const [showMealLog, setShowMealLog] = useState(false);
 
-  const trendLabel =
-    weightTrend.trendPerWeek < -0.05
-      ? `平缓下降 (${Math.abs(weightTrend.trendPerWeek)} kg/周)`
-      : weightTrend.trendPerWeek > 0.05
-      ? `轻微上升 (+${weightTrend.trendPerWeek} kg/周)`
-      : '体征基本平稳 (波动 <0.05 kg/周)';
+  const { resistance } = training;
+  const weightFlagged = weight.quality.flag === 'needs_review';
+  const nutritionFlagged = nutrition.quality.flag === 'needs_review';
+  const trendAbs = weight.trendKgPerWeek === null ? null : formatAbs(weight.trendKgPerWeek, 2);
+  const trendSign =
+    weight.direction === 'up' ? '+' : weight.direction === 'down' ? '−' : '';
 
   return (
-    <section className="py-5 border-t border-[#ece7de] space-y-3.5">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-xl sm:text-2xl font-serif font-normal text-[#1c1917] tracking-tight">
-          RECENT
-        </h2>
-        <span className="text-xs text-[#a8a29e] font-sans">
-          多日滚动平滑 · 事实轨迹
-        </span>
+    <section className="pt-10 lg:pr-9">
+      <SectionHead
+        title="近况"
+        verdict={resistance.met ? '抗阻合议' : `尚差${cnCount(resistance.remaining)}日`}
+        note={<span className="text-xs text-ink3 tracking-[0.1em]">近七日</span>}
+      />
+
+      {/* 一、近七日实测：体重、训练、睡眠同入一张行文表 */}
+      <div className="mt-4">
+        <FactRow label="体重">
+          {weight.rollingMean7d === null ? (
+            '数据不足'
+          ) : (
+            <>
+              均 <span className="font-semibold">{weight.rollingMean7d}</span> 公斤 ·{' '}
+              <span className="font-semibold">
+                {trendAbs === null ? '—' : `${trendSign}${trendAbs}`}
+              </span>
+              /周
+            </>
+          )}
+        </FactRow>
+
+        <RuleMeter
+          className="inkrow-dotted"
+          label="抗阻"
+          value={resistance.completed}
+          max={resistance.target}
+          unit="次"
+          tone={resistance.met ? 'accent' : 'ink'}
+          suffix={resistance.met ? '合议' : '未合议'}
+          suffixTone={resistance.met ? 'accent' : 'muted'}
+        />
+
+        <RuleMeter
+          className="inkrow-dotted"
+          percent={false}
+          label="睡均"
+          value={sleep.avgHours ?? 0}
+          max={SLEEP_REFERENCE_HOURS}
+          unit="h"
+          tone={sleep.meetsReference ? 'accent' : 'ink'}
+          suffix={
+            sleep.meetsReference === null ? '未录' : sleep.meetsReference ? '合议' : '未合议'
+          }
+          suffixTone={sleep.meetsReference ? 'accent' : 'muted'}
+        />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* 1. Weight Trend (Rolling Average + Weekly Rate) */}
-        <div className="p-3.5 rounded-xl bg-[#fbfaf8] border border-[#e8e2d8] space-y-1.5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between text-xs text-[#78716c]">
-              <span>7天滚动均重</span>
-              <span className="text-[#15803d] font-mono text-[11px] flex items-center">
-                <TrendingDown className="w-3 h-3 mr-0.5" />
-                {trendLabel}
+      {/* 二、今日所食 */}
+      <div className="mt-5 pt-4 border-t border-line">
+        <div className="flex items-baseline justify-between gap-3">
+          <button onClick={() => setShowMealLog(!showMealLog)} className="btn-link">
+            <span className="group-head">今日所食 · {nutrition.mealCount} 膳</span>
+            {showMealLog ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+          <span className="text-[13px] tabular-nums">
+            {nutrition.protein.status === 'over' || nutrition.calories.status === 'over' ? (
+              <span className="text-danger font-semibold">
+                已超 {round1(nutrition.protein.over)} g · {round1(nutrition.calories.over)} 千卡
               </span>
-            </div>
-
-            <div className="flex items-baseline gap-1.5 pt-1 font-mono">
-              <span className="text-2xl font-serif font-bold text-[#1c1917] tabular-nums">
-                {weightTrend.rollingAverage7d}
-              </span>
-              <span className="text-xs text-[#78716c] font-sans">kg</span>
-              <span className="text-[11px] text-[#a8a29e] font-sans ml-1">
-                (今日 {currentWeight}kg)
-              </span>
-            </div>
-          </div>
-
-          <div className="pt-2 text-[11px] text-[#78716c] border-t border-[#f0ece4]">
-            线性平滑排除了单日水分与钠盐急性干扰
-          </div>
+            ) : (
+              <>
+                <span className="text-ink3">尚余</span>{' '}
+                <span className="font-semibold text-ink">
+                  {round1(nutrition.protein.remaining)}
+                </span>{' '}
+                g ·{' '}
+                <span className="font-semibold text-ink">
+                  {round1(nutrition.calories.remaining)}
+                </span>{' '}
+                千卡
+              </>
+            )}
+          </span>
         </div>
 
-        {/* 2. Training Volume & Exposure */}
-        <div className="p-3.5 rounded-xl bg-[#fbfaf8] border border-[#e8e2d8] space-y-1.5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between text-xs text-[#78716c]">
-              <span>本周练习</span>
-              <Dumbbell className="w-3.5 h-3.5 text-[#15803d]" />
-            </div>
-
-            <div className="flex items-baseline gap-1 pt-1 font-mono">
-              <span className="text-2xl font-serif font-bold text-[#1c1917] tabular-nums">
-                {workoutsThisWeek}
-              </span>
-              <span className="text-xs text-[#78716c] font-sans">次徒手循环</span>
-            </div>
-          </div>
-
-          <div className="pt-2 text-[11px] text-[#78716c] border-t border-[#f0ece4] flex items-center justify-between">
-            <span>自重多关节节律稳定</span>
-            <span className="font-mono text-[10px] text-[#15803d]">ACSM 2026</span>
-          </div>
+        <div className="mt-1">
+          <RuleMeter
+            className="inkrow-dotted"
+            label="蛋白质"
+            value={nutrition.protein.consumed}
+            max={nutrition.protein.target}
+            unit="g"
+            tone={
+              nutrition.protein.status === 'over'
+                ? 'danger'
+                : nutrition.protein.status === 'met'
+                ? 'accent'
+                : 'ink'
+            }
+          />
+          <RuleMeter
+            className="inkrow-dotted"
+            label="热量"
+            value={nutrition.calories.consumed}
+            max={nutrition.calories.target}
+            unit="千卡"
+            tone={
+              nutrition.calories.status === 'over'
+                ? 'danger'
+                : nutrition.calories.status === 'met'
+                ? 'accent'
+                : 'ink'
+            }
+          />
         </div>
 
-        {/* 3. Sleep Regularity */}
-        <div className="p-3.5 rounded-xl bg-[#fbfaf8] border border-[#e8e2d8] space-y-1.5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between text-xs text-[#78716c]">
-              <span>平均睡眠</span>
-              <Moon className="w-3.5 h-3.5 text-[#6366f1]" />
-            </div>
+        {nutritionFlagged && (
+          <p className="mt-2 text-[12px] text-danger">
+            越常度 {toPercent(nutrition.calories.ratio)}% · 可逐条掷还
+          </p>
+        )}
 
-            <div className="flex items-baseline gap-1 pt-1 font-mono">
-              <span className="text-2xl font-serif font-bold text-[#1c1917] tabular-nums">
-                {avgSleepHours}
-              </span>
-              <span className="text-xs text-[#78716c] font-sans">小时</span>
-            </div>
+        {showMealLog && meals.length > 0 && (
+          <div className="mt-2 border-t border-line">
+            {meals.map((meal) => (
+              <div key={meal.id} className="inklist-row inklist-dotted text-[12px]">
+                <span className="text-ink3 tabular-nums shrink-0">{meal.time}</span>
+                <span className="text-ink truncate">{meal.name || meal.foods.join('、')}</span>
+                <span className="flex items-center gap-2 shrink-0">
+                  <span className="text-ink3 tabular-nums">
+                    {meal.estimatedCalories} 千卡 · {meal.estimatedProtein} g
+                  </span>
+                  <button
+                    onClick={() => onDeleteMeal(meal.id)}
+                    className="p-1 text-ink4 hover:text-danger transition-colors cursor-pointer"
+                    title="掷还"
+                    aria-label={`掷还 ${meal.name}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              </div>
+            ))}
           </div>
-
-          <div className="pt-2 text-[11px] text-[#78716c] border-t border-[#f0ece4] flex items-center justify-between">
-            <span>达到 AASM 7h+ 修复基准</span>
-            <span className="font-mono text-[10px] text-[#6366f1]">良好稳态</span>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Dynamic Weight Forecast Card (Section Nine) */}
-      <div className="p-4 rounded-xl bg-[#fbfaf8] border border-[#e8e2d8] space-y-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-serif font-medium text-[#1c1917]">
-              动态体重区间预测 (Estimated Forecast)
-            </span>
-            <span className="text-[10px] text-[#78716c] font-mono bg-[#f0ede6] px-1.5 py-0.5 rounded-sm">
-              Hall et al. 2011 动态非线性模型
-            </span>
-          </div>
-
-          <button
-            onClick={() => setShowForecastDetails(!showForecastDetails)}
-            className="text-[11px] text-[#78716c] hover:text-[#1c1917] flex items-center gap-0.5 cursor-pointer font-sans"
-          >
-            <span>{showForecastDetails ? '收起假定' : '模型依据'}</span>
+      {/* 三、情景外推 */}
+      <div className="mt-5 pt-4 border-t border-line">
+        <div className="flex items-baseline justify-between">
+          <span className="group-head">情景外推 · 公斤</span>
+          <button onClick={() => setShowForecastDetails(!showForecastDetails)} className="btn-link">
+            <span>{showForecastDetails ? '掩其推据' : '推演所据'}</span>
             {showForecastDetails ? (
               <ChevronUp className="w-3 h-3" />
             ) : (
@@ -135,50 +214,54 @@ export const RecentSection: React.FC<RecentSectionProps> = ({
           </button>
         </div>
 
-        {/* 3 Prediction Intervals: 4w, 8w, 12w */}
-        <div className="grid grid-cols-3 gap-2 pt-1">
-          <div className="p-2.5 rounded-lg bg-white border border-[#eee8df] text-center">
-            <div className="text-[11px] text-[#78716c] font-sans">4 周后</div>
-            <div className="text-sm font-serif font-medium text-[#1c1917] tabular-nums mt-0.5">
-              {weightForecast.fourWeeks.range.min}–{weightForecast.fourWeeks.range.max} kg
-            </div>
-            <div className="text-[10px] text-[#a8a29e] font-mono mt-0.5">Estimated</div>
+        {forecast.withheld ? (
+          <p className="mt-2 text-[13px] text-ink2">今录存疑或数据不足 · 暂不出推演</p>
+        ) : (
+          <div className="mt-1">
+            <FactRow label="四周">
+              <span className="font-semibold">
+                {forecast.fourWeeks.range.min}–{forecast.fourWeeks.range.max}
+              </span>{' '}
+              公斤
+            </FactRow>
+            <FactRow label="八周">
+              <span className="font-semibold">
+                {forecast.eightWeeks.range.min}–{forecast.eightWeeks.range.max}
+              </span>{' '}
+              公斤
+            </FactRow>
+            <FactRow label="十二周">
+              <span className="font-semibold">
+                {forecast.twelveWeeks.range.min}–{forecast.twelveWeeks.range.max}
+              </span>{' '}
+              公斤
+            </FactRow>
           </div>
+        )}
 
-          <div className="p-2.5 rounded-lg bg-white border border-[#eee8df] text-center">
-            <div className="text-[11px] text-[#78716c] font-sans">8 周后</div>
-            <div className="text-sm font-serif font-medium text-[#1c1917] tabular-nums mt-0.5">
-              {weightForecast.eightWeeks.range.min}–{weightForecast.eightWeeks.range.max} kg
-            </div>
-            <div className="text-[10px] text-[#a8a29e] font-mono mt-0.5">Estimated</div>
-          </div>
-
-          <div className="p-2.5 rounded-lg bg-white border border-[#eee8df] text-center">
-            <div className="text-[11px] text-[#78716c] font-sans">12 周后</div>
-            <div className="text-sm font-serif font-medium text-[#1c1917] tabular-nums mt-0.5">
-              {weightForecast.twelveWeeks.range.min}–{weightForecast.twelveWeeks.range.max} kg
-            </div>
-            <div className="text-[10px] text-[#a8a29e] font-mono mt-0.5">Estimated</div>
-          </div>
-        </div>
-
-        {/* Collapsible Assumptions & Limitations */}
         {showForecastDetails && (
-          <div className="pt-2 text-xs text-[#78716c] space-y-1.5 border-t border-[#f0ece4]">
-            <div className="flex items-start gap-1.5">
-              <Info className="w-3.5 h-3.5 text-[#15803d] shrink-0 mt-0.5" />
-              <span>
-                <strong>科学声明：</strong>
-                模型根据当前摄入水平与动态能量平衡方程推导，已考虑机体体重下降引发的代谢自适应减速（反对静态 3500 kcal = 1 lb）。输出为统计置信区间，绝非固定单一数字。
-              </span>
+          <div className="mt-2 pt-2 border-t border-line text-[12px] text-ink3 space-y-1">
+            <div className="tabular-nums">
+              模型 {forecast.modelVersion} · 据近三十日 {forecast.basedOnDays}/
+              {forecast.inputWindowDays} 日
             </div>
-            <div className="pl-5 text-[11px] text-[#a8a29e] space-y-0.5 font-sans">
-              <div>• 前提：保持每周 2–3 次徒手抗阻练习与平稳饮食结构</div>
-              <div>• 局限：食盐摄入与碳水糖原储留会引发短期 ±1kg 水分波动</div>
-            </div>
+            <div>前提</div>
+            {forecast.assumptions.map((item) => (
+              <div key={item}>· {item}</div>
+            ))}
+            <div className="pt-1">局限</div>
+            {forecast.limitations.map((item) => (
+              <div key={item}>· {item}</div>
+            ))}
           </div>
         )}
       </div>
+
+      {weightFlagged && (
+        <p className="mt-3 text-[12px] text-danger">
+          体重待核 · 较近七日均重低 {formatAbs(Number(weight.quality.detail.deltaKg))} 公斤
+        </p>
+      )}
     </section>
   );
 };

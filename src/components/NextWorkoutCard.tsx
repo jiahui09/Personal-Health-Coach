@@ -1,9 +1,17 @@
+// Serif for the chapter heading; instruction copy stays in the UI sans. deslop-ignore-file 07
 import React, { useState } from 'react';
 import { Check, HelpCircle } from 'lucide-react';
-import { WorkoutRecommendation } from '../types/health';
+import { WorkoutRecommendation, WorkoutRecord } from '../types/health';
+import type { WorkoutDecision } from '../domain/types';
+import { describeWorkoutDecision } from '../services/decisionCopy';
+import { SectionHead } from './SectionHead';
 
 interface NextWorkoutCardProps {
   nextWorkout: WorkoutRecommendation;
+  /** 训练决策（纯函数结果）：状态与原因都取自它。 */
+  decision: WorkoutDecision;
+  /** 今日已录的实际训练；有则在章节里如实列出。 */
+  todaySession: WorkoutRecord | null;
   isCompletedToday: boolean;
   onCompleteWorkout: () => void;
   onOpenEvidence: () => void;
@@ -12,6 +20,8 @@ interface NextWorkoutCardProps {
 
 export const NextWorkoutCard: React.FC<NextWorkoutCardProps> = ({
   nextWorkout,
+  decision,
+  todaySession,
   isCompletedToday,
   onCompleteWorkout,
   onOpenEvidence,
@@ -20,120 +30,104 @@ export const NextWorkoutCard: React.FC<NextWorkoutCardProps> = ({
   const [checkedSets, setCheckedSets] = useState<Record<number, boolean>>({});
 
   const toggleSetCheck = (index: number) => {
-    setCheckedSets((prev) => ({
-      ...prev,
-      [index]: !prev[index],
-    }));
+    setCheckedSets((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
   const getTrainingStateLabel = () => {
     switch (nextWorkout.trainingState) {
-      case 'LIGHT':
-        return 'Light';
-      case 'RECOVERY':
-        return 'Recovery';
-      case 'REST':
-        return 'Rest';
+      case 'LIGHT': return '轻量';
+      case 'RECOVERY': return '恢复';
+      case 'REST': return '休憩';
       case 'NORMAL':
-      default:
-        return 'Normal';
+      default: return '常规';
     }
   };
 
   return (
-    <section className="py-5 border-t border-[#ece7de] space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-baseline gap-2.5">
-          <h2 className="text-2xl font-serif font-medium text-[#1c1917]">
-            Next Workout
-          </h2>
-          <span className="text-xs font-mono text-[#78716c]">
-            {nextWorkout.durationMinutes} min · {getTrainingStateLabel()}
+    <section className="pt-10 lg:pr-9">
+      {/* 章节题：其三 · 今日之练（统一章节头 + 朱批旁注「今日常规」） */}
+      <SectionHead
+        ordinal="其三"
+        title="今日之练"
+        verdict={`今${getTrainingStateLabel()}`}
+        note={
+          <span className="text-[12px] text-ink3 tabular-nums">
+            约 {nextWorkout.durationMinutes} 分 · 估算
           </span>
-        </div>
+        }
+      />
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onOpenEvidence}
-            className="text-xs text-[#57534e] hover:text-[#1c1917] flex items-center gap-1 font-sans cursor-pointer py-1.5 px-3 rounded-lg border border-[#ded8cc] bg-white/60 hover:bg-white shadow-2xs transition-all"
-          >
-            <HelpCircle className="w-3.5 h-3.5 text-[#15803d]" />
-            <span>Why?</span>
-          </button>
+      <div className="mt-5">
+        {/* 判定一句（原因由决策结果生成）；详细理由与阈值入「缘由」弹窗 */}
+        <p className="text-[13px] text-ink3">{describeWorkoutDecision(decision)}</p>
 
-          <button
-            onClick={onCustomWorkout}
-            className="text-xs text-[#78716c] hover:text-[#1c1917] font-sans cursor-pointer py-1 px-2 transition-colors"
-          >
-            自选动作
-          </button>
-        </div>
-      </div>
+        {todaySession && (
+          <p className="mt-1.5 text-[12px] text-ink2">
+            今日已录 {todaySession.title} · {todaySession.durationMinutes} 分 ·{' '}
+            {todaySession.durationSource === 'actual' ? '实际计时' : '估算'} ·{' '}
+            {todaySession.category === 'resistance' ? '抗阻' : todaySession.category}
+          </p>
+        )}
 
-      {/* Hero Action Surface */}
-      <div className="rounded-2xl bg-[#fbfaf8] border border-[#e4ded5] p-5 space-y-4 shadow-2xs">
-        {/* Curated Exercise List */}
-        <div className="space-y-2">
-          {nextWorkout.exercises.map((ex, idx) => {
-            const isChecked = checkedSets[idx] || isCompletedToday;
-            return (
-              <div
-                key={idx}
-                onClick={() => toggleSetCheck(idx)}
-                className={`p-3 rounded-xl border transition-all duration-150 cursor-pointer flex items-center justify-between gap-3 ${
-                  isChecked
-                    ? 'bg-[#f4f8f4] border-[#bbf7d0] text-[#1c1917]'
-                    : 'bg-white border-[#e8e2d8] hover:border-[#ded8cc]'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    className={`w-5 h-5 rounded-md flex items-center justify-center border transition-colors shrink-0 ${
-                      isChecked
-                        ? 'bg-[#15803d] border-[#15803d] text-white'
-                        : 'border-[#d6cebf] bg-white hover:border-[#a8a29e]'
+        {/* 动作清单：目录式行 */}
+        {nextWorkout.exercises.length > 0 ? (
+          <div className="mt-4">
+            {nextWorkout.exercises.map((ex, idx) => {
+              const isChecked = checkedSets[idx] || isCompletedToday;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => toggleSetCheck(idx)}
+                  aria-pressed={isChecked}
+                  aria-label={`${isChecked ? '记为未成' : '记为已成'}：${ex.name}`}
+                  className={`inklist-row inklist-dotted w-full text-left cursor-pointer transition-colors duration-150`}
+                >
+                  <span
+                    className={`w-[18px] h-[18px] shrink-0 grid place-items-center rounded-sm border transition-colors duration-150 ${
+                      isChecked ? 'bg-accent border-accent text-white' : 'border-control bg-surface'
                     }`}
                   >
-                    {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                  </button>
-
-                  <div className={`text-xs font-medium ${isChecked ? 'text-[#1c1917]' : 'text-[#292524]'}`}>
-                    {ex.name}
-                  </div>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <span className="text-xs font-mono font-medium text-[#1c1917]">
+                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                  </span>
+                  <span className="text-[15px] text-ink">{ex.name}</span>
+                  <span className="text-[13px] font-semibold text-ink2 tabular-nums shrink-0">
                     {ex.sets} 组 × {ex.repsOrDuration}
                   </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-ink2 mt-4">今日无练事。</p>
+        )}
 
-        {/* Action Footer */}
-        <div className="pt-2 flex items-center justify-between gap-3 border-t border-[#f0ebe3]">
-          <div className="text-[11px] text-[#78716c]">
-            {nextWorkout.recoveryGuidance || '组间休息 45–60 秒，保持呼吸平稳。'}
+        {/* 动作脚注行：左恢复指引,右动作组（缘由 / 另择动作 / 毕此一练） */}
+        <div className="section-actions">
+          <div className="text-xs text-ink3 leading-relaxed sm:max-w-[46ch]">
+            {nextWorkout.recoveryGuidance || '组间歇 45–60 秒，呼吸当匀。'}
           </div>
 
-          {!isCompletedToday ? (
-            <button
-              onClick={onCompleteWorkout}
-              className="px-4 py-2 rounded-xl bg-[#1c1917] hover:bg-[#2e2a26] text-white font-medium text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
-            >
-              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>完成本次训练</span>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <button onClick={onOpenEvidence} className="btn-ghost">
+              <HelpCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>缘由</span>
             </button>
-          ) : (
-            <div className="flex items-center gap-1.5 text-xs text-[#15803d] font-medium py-1 px-3 bg-[#f0fdf4] rounded-lg border border-[#bbf7d0]">
-              <Check className="w-3.5 h-3.5 stroke-[3]" />
-              <span>今日训练已完成</span>
-            </div>
-          )}
+            <button onClick={onCustomWorkout} className="btn-link px-2">
+              另择动作
+            </button>
+            {!isCompletedToday ? (
+              <button onClick={onCompleteWorkout} className="btn-primary whitespace-nowrap">
+                <Check className="w-3.5 h-3.5 shrink-0 stroke-[2.5]" />
+                <span>毕此一练</span>
+              </button>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-accent py-1.5 px-3 bg-accentsoft rounded-lg border border-accentline">
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                <span>今日之练已毕</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </section>

@@ -1,152 +1,167 @@
-import React, { useState } from 'react';
-import { Compass, Clock, Code, BookOpen, Dumbbell, Sparkles, Plus } from 'lucide-react';
-import { LifeLog, WeeklyLifeStat } from '../types/health';
+// Serif for the section headings and journal entry titles. deslop-ignore-file 07
+import React from 'react';
+import { Plus } from 'lucide-react';
+import type { ActivitySummary, JournalSummary } from '../domain/types';
+import { minutesToHours, toPercent } from '../domain/format';
+import { SectionHead } from './SectionHead';
 
-interface LifeSectionProps {
-  weeklyStats: WeeklyLifeStat[];
-  recentLogs: LifeLog[];
+const CATEGORY_CN: Record<string, string> = {
+  Coding: '写码',
+  Learning: '研学',
+  Exercise: '习练',
+  Reading: '披阅',
+  Life: '日常',
+};
+
+const LABEL = 'text-[12px] text-ink3 tracking-[0.1em] truncate';
+
+interface LifeWeekStatsProps {
+  /** 本周（周一起）活动统计，全部由 domain 派生。 */
+  activity: ActivitySummary;
+  selectedCategory: string | null;
+  onSelectCategory: (category: string | null) => void;
+}
+
+/**
+ * 本周之功 — 右栏区块：分类时长一览（与「近况」共用同一套共列网格,条因此对齐）。
+ * 与通栏的 LifeEntries 同属「生活纪事」，拆开放是为了让桌面双栏等高。
+ */
+export const LifeWeekStats: React.FC<LifeWeekStatsProps> = ({
+  activity,
+  selectedCategory,
+  onSelectCategory,
+}) => {
+  const totalHours = minutesToHours(activity.totalMinutes);
+
+  return (
+    <section className="pt-10 lg:pr-9">
+      <SectionHead
+        title="生活纪事"
+        verdict={activity.totalMinutes > 0 ? `本周${totalHours}时` : '本周未录'}
+        note={<span className="text-[12px] text-ink3 tracking-[0.1em]">周一起算</span>}
+      />
+
+      <div className="mt-4">
+        <div className="flex items-baseline justify-between text-[12px] text-ink3">
+          <span className="group-head">本周之功</span>
+          <span>占本周</span>
+        </div>
+
+        {activity.byCategory.length === 0 ? (
+          <p className="text-xs text-ink3 py-3">本周尚无纪事。</p>
+        ) : (
+          activity.byCategory.map((item) => {
+            const isSelected = selectedCategory === item.category;
+            const pct = toPercent(item.share);
+            return (
+              <button
+                type="button"
+                key={item.category}
+                onClick={() => onSelectCategory(isSelected ? null : item.category)}
+                aria-pressed={isSelected}
+                aria-label={`${CATEGORY_CN[item.category] ?? item.category} ${
+                  minutesToHours(item.minutes)
+                } 时 · ${item.sessions} 次，占本周 ${pct}%`}
+                className={`inkrow inkrow-dotted w-full text-left cursor-pointer transition-colors duration-150 ${
+                  isSelected ? 'bg-accentsoft' : 'hover:bg-surface2'
+                }`}
+              >
+                <span className={LABEL}>{CATEGORY_CN[item.category] ?? item.category}</span>
+                <span className="inkrow-meter inkrow-mid" aria-hidden="true">
+                  <i className={isSelected ? 'bg-accent' : 'bg-ink'} style={{ width: `${pct}%` }} />
+                </span>
+                <span className="inkrow-value text-[13px] text-ink">
+                  <span className="font-semibold">{minutesToHours(item.minutes)}</span> 时 ·{' '}
+                  <span className="text-ink3">{item.sessions} 次</span>
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </section>
+  );
+};
+
+interface LifeEntriesProps {
+  /** 近七日手记（只数有文字的行）。 */
+  journal: JournalSummary;
+  selectedCategory: string | null;
+  onSelectCategory: (category: string | null) => void;
   onOpenAddLog: () => void;
 }
 
-export const LifeSection: React.FC<LifeSectionProps> = ({
-  weeklyStats,
-  recentLogs,
+/** 近来手记 — 通栏区块：名录式条目，可按分类筛选。 */
+export const LifeEntries: React.FC<LifeEntriesProps> = ({
+  journal,
+  selectedCategory,
+  onSelectCategory,
   onOpenAddLog,
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-
-  const getCategoryIcon = (cat: string) => {
-    switch (cat) {
-      case 'Coding':
-        return <Code className="w-3.5 h-3.5 text-[#2563eb]" />;
-      case 'Learning':
-        return <Sparkles className="w-3.5 h-3.5 text-[#d97706]" />;
-      case 'Exercise':
-        return <Dumbbell className="w-3.5 h-3.5 text-[#15803d]" />;
-      case 'Reading':
-        return <BookOpen className="w-3.5 h-3.5 text-[#9333ea]" />;
-      default:
-        return <Clock className="w-3.5 h-3.5 text-[#78716c]" />;
-    }
-  };
-
   const filteredLogs = selectedCategory
-    ? recentLogs.filter((l) => l.category === selectedCategory)
-    : recentLogs;
+    ? journal.entries.filter((log) => log.category === selectedCategory)
+    : journal.entries;
 
   return (
-    <section className="py-6 border-t border-[#ece7de] space-y-4">
-      {/* Header */}
-      <div className="flex items-baseline justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl sm:text-2xl font-serif font-normal text-[#1c1917] tracking-tight">
-            LIFE
-          </h2>
-          <span className="text-xs font-mono text-[#a8a29e]">
-            人生轨迹 · 事实统计
-          </span>
-        </div>
-
-        <button
-          onClick={onOpenAddLog}
-          className="text-xs text-[#78716c] hover:text-[#1c1917] font-sans flex items-center gap-1 cursor-pointer transition-colors"
-        >
-          <Plus className="w-3 h-3 text-[#15803d]" />
-          <span>记录时刻</span>
-        </button>
-      </div>
-
-      {/* This Week Factual Breakdown (No scores, no value judgments) */}
-      <div className="p-4 rounded-xl bg-[#fbfaf8] border border-[#e8e2d8] space-y-3">
-        <div className="flex items-center justify-between text-xs text-[#78716c]">
-          <span>This week · 本周投入</span>
-          <span className="font-mono text-[11px] text-[#a8a29e]">纯事实记录</span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          {weeklyStats.map((item) => (
-            <div
-              key={item.category}
-              onClick={() =>
-                setSelectedCategory(selectedCategory === item.category ? null : item.category)
-              }
-              className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
-                selectedCategory === item.category
-                  ? 'bg-white border-[#15803d] shadow-2xs'
-                  : 'bg-white/60 border-[#eee8df] hover:border-[#dfd8cc]'
-              }`}
-            >
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-sans text-[#78716c] flex items-center gap-1.5">
-                  {getCategoryIcon(item.category)}
-                  <span>{item.category}</span>
-                </span>
-              </div>
-
-              <div className="text-lg font-serif font-medium text-[#1c1917] tabular-nums mt-1">
-                {item.sessions ? `${item.sessions} 次` : `${item.hours}h`}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Recent moments (Chronological logs from life_logs) */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs text-[#78716c] px-1">
-          <span>Recent moments · 近期手记</span>
-          {selectedCategory && (
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className="text-[11px] text-[#15803d] hover:underline cursor-pointer"
-            >
-              显示全部
+    <section className="pt-10 lg:pr-9">
+      <SectionHead
+        title="近来手记"
+        verdict={`${journal.windowLabel} ${journal.count} 条`}
+        note={
+          <div className="flex items-center gap-4 text-xs text-ink3">
+            {selectedCategory && (
+              <button onClick={() => onSelectCategory(null)} className="btn-link">
+                尽览
+              </button>
+            )}
+            <button onClick={onOpenAddLog} className="btn-link">
+              <Plus className="w-3.5 h-3.5 shrink-0" />
+              <span>记此一刻</span>
             </button>
-          )}
-        </div>
+          </div>
+        }
+      />
 
-        <div className="space-y-2">
-          {filteredLogs.map((log) => (
+      {filteredLogs.length === 0 ? (
+        <p className="text-xs text-ink3 mt-4">尚无纪事。</p>
+      ) : (
+        <div className="mt-4">
+          {filteredLogs.map((log, idx) => (
             <div
               key={log.id}
-              className="p-3.5 rounded-xl bg-[#fbfaf8] border border-[#e8e2d8] hover:border-[#ded8cc] transition-colors space-y-1.5"
+              className={`py-3.5 ${idx > 0 ? 'border-t border-dotted border-linehover' : ''}`}
             >
-              <div className="flex items-center justify-between text-xs">
-                <span className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#15803d]" />
-                  <span className="font-serif font-medium text-[#1c1917] text-sm">
-                    {log.title}
-                  </span>
+              <div className="inklist-row inklist-dotted !py-0">
+                <span className="font-serif text-[17px] font-bold text-ink truncate">
+                  {log.title}
                 </span>
-
-                <span className="text-[11px] font-mono text-[#a8a29e]">
-                  {log.date}
-                </span>
+                <span className="leader" aria-hidden="true" />
+                <span className="text-[12px] text-ink3 tabular-nums shrink-0">{log.date}</span>
               </div>
 
-              <p className="text-xs text-[#57534e] font-sans leading-relaxed pl-3.5">
-                {log.content}
-              </p>
-
-              <div className="flex items-center gap-2 pl-3.5 pt-1 text-[11px] font-mono text-[#a8a29e]">
-                <span>{log.category}</span>
+              <div className="mt-1 text-[12px] text-ink3 flex items-center gap-2">
+                <span>{CATEGORY_CN[log.category] ?? log.category}</span>
                 {log.durationMinutes > 0 && (
                   <>
                     <span>·</span>
-                    <span>{Math.round(log.durationMinutes / 6) / 10}h</span>
+                    <span className="tabular-nums">{minutesToHours(log.durationMinutes)} 时</span>
                   </>
                 )}
                 {log.project && (
                   <>
                     <span>·</span>
-                    <span className="text-[#78716c]">{log.project}</span>
+                    <span>{log.project}</span>
                   </>
                 )}
               </div>
+
+              {log.content && (
+                <p className="text-[13px] text-ink2 leading-relaxed mt-1.5">{log.content}</p>
+              )}
             </div>
           ))}
         </div>
-      </div>
+      )}
     </section>
   );
 };

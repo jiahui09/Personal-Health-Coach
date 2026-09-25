@@ -1,0 +1,126 @@
+/**
+ * Journal data-contract regression tests (behavior lock)
+ *
+ * 锁定「页面只读 TodayData 的结构化结果」这一契约：原始记录切片、派生指标、
+ * 决策结果三层都必须是 domain 算好的值，展示层不再自行计算。
+ *
+ * 固定 clock：2026-09-25（周五）21:30 —— 本周一 = 2026-09-21。
+ *
+ * 1. f_meal_slot boundaries (meal slot rule shared with the UI caption)
+ * 2. TodayData contract: tasks / weight / nutrition / sleep / activity / journal / training / forecast
+ * 3. storage fallback: corrupt localStorage key falls back to seed data
+ */
+
+import { f_meal_slot } from '../services/scientificRules';
+import { MockHealthRepository } from '../services/mockHealthRepository';
+
+function assert(condition: boolean, message: string): asserts condition {
+  if (!condition) throw new Error(`FAIL: ${message}`);
+}
+
+const approx = (a: number, b: number, eps = 1e-9): boolean => Math.abs(a - b) < eps;
+
+// --- 1. meal slot boundaries -------------------------------------------------
+assert(f_meal_slot(0) === 'breakfast', 'hour 0 is breakfast');
+assert(f_meal_slot(9) === 'breakfast', 'hour 9 is breakfast');
+assert(f_meal_slot(10) === 'lunch', 'hour 10 is lunch');
+assert(f_meal_slot(14) === 'lunch', 'hour 14 is lunch');
+assert(f_meal_slot(15) === 'dinner', 'hour 15 is dinner');
+assert(f_meal_slot(23) === 'dinner', 'hour 23 is dinner');
+
+// --- 2. TodayData contract (fixed clock → deterministic seed windows) --------
+const CLOCK = (): Date => new Date(2026, 8, 25, 21, 30);
+const repository = new MockHealthRepository({ clock: CLOCK });
+const today = await repository.getToday();
+
+assert(today.date === '2026-09-25', `date is the injected day (got ${today.date})`);
+assert(today.mealSlot === 'dinner', 'hour 21 → dinner slot');
+assert(['朝安。', '昼安。', '夜安。'].includes(today.timeGreeting), 'timeGreeting in {朝安,昼安,夜安}');
+assert(today.displayDate.includes('年'), 'displayDate uses the Chinese calendar line');
+
+// 任务：4 事 1 成（seed），完成率由 domain 算出
+assert(today.todos.length === 4, 'today slice carries the 4 seeded tasks');
+assert(today.tasks.total === 4 && today.tasks.completed === 1, '1/4 comes from status, not from durations');
+assert(approx(today.tasks.ratio, 0.25), 'task ratio matches completed/total');
+
+// 体重：条数与有效日数分开，端点变化与斜率不同名
+assert(today.weight.latest === 68.4, `latest seed weight is 68.4 (got ${today.weight.latest})`);
+assert(today.weight.readingCount === 30 && today.weight.daysWithRecords === 30, '30 records over 30 days');
+assert(today.weight.endpointChangeKg === -0.9, `endpoint change 69.3→68.4 = -0.9 (got ${today.weight.endpointChangeKg})`);
+assert(today.weight.rollingMean7d !== null && today.weight.rollingMean7dDays === 7, '7-day mean over 7 recorded days');
+assert(today.weight.trendKgPerWeek !== null && today.weight.trendDays === 30, 'trend uses the 30-day window');
+assert(today.weight.quality.flag === 'normal', 'seed data is within normal range');
+assert(today.weightSeries.length === 30, 'chart series = 30 daily representatives');
+for (let i = 1; i < today.weightSeries.length; i++) {
+  assert(today.weightSeries[i - 1].date < today.weightSeries[i].date, 'weightSeries dates ascend');
+}
+
+// 营养：实测入账 vs 目标，余量与超额同源
+assert(today.nutrition.calories.consumed === 1020 && today.nutrition.calories.target === 1950, 'seed intake 1020/1950 kcal');
+assert(today.nutrition.protein.consumed === 63 && today.nutrition.protein.target === 110, 'seed intake 63/110 g protein');
+assert(approx(today.nutrition.calories.remaining, 930), 'remaining calories = target - consumed');
+assert(today.nutrition.calories.status === 'under' && today.nutrition.protein.status === 'under', 'under target');
+assert(approx(today.nutrition.calories.ratio, 1020 / 1950), 'ratio === consumed/target (single source)');
+assert(today.nutrition.mealCount === 2, 'meal count = confirmed logs today');
+assert(today.nutrition.quality.flag === 'normal', 'seed intake is plausible');
+
+// 睡眠：由时刻推得，近七日均如实报告夜数
+assert(today.sleep.today?.minutes === 440, '00:55→08:15 = 440 min (7h20m)');
+assert(today.sleep.today?.source === 'interval', 'sleep came from the clock interval');
+assert(today.sleep.nights === 1 && today.sleep.windowDays === 7, 'only 1 night recorded → 1/7 reported');
+assert(today.sleep.avgMinutes === 440, 'average is over recorded nights only');
+assert(today.sleep.meetsReference === true, '440 min meets the 7h reference');
+
+// 生活纪事：本周（周一起）
+const weekMinutes = today.activity.byCategory.reduce((sum, row) => sum + row.minutes, 0);
+assert(today.activity.totalMinutes === weekMinutes, 'total minutes = sum of category minutes');
+assert(today.activity.totalMinutes > 0, 'seed has activity in the current week');
+assert(today.activity.byCategory.every((row) => row.sessions >= 1), 'each category reports its session count');
+assert(today.journal.count === today.journal.entries.length, 'journal count = journal entries');
+assert(today.journal.entries.every((entry) => (entry.content ?? '').trim().length > 0), 'journal entries all carry text');
+
+// 训练：决策来自纯函数；抗阻只数本周抗阻
+assert(today.training.decision.mode === 'normal', 'seed (energy 4 / soreness 2 / 7h20m) → normal session');
+assert(today.training.resistance.target === 2, 'weekly resistance target comes from policy');
+assert(today.training.resistance.completed <= today.training.resistance.totalWorkoutsThisWeek, 'resistance ⊆ all workouts');
+assert(today.training.todaySession === null, 'no workout recorded today in seed');
+
+// 决策与推荐
+assert(today.nextMeal.reason.length > 0, 'nextMeal carries a reason sentence');
+assert(today.nextWorkout.recoveryGuidance.length > 0, 'nextWorkout carries recovery guidance');
+assert(today.nextWorkout.durationSource === 'estimated', 'recommended duration is explicitly estimated');
+
+// 情景外推：写明出处与依据日数，且与实测分离
+assert(today.forecast.modelVersion.length > 0, 'forecast carries its model version');
+assert(today.forecast.method === 'scenario_trend_projection', 'forecast is labelled as a scenario projection');
+assert(today.forecast.basedOnDays === 30 && today.forecast.inputWindowDays === 30, 'forecast reports its window');
+if (!today.forecast.withheld) {
+  for (const period of [today.forecast.fourWeeks, today.forecast.eightWeeks, today.forecast.twelveWeeks]) {
+    assert(period.range.min > 0 && period.range.min <= period.range.max, 'forecast intervals are ordered');
+  }
+}
+assert(today.forecast.assumptions.length > 0, 'forecast carries assumptions');
+assert(today.forecast.limitations.length > 0, 'forecast carries limitations');
+
+// 数据质量的汇总
+assert(Array.isArray(today.dataQuality.flags) && today.dataQuality.reviewCount >= 0, 'quality flags present');
+
+// 同一 clock 两次调用必须完全一致（可复算）
+const again = await repository.getToday();
+assert(JSON.stringify(again) === JSON.stringify(today), 'getToday is deterministic for a fixed clock');
+
+// --- 3. storage fallback: corrupt key -> seed data, no throw ----------------
+const storage = (globalThis as { localStorage?: Storage }).localStorage;
+if (storage) {
+  storage.setItem('phc_todos_v3', '{corrupt json');
+  const fallbackRepository = new MockHealthRepository({ clock: CLOCK });
+  const todos = await fallbackRepository.getTodos();
+  assert(todos.length === 4, 'corrupt todos key falls back to seed data');
+} else {
+  // No storage at all (Node without Web Storage): construction must still work
+  // because getStorage treats the missing store as the same fail-safe boundary.
+  const todos = await repository.getTodos();
+  assert(Array.isArray(todos), 'todos readable without a storage backend');
+}
+
+console.log('ALL JOURNAL CONTRACT TESTS PASSED.');

@@ -16,10 +16,10 @@ import {
   HealthContext,
   MealRecommendation,
   WeightForecast,
-  WeightRecord,
-  WeightTrendResult,
   WorkoutRecommendation,
 } from '../types/health';
+import type { DataQuality } from '../domain/types';
+import { resolveSleepMinutes } from '../domain/sleep';
 import {
   ENGINE_VERSION,
   f_diet_quality,
@@ -34,7 +34,6 @@ import {
   f_training_state,
   f_training_volume,
   f_weight_forecast,
-  f_weight_trend,
   f_workout,
 } from './scientificRules';
 
@@ -49,9 +48,10 @@ export interface DecisionEvaluationResult {
     dailyProteinTarget: number;
     consumedCalories: number;
     consumedProtein: number;
-    energy: number;
-    soreness: number;
-    sleepHours: number;
+    energy: number | null;
+    soreness: number | null;
+    /** 由就寝/起身时刻推得的小时数；今日未录为 null。 */
+    sleepHours: number | null;
   };
   mealRecommendation: MealRecommendation;
   workoutRecommendation: WorkoutRecommendation;
@@ -76,17 +76,16 @@ export class ScientificDecisionEngine {
   }
 
   /**
-   * Calculate 7-day rolling average & linear weekly trend
+   * 4w / 8w / 12w 情景区间（据 domain 派生的趋势；数据存疑或不足时不出数）。
    */
-  computeWeightTrend(weightHistory: WeightRecord[]): WeightTrendResult {
-    return f_weight_trend(weightHistory);
-  }
-
-  /**
-   * Calculate 4w, 8w, 12w prediction intervals based on Hall et al. dynamic energy balance
-   */
-  computeWeightForecast(currentWeight: number, weightTrend: WeightTrendResult, goal: string): WeightForecast {
-    return f_weight_forecast({ currentWeight, weightTrend, goal });
+  computeWeightForecast(input: {
+    latestWeight: number | null;
+    trendKgPerWeek: number | null;
+    basedOnDays: number;
+    inputWindowDays: number;
+    quality: DataQuality;
+  }): WeightForecast {
+    return f_weight_forecast({ ...input, modelVersion: this.version });
   }
 
   /**
@@ -119,7 +118,7 @@ export class ScientificDecisionEngine {
 
     return {
       version: this.version,
-      evaluatedAt: new Date().toISOString(),
+      evaluatedAt: context.now.toISOString(),
       isDeterministic: true,
       llmStatus: 'OFF',
       contextSummary: {
@@ -128,9 +127,14 @@ export class ScientificDecisionEngine {
         dailyProteinTarget: context.profile.dailyProteinTarget,
         consumedCalories,
         consumedProtein,
-        energy: context.todayState.energy,
-        soreness: context.todayState.soreness,
-        sleepHours: context.todayState.sleepHours,
+        energy: context.todayState.energy ?? null,
+        soreness: context.todayState.soreness ?? null,
+        sleepHours:
+          context.todayState.sleep === undefined
+            ? null
+            : Math.round(
+                ((resolveSleepMinutes(context.todayState.sleep)?.minutes ?? 0) / 60) * 100
+              ) / 100,
       },
       mealRecommendation: meal,
       workoutRecommendation: workout,
@@ -167,6 +171,5 @@ export {
   f_training_state,
   f_training_volume,
   f_weight_forecast,
-  f_weight_trend,
   f_workout,
 };

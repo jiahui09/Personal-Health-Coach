@@ -1,34 +1,223 @@
 @import "tailwindcss";
 
+/* Design tokens — the single source for palette, faces and radii.
+   奏折制:墨 = 臣工所书(正文/数据/事实),朱 = 御批(裁决/状态/动作/旁注)。
+   Paper (warm) vs surface (near-white) gives the page its contrast; the ink
+   ramp carries all reading; one functional accent (朱) carries every verdict.
+   deslop-ignore-file 07 33 34 35 */
+
+@theme {
+  /* surfaces */
+  --color-paper: #f4f0e8;
+  --color-surface: #fffdf8;
+  --color-surface2: #f1ece1;
+  --color-surface3: #e7e0d1;
+  /* hairlines */
+  --color-line: #e3dccc;
+  --color-linesoft: #ece6da;
+  --color-linehover: #cec5b1;
+  --color-hair: #cdc4b3;
+  /* ink ramp — 每档对 paper/surface 皆 ≥4.5:1(WCAG AA 正文),数值由 contrast.test.ts 锁定 */
+  --color-ink: #16120e; /* 16.39 */
+  --color-ink2: #57534e; /* 6.71 */
+  --color-ink3: #6f675e; /* 4.89 —— 原 #8c8378 仅 3.28,不达标 */
+  --color-ink4: #736b61; /* 4.61 —— 原 #a89f92 仅 2.30,不达标 */
+  /* accents —— 「御批朱墨」色组(比选稿见 docs/palette-options.html,选中其五并微调):
+     古书纸 #f4f0e8 与批朱红 #a63a2b 为既定锚色;朱现同时承担印章与状态,
+     故 danger 另取更深的紫檀绛拉开明度差,tier2 收为褐。 */
+  --color-accent: #a63a2b; /* 5.66 对纸,白字压朱 6.44;状态/达标/勾选/折线/焦点/旁批 */
+  --color-accentsoft: #fbeee9; /* 纸混朱 6% */
+  --color-accentline: #f2d9d0; /* 纸混朱 14% */
+  --color-accentbright: #fda4af; /* 压墨 9.85:1(Toast 勾 / 录毕勾) */
+  --color-seal: #a63a2b; /* 批朱红 —— 刊头印章,与 accent 同源不同职 */
+  --color-danger: #7f1d1d; /* 紫檀绛:8.82 对纸,白字 10.02 —— 与朱(5.66)拉明度差 */
+  --color-tier2: #7a5a2e; /* 褐 5.55 对纸 —— 证据次级/中性提示 */
+  /* 可交互控件边界(复选框/输入框):≥3:1,满足 1.4.11;装饰线仍用 line/hair */
+  --color-control: #877c69; /* 3.61 对纸 */
+  /* faces */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --font-serif: 'Newsreader', 'Noto Serif SC', 'Songti SC', 'Source Han Serif SC',
+    'Noto Serif CJK SC', Georgia, serif;
+}
+
 @layer base {
   body {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #faf8f5;
-    color: #24272c;
+    font-family: var(--font-sans);
+    color: var(--color-ink);
     overflow-x: hidden;
+    /* 仿真古书纸：纤维噪点 + 陈化晕染，纸色仍由 --color-paper 出（不用氛围渐变） */
+    background-color: var(--color-paper);
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='fiber'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65 0.95' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23fiber)' opacity='0.06'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cfilter id='mottle'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='480' height='480' filter='url(%23mottle)' opacity='0.07'/%3E%3C/svg%3E");
   }
 
+  /* Display face: Newsreader carries Latin, Noto Serif SC carries the headings. */
   h1, h2, h3, .font-serif {
-    font-family: 'Newsreader', Georgia, Cambria, 'Times New Roman', Times, serif;
+    font-family: var(--font-serif);
   }
 
+  /* Code face: rule ids and technical identifiers only. */
   .font-mono {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  }
+
+  /* 键盘焦点必须可见:2px 墨线环 + 2px 偏移。
+     源码中不得再引入「隐藏焦点轮廓」的工具类,由 grep 闸门与截图复核。 */
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
   }
 }
 
-/* Subtle gentle animations */
-@keyframes subtleFade {
-  from {
-    opacity: 0;
+@layer components {
+  /* 动作三级体系:墨实心主按钮 → 描边次按钮 → 文字链。
+     绿不作按钮底色(只表状态/达标/图表);圆角仍全站唯一 8px 档。 */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.625rem 1.25rem;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #fff;
+    background-color: var(--color-ink);
+    border-radius: 8px;
+    transition: background-color 150ms;
+    cursor: pointer;
+  }
+  .btn-primary:hover {
+    background-color: var(--color-ink2);
+  }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 13px;
+    line-height: 1.3;
+    color: var(--color-ink2);
+    border: 1px solid var(--color-linehover);
+    border-radius: 8px;
+    transition:
+      color 150ms,
+      border-color 150ms;
+    cursor: pointer;
+  }
+  .btn-ghost:hover {
+    color: var(--color-ink);
+    border-color: var(--color-hair);
+  }
+
+  .btn-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--color-ink2);
+    transition: color 150ms;
+    cursor: pointer;
+  }
+  .btn-link:hover {
+    color: var(--color-ink);
+  }
+
+  /* 章节末的动作脚注行:左边语境提示,右边动作组。
+     窄屏纵向堆叠(动作整行另起),宽屏一行两端对齐——章节级动作只许出现在这里。 */
+  .section-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-line);
+  }
+  @media (min-width: 640px) {
+    .section-actions {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
+  }
+
+  /* 目录式点线引导(标题 …… 用时):flex 让它落在行中央,再下移 4px 贴近基线。
+     这是光学基线微调,不是布局位移——所有点线引导共用同一档。 */
+  .leader {
+    flex: 1 1 auto;
+    min-width: 1rem;
+    border-bottom: 1px dotted var(--color-linehover);
     transform: translateY(4px);
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 
-.animate-subtle {
-  animation: subtleFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  /* ---------- 行文共列网格 ----------
+     统计行一律「名 | 中列(计量条或点阵) | 值」三列定宽:
+     全页计量条因此天然同起同止,对齐由结构保证,不靠逐处调数值。
+     名列为二字至五字（今之体重/回归斜率/蛋白质/热量/精力/酸痛/写码…）。 */
+  .inkrow {
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr) 152px;
+    align-items: baseline;
+    column-gap: 0.75rem;
+    padding-block: 0.75rem;
+  }
+  /* 行间只用点线(L3);实线(L2)留给「组」的分界 */
+  .inkrow-dotted + .inkrow-dotted {
+    border-top: 1px dotted var(--color-linehover);
+  }
+  .inkrow-value {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .inkrow-mid {
+    align-self: center;
+  }
+  .inkrow-meter {
+    position: relative;
+    height: 3px;
+    background: var(--color-line);
+  }
+  .inkrow-meter > i {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    display: block;
+  }
+  @media (max-width: 639px) {
+    .inkrow {
+      grid-template-columns: 64px minmax(0, 1fr) 116px;
+      column-gap: 0.5rem;
+    }
+  }
+
+  /* 组标题（今日所食 / 本周之功 / 今日体感 / 三十日趋势 …）：
+     与行文行同列起点,字号小于正文,只作分组标记。 */
+  .group-head {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-ink3);
+    letter-spacing: 0.14em;
+  }
+
+  /* 名录式条目（标题可长）：名 | 点线 | 值 */
+  .inklist-row {
+    display: grid;
+    grid-template-columns: minmax(0, auto) minmax(1rem, 1fr) 132px;
+    align-items: baseline;
+    column-gap: 0.75rem;
+    padding-block: 0.75rem;
+  }
+  .inklist-row > :last-child {
+    text-align: right;
+  }
+  .inklist-row .leader {
+    width: 100%;
+  }
+  .inklist-dotted + .inklist-dotted {
+    border-top: 1px dotted var(--color-linehover);
+  }
 }

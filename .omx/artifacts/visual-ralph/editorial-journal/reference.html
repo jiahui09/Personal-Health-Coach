@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="zh-CN">
+<!-- 参考稿（Visual Ralph，用户已批准原样实现）：deslop-ignore-file 09 11 18 19 24 -->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>个人健康手记 · 编辑式改版参考</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f4f0e8;
+    --card:#fffdf8;
+    --ink:#16120e;
+    --ink2:#57534e;
+    --ink3:#8c8378;
+    --line:#e3dccc;
+    --line-soft:#ece6da;
+    --green:#15803d;
+    --red:#a63a2b;
+    --serif:'Newsreader','Noto Serif SC','Songti SC','Source Han Serif SC','Noto Serif CJK SC',serif;
+    --sans:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 36px 72px}
+
+  /* ---- 刊头 ---- */
+  .masthead{display:flex;align-items:center;gap:14px;padding:26px 0 16px;border-bottom:2px solid var(--ink)}
+  .seal{width:32px;height:32px;background:var(--red);color:#fff;font-family:var(--serif);font-weight:700;font-size:18px;display:grid;place-items:center;border-radius:4px}
+  .brand{font-family:var(--serif);font-size:18px;font-weight:700;letter-spacing:.08em}
+  .brand small{display:block;font-family:var(--sans);font-size:9.5px;letter-spacing:.26em;color:var(--ink3);font-weight:600;margin-top:3px}
+  .mast-right{margin-left:auto;display:flex;align-items:center;gap:18px}
+  .mast-meta{font-size:11.5px;letter-spacing:.14em;color:var(--ink3);font-weight:600}
+  .btn{font-family:var(--sans);font-size:13.5px;font-weight:600;letter-spacing:.04em;border-radius:8px;padding:10px 18px;cursor:pointer;border:1px solid transparent}
+  .btn-ink{background:var(--ink);color:#fff}
+  .btn-line{background:transparent;color:var(--ink2);border-color:var(--line)}
+  .btn-green{background:var(--green);color:#fff;padding:12px 22px;font-size:14.5px}
+  .btn-ghost{background:transparent;color:var(--ink3);border-color:transparent}
+
+  /* ---- 序 ---- */
+  .hero{padding:46px 0 34px;border-bottom:1px solid var(--line)}
+  .hero h1{font-family:var(--serif);font-size:clamp(46px,7vw,74px);line-height:1.02;font-weight:700;letter-spacing:.02em}
+  .hero-date{margin-top:18px;font-family:var(--serif);font-size:17px;letter-spacing:.3em;color:var(--ink2)}
+  .hero-note{margin-top:8px;font-size:13.5px;color:var(--ink3)}
+
+  /* ---- 分节标题 ---- */
+  .sec{padding-top:52px}
+  .sec-head{display:flex;align-items:baseline;gap:16px;padding-bottom:12px;border-bottom:1.5px solid var(--ink)}
+  .sec-no{font-family:var(--serif);font-size:13.5px;font-weight:700;letter-spacing:.34em;color:var(--green)}
+  .sec-head h2{font-family:var(--serif);font-size:27px;font-weight:700;letter-spacing:.08em}
+  .sec-aside{margin-left:auto;font-size:12.5px;color:var(--ink3);letter-spacing:.1em}
+  .sec-head.plain{border-bottom-color:var(--line);border-bottom-width:1px}
+
+  /* ---- 栅格 ---- */
+  .cols{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:0 56px;align-items:start}
+  .cols > *{min-width:0}
+
+  /* ---- 待办 ---- */
+  .todos{list-style:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 20px;margin-top:20px}
+  .todo{display:flex;align-items:center;gap:13px;padding:14px 0}
+  .todo + .todo{border-top:1px solid var(--line-soft)}
+  .box{width:17px;height:17px;border:1.5px solid var(--ink);border-radius:4px;flex:0 0 auto;display:grid;place-items:center;background:#fff}
+  .box svg{width:11px;height:11px}
+  .todo-title{font-size:15px}
+  .todo.done .todo-title{color:var(--ink3);text-decoration:line-through;text-decoration-thickness:1px}
+  .leader{flex:1;border-bottom:1px dotted #cec5b3;transform:translateY(5px);min-width:20px}
+  .todo-time{font-size:12.5px;color:var(--ink3);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+  .todo-add{display:flex;align-items:center;gap:9px;padding:13px 0 14px;color:var(--green);font-size:13.5px;font-weight:600;border-top:1px solid var(--line-soft)}
+
+  /* ---- 随笔 ---- */
+  .quote{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--green);border-radius:8px;padding:20px 24px;margin-top:24px}
+  .quote-meta{display:flex;justify-content:space-between;font-size:11.5px;letter-spacing:.16em;color:var(--ink3)}
+  .quote-text{font-family:var(--serif);font-size:19.5px;line-height:1.85;margin-top:12px}
+
+  /* ---- 体重 ---- */
+  .weight-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:24px 26px;margin-top:20px}
+  .weight-top{display:flex;align-items:baseline;justify-content:space-between}
+  .weight-label{font-size:12.5px;letter-spacing:.16em;color:var(--ink3);font-weight:600}
+  .weight-edit{font-size:12.5px;color:var(--ink3);letter-spacing:.08em}
+  .weight-num{font-family:var(--serif);font-size:78px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.01em;margin-top:14px}
+  .weight-num span{font-family:var(--sans);font-size:17px;font-weight:500;color:var(--ink3);margin-left:8px;letter-spacing:.06em}
+  .weight-delta{margin-top:10px;font-size:14px;color:var(--green);font-weight:600}
+  .weight-delta b{font-variant-numeric:tabular-nums}
+  .chart{margin-top:20px;padding-top:16px;border-top:1px solid var(--line-soft)}
+  .chart-cap{display:flex;justify-content:space-between;font-size:11.5px;letter-spacing:.14em;color:var(--ink3);margin-bottom:10px}
+  .axis{display:flex;justify-content:space-between;font-size:11px;color:var(--ink3);margin-top:7px;font-variant-numeric:tabular-nums;letter-spacing:.08em}
+
+  /* ---- 三格状态 ---- */
+  .strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:20px}
+  .cell{padding:18px 18px 17px}
+  .cell + .cell{border-left:1px solid var(--line)}
+  .cell-label{font-size:12px;color:var(--ink3);letter-spacing:.14em;font-weight:600}
+  .cell-value{font-family:var(--serif);font-size:31px;font-weight:700;line-height:1.1;margin-top:8px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .cell-state{font-size:13px;font-weight:700;color:var(--green);letter-spacing:.1em;margin-top:8px}
+  .dots{display:flex;gap:6px;margin-top:10px}
+  .dot{width:11px;height:11px;border-radius:50%;background:#ddd5c6}
+  .dot.on{background:var(--ink)}
+  .cell-note{font-size:11.5px;color:var(--ink3);line-height:1.55;margin-top:9px}
+
+  /* ---- 一餐 ---- */
+  .meal-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:26px 28px 24px;margin-top:20px}
+  .meal-actions{display:flex;gap:10px;justify-content:flex-end;margin-bottom:6px}
+  .meal-title{font-family:var(--serif);font-size:31px;font-weight:700;line-height:1.35}
+  .meal-items{margin-top:10px;font-size:14.5px;color:var(--ink2);letter-spacing:.04em}
+  .meal-why{margin-top:14px;font-size:14.5px;color:var(--ink2);line-height:1.85;max-width:54ch}
+  .numbers{display:flex;align-items:flex-end;gap:38px;margin-top:22px;padding-top:18px;border-top:1px solid var(--line-soft)}
+  .num b{display:block;font-family:var(--serif);font-size:31px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.15}
+  .num span{display:block;font-size:11.5px;color:var(--ink3);letter-spacing:.14em;margin-top:4px}
+  .numbers .btn-green{margin-left:auto}
+
+  /* ---- 训练 ---- */
+  .exs{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 20px;margin-top:20px}
+  .ex{display:flex;align-items:center;gap:14px;padding:14px 0}
+  .ex + .ex{border-top:1px solid var(--line-soft)}
+  .ex-name{font-size:15.5px}
+  .ex-set{margin-left:auto;font-size:14px;font-weight:600;color:var(--ink2);font-variant-numeric:tabular-nums;letter-spacing:.03em}
+  .ex-foot{display:flex;align-items:center;gap:18px;padding:15px 0 4px;border-top:1px solid var(--line);margin-top:4px}
+  .ex-foot p{font-size:12.5px;color:var(--ink3);line-height:1.6}
+  .ex-foot .btn-ink{margin-left:auto;white-space:nowrap}
+
+  /* ---- 近况 ---- */
+  .stats{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-top:20px}
+  .stat{display:flex;align-items:center;gap:14px;padding:16px 20px}
+  .stat + .stat{border-top:1px solid var(--line-soft)}
+  .stat-label{font-size:13.5px;color:var(--ink2)}
+  .stat-sub{font-size:11.5px;color:var(--ink3);margin-top:3px;letter-spacing:.06em}
+  .stat-right{margin-left:auto;text-align:right}
+  .stat-value{font-family:var(--serif);font-size:27px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.15}
+  .stat-tag{font-size:11px;color:var(--ink3);letter-spacing:.1em;margin-top:3px}
+  .stat-tag.green{color:var(--green);font-weight:600}
+  .mini-bars{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:20px 22px 16px;margin-top:20px}
+  .forecast{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card);margin-top:20px}
+  .fbox{padding:16px 16px 15px;text-align:center}
+  .fbox + .fbox{border-left:1px solid var(--line)}
+  .fbox span{display:block;font-size:11.5px;color:var(--ink3);letter-spacing:.14em}
+  .fbox b{display:block;font-family:var(--serif);font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:7px}
+
+  /* ---- 生活 ---- */
+  .life{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-top:20px}
+  .life-row{display:flex;align-items:center;gap:16px;padding:16px 20px}
+  .life-row + .life-row{border-top:1px solid var(--line-soft)}
+  .life-name{font-family:var(--serif);font-size:17px;font-weight:700;letter-spacing:.1em;min-width:74px}
+  .life-desc{font-size:13.5px;color:var(--ink2)}
+  .life-num{margin-left:auto;font-family:var(--serif);font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+  .life-num small{font-family:var(--sans);font-size:12px;font-weight:500;color:var(--ink3);margin-left:5px}
+
+  /* ---- 页脚 ---- */
+  .foot{margin-top:64px;padding-top:18px;border-top:2px solid var(--ink);display:flex;align-items:center;gap:14px;font-size:12px;color:var(--ink3);letter-spacing:.1em}
+  .foot b{font-family:var(--serif);color:var(--ink);font-weight:700;letter-spacing:.14em}
+  .foot .right{margin-left:auto}
+
+  .fab{position:fixed;right:36px;bottom:32px;background:var(--ink);color:#fff;border-radius:8px;padding:14px 22px;font-size:14.5px;font-weight:600;letter-spacing:.06em;box-shadow:0 2px 10px rgba(22,18,14,.18)}
+
+  @media (max-width:940px){
+    .wrap{padding:0 20px 96px}
+    .cols{grid-template-columns:minmax(0,1fr);gap:0}
+    .hero h1{font-size:44px}
+    .weight-num{font-size:64px}
+    .strip{grid-template-columns:minmax(0,1fr)}
+    .cell + .cell{border-left:0;border-top:1px solid var(--line)}
+    .meal-title{font-size:25px}
+    .sec-head h2{font-size:23px}
+    .mast-meta{display:none}
+    .fab{right:18px;bottom:18px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="seal">记</div>
+    <div class="brand">个人健康手记<small>Personal Health Coach</small></div>
+    <div class="mast-right">
+      <span class="mast-meta">本地存储 · 私人手记</span>
+      <button class="btn btn-ink">记一笔</button>
+    </div>
+  </header>
+
+  <section class="hero">
+    <h1>午后好。</h1>
+    <div class="hero-date">丙午年 · 九月廿五 · 星期五</div>
+    <div class="hero-note">今日四件事，已完成一件。</div>
+  </section>
+
+  <div class="cols">
+
+    <!-- 左栏 · 章一 -->
+    <div>
+      <section class="sec">
+        <div class="sec-head">
+          <span class="sec-no">其一</span>
+          <h2>今日之事</h2>
+          <span class="sec-aside">1 / 4 · 手记速记</span>
+        </div>
+        <ul class="todos">
+          <li class="todo">
+            <span class="box"></span>
+            <span class="todo-title">完成产品核心架构手记</span>
+            <span class="leader"></span>
+            <span class="todo-time">45 分</span>
+          </li>
+          <li class="todo">
+            <span class="box"></span>
+            <span class="todo-title">阅读一篇抗阻训练文献</span>
+            <span class="leader"></span>
+            <span class="todo-time">30 分</span>
+          </li>
+          <li class="todo">
+            <span class="box"></span>
+            <span class="todo-title">徒手自重轻量练习（16 分钟）</span>
+            <span class="leader"></span>
+            <span class="todo-time">16 分</span>
+          </li>
+          <li class="todo done">
+            <span class="box" style="background:#15803d;border-color:#15803d">
+              <svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.8 9 10 3.4" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <span class="todo-title">采购新鲜蔬菜与优质蛋白质食材</span>
+            <span class="leader"></span>
+            <span class="todo-time">—</span>
+          </li>
+          <li class="todo-add">＋ 添加待办事项</li>
+        </ul>
+
+        <div class="quote">
+          <div class="quote-meta"><span>生活记事</span><span>14:20</span></div>
+          <div class="quote-text">「把模型预测和真实体重每周对一次，偏差大的时候先查记录有没有漏，再谈调整目标。」</div>
+        </div>
+      </section>
+
+      <!-- 章二 · 下一餐 -->
+      <section class="sec">
+        <div class="sec-head">
+          <span class="sec-no">其二</span>
+          <h2>下一餐</h2>
+          <span class="sec-aside">今日晚餐 · 减脂平稳期</span>
+        </div>
+        <div class="meal-card">
+          <div class="meal-actions">
+            <button class="btn btn-line">缘由</button>
+            <button class="btn btn-ghost">另记一笔</button>
+          </div>
+          <div class="meal-title">三文鱼 · 藜麦 · 菠菜与牛油果</div>
+          <div class="meal-items">三文鱼柳（煎）／熟藜麦／焯水菠菜／牛油果</div>
+          <div class="meal-why">平衡补充约 37–47 克蛋白质与全食物膳食纤维，适配今日减脂平稳期的热量区间。</div>
+          <div class="numbers">
+            <div class="num"><b>540–620</b><span>千卡</span></div>
+            <div class="num"><b>37–47g</b><span>蛋白质</span></div>
+            <button class="btn btn-green">按此记录</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 章三 · 今日之练 -->
+      <section class="sec">
+        <div class="sec-head">
+          <span class="sec-no">其三</span>
+          <h2>今日之练</h2>
+          <span class="sec-aside">20 分钟 · 常规</span>
+        </div>
+        <div class="exs">
+          <div class="ex"><span class="box"></span><span class="ex-name">徒手深蹲</span><span class="ex-set">3 组 × 12 次</span></div>
+          <div class="ex"><span class="box"></span><span class="ex-name">标准俯卧撑</span><span class="ex-set">3 组 × 8–10 次</span></div>
+          <div class="ex"><span class="box"></span><span class="ex-name">交替前后箭步蹲</span><span class="ex-set">2 组 × 每侧 10 次</span></div>
+          <div class="ex"><span class="box"></span><span class="ex-name">单腿臀桥</span><span class="ex-set">2 组 × 每侧 8 次</span></div>
+          <div class="ex"><span class="box"></span><span class="ex-name">平板支撑</span><span class="ex-set">2 组 × 35 秒</span></div>
+          <div class="ex-foot">
+            <p>组间休息 60–90 秒，预留 2 次力竭储备（RIR 2）。</p>
+            <button class="btn btn-ink">完成本次训练</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 右栏 -->
+    <aside>
+      <section class="sec">
+        <div class="sec-head plain">
+          <h2>身体近况</h2>
+          <span class="sec-aside">更新体重</span>
+        </div>
+        <div class="weight-card">
+          <div class="weight-top">
+            <span class="weight-label">当前体重</span>
+            <span class="weight-edit">九月记录 · 22 次</span>
+          </div>
+          <div class="weight-num">68.4<span>kg</span></div>
+          <div class="weight-delta">近 30 天轻了 <b>0.9</b> 公斤 · 平稳下降</div>
+          <div class="chart">
+            <div class="chart-cap"><span>三十日趋势</span><span>69.3 → 68.4</span></div>
+            <svg viewBox="0 0 560 140" width="100%" height="118" preserveAspectRatio="none" aria-label="体重三十日趋势">
+              <line x1="0" y1="70" x2="560" y2="70" stroke="#e3dccc" stroke-width="1"/>
+              <path d="M 0.0,23.5 L 19.3,29.0 L 38.6,18.0 L 57.9,34.6 L 77.2,45.6 L 96.6,40.1 L 115.9,56.7 L 135.2,62.2 L 154.5,51.1 L 173.8,67.7 L 193.1,73.2 L 212.4,62.2 L 231.7,78.8 L 251.0,84.3 L 270.3,73.2 L 289.7,89.8 L 309.0,95.3 L 328.3,84.3 L 347.6,100.9 L 366.9,106.4 L 386.2,95.3 L 405.5,111.9 L 424.8,117.4 L 444.1,106.4 L 463.4,123.0 L 482.8,117.4 L 502.1,128.5 L 521.4,123.0 L 540.7,134.0 L 560.0,123.0 L 560,140 L 0,140 Z" fill="rgba(21,128,61,.10)"/>
+              <polyline points="0.0,23.5 19.3,29.0 38.6,18.0 57.9,34.6 77.2,45.6 96.6,40.1 115.9,56.7 135.2,62.2 154.5,51.1 173.8,67.7 193.1,73.2 212.4,62.2 231.7,78.8 251.0,84.3 270.3,73.2 289.7,89.8 309.0,95.3 328.3,84.3 347.6,100.9 366.9,106.4 386.2,95.3 405.5,111.9 424.8,117.4 444.1,106.4 463.4,123.0 482.8,117.4 502.1,128.5 521.4,123.0 540.7,134.0 560.0,123.0" fill="none" stroke="#15803d" stroke-width="2"/>
+              <circle cx="560" cy="123" r="4" fill="#15803d"/>
+            </svg>
+            <div class="axis"><span>08-27</span><span>09-11</span><span>09-25</span></div>
+          </div>
+        </div>
+
+        <div class="strip">
+          <div class="cell">
+            <div class="cell-label">睡眠时长</div>
+            <div class="cell-value">7h 20m</div>
+            <div class="cell-note">00:55 入睡 → 08:15 醒来，达到 AASM 每晚 7 小时基准。</div>
+          </div>
+          <div class="cell">
+            <div class="cell-label">精力感知</div>
+            <div class="cell-value">4/5</div>
+            <div class="cell-state">良好</div>
+            <div class="dots"><i class="dot on"></i><i class="dot on"></i><i class="dot on"></i><i class="dot on"></i><i class="dot"></i></div>
+            <div class="cell-note">与睡眠、酸痛共同决定今日训练状态。</div>
+          </div>
+          <div class="cell">
+            <div class="cell-label">肌肉酸痛</div>
+            <div class="cell-value">2/5</div>
+            <div class="cell-state">轻微</div>
+            <div class="dots"><i class="dot on"></i><i class="dot on"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+            <div class="cell-note">达 4 分则今日训练降级为恢复。</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-head plain">
+          <h2>近况</h2>
+          <span class="sec-aside">最近七天</span>
+        </div>
+        <div class="stats">
+          <div class="stat">
+            <div>
+              <div class="stat-label">七日滚动均重</div>
+              <div class="stat-sub">抹平单日水分与钠盐波动</div>
+            </div>
+            <div class="stat-right">
+              <div class="stat-value">68.4</div>
+              <div class="stat-tag">公斤 · 今日 68.4</div>
+            </div>
+          </div>
+          <div class="stat">
+            <div>
+              <div class="stat-label">本周训练</div>
+              <div class="stat-sub">徒手循环两次</div>
+            </div>
+            <div class="stat-right">
+              <div class="stat-value">2</div>
+              <div class="stat-tag green">达到每周 2 天抗阻建议</div>
+            </div>
+          </div>
+          <div class="stat">
+            <div>
+              <div class="stat-label">昨夜睡眠</div>
+              <div class="stat-sub">今晨记录</div>
+            </div>
+            <div class="stat-right">
+              <div class="stat-value">7h 20m</div>
+              <div class="stat-tag green">达到 7 小时基准 · AASM 2015</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mini-bars">
+          <div class="chart-cap"><span>近七日睡眠</span><span>小时</span></div>
+          <svg viewBox="0 0 266 96" width="100%" height="96" aria-label="近七日睡眠柱状图">
+            <line x1="0" y1="16.7" x2="266" y2="16.7" stroke="#15803d" stroke-width="1" stroke-dasharray="3 4"/>
+            <rect x="0" y="20.9" width="26" height="55.1" rx="2" fill="#16120e"/>
+            <rect x="38" y="15.0" width="26" height="61.0" rx="2" fill="#16120e"/>
+            <rect x="76" y="16.7" width="26" height="59.3" rx="2" fill="#16120e"/>
+            <rect x="114" y="18.4" width="26" height="57.6" rx="2" fill="#16120e"/>
+            <rect x="152" y="12.5" width="26" height="63.5" rx="2" fill="#16120e"/>
+            <rect x="190" y="23.5" width="26" height="52.5" rx="2" fill="#b8b0a2"/>
+            <rect x="228" y="13.9" width="26" height="62.1" rx="2" fill="#16120e"/>
+            <text x="13" y="92" font-size="10" fill="#8c8378" text-anchor="middle" font-family="Plus Jakarta Sans">19</text>
+            <text x="51" y="92" font-size="10" fill="#8c8378" text-anchor="middle" font-family="Plus Jakarta Sans">20</text>
+            <text x="89" y="92" font-size="10" fill="#8c8378" text-anchor="middle" font-family="Plus Jakarta Sans">21</text>
+            <text x="127" y="92" font-size="10" fill="#8c8378" text-anchor="middle" font-family="Plus Jakarta Sans">22</text>
+            <text x="165" y="92" font-size="10" fill="#8c8378" text-anchor="middle" font-family="Plus Jakarta Sans">23</text>
+            <text x="203" y="92" font-size="10" fill="#8c8378" text-anchor="middle" font-family="Plus Jakarta Sans">24</text>
+            <text x="241" y="92" font-size="10" fill="#8c8378" text-anchor="middle" font-family="Plus Jakarta Sans">25</text>
+          </svg>
+        </div>
+
+        <div class="chart-cap" style="margin-top:22px"><span>体重区间预测</span><span>模型依据</span></div>
+        <div class="forecast">
+          <div class="fbox"><span>四周后</span><b>67.4–68.1</b></div>
+          <div class="fbox"><span>八周后</span><b>66.6–67.7</b></div>
+          <div class="fbox"><span>十二周后</span><b>65.9–67.4</b></div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <section class="sec">
+    <div class="sec-head plain">
+      <h2>生活纪事</h2>
+      <span class="sec-aside">最近七天 · 按分类</span>
+    </div>
+    <div class="life">
+      <div class="life-row">
+        <span class="life-name">愉悦</span>
+        <span class="life-desc">散步、听雨、和朋友吃饭——记录三则</span>
+        <span class="life-num">128<small>分钟</small></span>
+      </div>
+      <div class="life-row">
+        <span class="life-name">劳碌</span>
+        <span class="life-desc">伏案写作与会议，久坐 5 小时以上两日</span>
+        <span class="life-num">2<small>日</small></span>
+      </div>
+      <div class="life-row">
+        <span class="life-name">晨起</span>
+        <span class="life-desc">自然醒三次，闹钟醒四次</span>
+        <span class="life-num">3<small>次</small></span>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <b>个人健康手记</b>
+    <span>·</span>
+    <span>确定性规则，不含大模型</span>
+    <span class="right">本地存储 · 数据不出浏览器</span>
+  </footer>
+</div>
+
+<button class="fab">＋ 记一笔</button>
+</body>
+</html>

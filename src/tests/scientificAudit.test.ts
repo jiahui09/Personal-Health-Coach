@@ -1,5 +1,5 @@
 /**
- * Deterministic Test Suite for Scientific Decision Engine (V2.1)
+ * Deterministic Test Suite for the Scientific Decision Engine (V3)
  *
  * Verifies:
  * 1. Idempotency & Determinism: same input + same rule version = same output
@@ -7,10 +7,13 @@
  * 3. f_protein (Morton 2018 range) calculation
  * 4. f_training_state (Engineering heuristic) assignment
  * 5. f_progression (ACSM 2026 progressive overload translation)
- * 6. f_meal edge cases: missing meal data, high protein gap, tight budget
+ * 6. f_meal edge cases: sparse data, high protein gap, tight budget
  * 7. f_workout edge cases: completed today, high soreness, low energy + missing sleep
  * 8. f_energy_calibration: empirical maintenance estimation
+ * 9. Clock injection: the engine reads time only from `context.now`
  */
+
+import { scientificDecisionEngine } from '../services/scientificDecisionEngine';
 
 import {
   f_energy_calibration,
@@ -31,7 +34,7 @@ function assert(condition: boolean, message: string) {
 }
 
 export function runScientificAuditTests() {
-  console.log('🧪 Starting V2.1 Scientific Audit Verification Tests...\n');
+  console.log('Starting V3 Scientific Audit Verification Tests...\n');
 
   // ==========================================
   // Test 1: f_RMR (Mifflin-St Jeor)
@@ -142,9 +145,10 @@ export function runScientificAuditTests() {
 
   // Edge case A: missing meal data (0 meals logged today)
   const contextSparse: HealthContext = {
+    now: new Date('2026-09-24T13:00:00'),
     profile: baseProfile,
     currentWeight: 68.4,
-    todayState: { date: '2026-09-24', sleepHours: 7.5, energy: 4, soreness: 2 },
+    todayState: { date: '2026-09-24', sleep: { kind: 'duration', minutes: 450 }, energy: 4, soreness: 2 },
     todayMeals: [],
     recentMeals: [],
     recentWorkouts: [],
@@ -153,13 +157,21 @@ export function runScientificAuditTests() {
   const mealSparse = f_meal(contextSparse);
   assert(mealSparse.isUncertaintyNoted === true, 'Sparse data must note uncertainty');
   assert(mealSparse.trace.confidence === 'low', 'Sparse data must have low confidence');
-  assert(mealSparse.ruleId === 'RULE_MEAL_BASELINE_PLATE_01', 'Sparse data must use baseline plate rule');
+  assert(
+    mealSparse.ruleId === 'RULE_MEAL_CANDIDATE_OPTIMIZATION_03',
+    'V3 ranks meal candidates under the documented optimization rule'
+  );
+  assert(
+    mealSparse.energyRange !== undefined && mealSparse.energyRange.min < mealSparse.energyRange.max,
+    'Meal advice must expose an energy range, never a single integer'
+  );
 
   // Edge case B: high protein deficit
   const contextHighDeficit: HealthContext = {
+    now: new Date('2026-09-24T13:00:00'),
     profile: baseProfile,
     currentWeight: 68.4,
-    todayState: { date: '2026-09-24', sleepHours: 7.2, energy: 4, soreness: 2 },
+    todayState: { date: '2026-09-24', sleep: { kind: 'duration', minutes: 432 }, energy: 4, soreness: 2 },
     todayMeals: [
       {
         id: 'm1',
@@ -170,20 +182,30 @@ export function runScientificAuditTests() {
         foods: ['oats', 'milk'],
         estimatedCalories: 360,
         estimatedProtein: 16,
+        source: 'manual',
+        confirmed: true,
       },
     ],
     recentMeals: [],
     recentWorkouts: [],
   };
   const mealHighDeficit = f_meal(contextHighDeficit);
-  assert(mealHighDeficit.ruleId === 'RULE_MEAL_PROTEIN_DEFICIT_PRIORITY', 'High protein gap must trigger protein priority');
-  assert(mealHighDeficit.trace.confidence === 'high', 'Deficit rule with logged intake has high confidence');
+  assert(
+    mealHighDeficit.ruleId === 'RULE_MEAL_CANDIDATE_OPTIMIZATION_03',
+    'Logged intake must route through the candidate ranking rule'
+  );
+  assert(mealHighDeficit.trace.confidence === 'high', 'Logged intake yields high confidence');
+  assert(
+    mealHighDeficit.trace.inputSnapshot.consumedProtein === 16,
+    'Trace must snapshot the protein already consumed'
+  );
 
   // Edge case C: workout with high soreness
   const contextHighSoreness: HealthContext = {
+    now: new Date('2026-09-24T13:00:00'),
     profile: baseProfile,
     currentWeight: 68.4,
-    todayState: { date: '2026-09-24', sleepHours: 7, energy: 4, soreness: 5 },
+    todayState: { date: '2026-09-24', sleep: { kind: 'duration', minutes: 420 }, energy: 4, soreness: 5 },
     todayMeals: [],
     recentMeals: [],
     recentWorkouts: [],
@@ -194,9 +216,10 @@ export function runScientificAuditTests() {
 
   // Edge case D: workout with 0 training history
   const contextNoHistory: HealthContext = {
+    now: new Date('2026-09-24T13:00:00'),
     profile: baseProfile,
     currentWeight: 68.4,
-    todayState: { date: '2026-09-24', sleepHours: 8, energy: 4, soreness: 1 },
+    todayState: { date: '2026-09-24', sleep: { kind: 'duration', minutes: 480 }, energy: 4, soreness: 1 },
     todayMeals: [],
     recentMeals: [],
     recentWorkouts: [],
@@ -239,7 +262,26 @@ export function runScientificAuditTests() {
   assert(calibHigh.estimatedMaintenanceRange.max === 2200, 'Expected max 2200');
   console.log('   ✓ f_energy_calibration passed.');
 
-  console.log('\n🎉 ALL V2.1 SCIENTIFIC AUDIT TESTS PASSED SUCCESSFULLY!\n');
+  // ==========================================
+  // Test 9: Clock injection (y is a pure function of x, wall clock excluded)
+  // ==========================================
+  console.log('9. Testing clock injection (context.now is the only clock)...');
+  const clockCtx: HealthContext = { ...contextHighDeficit, now: new Date('2026-09-24T13:00:00') };
+  const evalA = scientificDecisionEngine.evaluateFullDecision(clockCtx);
+  const evalB = scientificDecisionEngine.evaluateFullDecision(clockCtx);
+
+  assert(
+    evalA.evaluatedAt === clockCtx.now.toISOString(),
+    'evaluatedAt must come from context.now, not the wall clock'
+  );
+  assert(JSON.stringify(evalA) === JSON.stringify(evalB), 'Same x must yield bit-identical y');
+  assert(
+    scientificDecisionEngine.verifyDeterminism(clockCtx) === true,
+    'verifyDeterminism must hold without wall-clock drift'
+  );
+  console.log('   ✓ Clock injection passed.');
+
+  console.log('\nALL V3 SCIENTIFIC AUDIT TESTS PASSED.\n');
   return true;
 }
 

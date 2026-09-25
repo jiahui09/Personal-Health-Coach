@@ -29,23 +29,39 @@ export interface UserProfile {
 
 export interface WeightRecord {
   id: string;
-  date: string; // YYYY-MM-DD
+  /** 本地日键 YYYY-MM-DD —— 唯一的窗口判定字段。 */
+  date: string;
   weight: number; // kg
   note?: string;
+  /** 测量来源；原始体重只能来自这里，没有第二份「今之体重」。 */
+  source: 'manual' | 'scale';
+  /** 同日多条的排序依据（HH:MM），缺省视为当日唯一。 */
+  time?: string;
 }
 
+/**
+ * 睡眠的唯一事实来源：区间（由时刻推得时长）与手录眠时二者互斥，
+ * 因此不会出现 duration 与 bedtime/wakeTime 互相打架。
+ */
+export type SleepEntry =
+  | { kind: 'interval'; sleepStart: string; wakeTime: string }
+  | { kind: 'duration'; minutes: number };
+
+/**
+ * 今日体感的条目：字段可缺席（用户可能只记了酸痛）。
+ * 缺席即「未录」，绝不填默认值冒充记录。
+ */
 export interface DailyState {
   date: string; // YYYY-MM-DD
-  sleepHours: number; // e.g. 7.33 (7h 20m)
-  sleepBedtime?: string;
-  sleepWakeup?: string;
-  energy: number; // 1 - 5 (1=low, 5=high)
-  soreness: number; // 1 - 5 (1=none, 5=high)
+  sleep?: SleepEntry;
+  energy?: number; // 1 - 5 (1=low, 5=high)
+  soreness?: number; // 1 - 5 (1=none, 5=high)
   notes?: string;
 }
 
 export type MealCategory = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
+/** 实际摄入（MealLog）。计划膳是 MealRecommendation，永不自动进入此表。 */
 export interface MealRecord {
   id: string;
   date: string; // YYYY-MM-DD
@@ -55,6 +71,10 @@ export interface MealRecord {
   foods: string[];
   estimatedCalories: number;
   estimatedProtein: number; // grams
+  /** 手录 / 采纳建议（一键照准）/ 食物库。 */
+  source: 'manual' | 'suggested' | 'database';
+  /** 只有确认入账的记录才计入今日所食。 */
+  confirmed: boolean;
 }
 
 export interface BodyweightExercise {
@@ -67,16 +87,22 @@ export interface BodyweightExercise {
 
 export type PerceivedDifficulty = 'light' | 'moderate' | 'challenging';
 
+/** 训练分类是结构化事实，抗阻统计只认它，绝不靠标题文字判断。 */
+export type WorkoutCategory = 'resistance' | 'recovery' | 'cardio' | 'mobility' | 'other';
+
 export interface WorkoutRecord {
   id: string;
   date: string; // YYYY-MM-DD
   time: string;
   title: string;
   durationMinutes: number;
+  /** 时长来源：用户计时/时段差 = actual，产品估算 = estimated（二者不可混称）。 */
+  durationSource: 'actual' | 'estimated';
   exercises: BodyweightExercise[];
   perceivedDifficulty: PerceivedDifficulty;
   completed: boolean;
   feeling?: string;
+  category: WorkoutCategory;
 }
 
 // ==========================================
@@ -163,6 +189,8 @@ export interface WorkoutRecommendation {
   trainingState: TrainingState;
   trainingStateHeuristicNote: string;
   durationMinutes: number;
+  /** 建议时长是估算（计划），不得当作用户实际计时。 */
+  durationSource: 'estimated';
   reason: string;
   exercises: BodyweightExercise[];
   recoveryGuidance: string;
@@ -187,13 +215,6 @@ export interface WorkoutRecommendation {
 // V3 New Models: Trends, Forecasts, Food & Diet
 // ==========================================
 
-export interface WeightTrendResult {
-  rollingAverage7d: number;
-  trendPerWeek: number; // kg per week (e.g. -0.18)
-  currentTrend: 'decreasing' | 'stable' | 'increasing';
-  dataPointsCount: number;
-}
-
 export interface ForecastPeriod {
   weeks: number;
   range: { min: number; max: number }; // kg range e.g. { min: 67.6, max: 68.3 }
@@ -201,11 +222,24 @@ export interface ForecastPeriod {
   label: string;
 }
 
+/**
+ * 体重区间推演：明确是「情景外推（trend projection）」，不是承诺、不是目标、
+ * 也不得与实测混为一谈；`withheld` 表示因数据存疑/不足而不出数。
+ */
 export interface WeightForecast {
   fourWeeks: ForecastPeriod;
   eightWeeks: ForecastPeriod;
   twelveWeeks: ForecastPeriod;
   confidence: 'low' | 'medium' | 'high';
+  /** 模型出处，页面必须展示。 */
+  modelVersion: string;
+  method: 'scenario_trend_projection';
+  /** 推演依据的窗口与有效日数。 */
+  inputWindowDays: number;
+  basedOnDays: number;
+  /** 数据质量不达标时不出数。 */
+  withheld: boolean;
+  withheldReason?: 'insufficient_weight_days' | 'weight_deviates_from_rolling_mean';
   assumptions: string[];
   limitations: string[];
 }
@@ -243,28 +277,26 @@ export interface TodoItem {
   id: string;
   title: string;
   date: string; // YYYY-MM-DD
+  /** 计划用时（拟），不是实际时长记录。 */
   estimatedMinutes?: number;
   priority?: 'low' | 'medium' | 'high';
-  completed: boolean;
+  /** 完成与否只由 status 决定，不由「有时长」反推。 */
+  status: 'todo' | 'done' | 'skipped';
   category?: 'workout' | 'reading' | 'work' | 'life';
 }
 
 export type LifeCategory = 'Coding' | 'Learning' | 'Exercise' | 'Reading' | 'Life';
 
+/** 活动记录（ActivityLog）与手记（JournalEntry）共用一张表：有 content 即手记，有时长即活动。 */
 export interface LifeLog {
   id: string;
   date: string; // YYYY-MM-DD
   title: string;
-  content: string;
+  /** 可以留空：只记时长的手帐行。 */
+  content?: string;
   category: LifeCategory;
   durationMinutes: number;
   project?: string;
-}
-
-export interface WeeklyLifeStat {
-  category: LifeCategory;
-  hours: number;
-  sessions?: number;
 }
 
 export interface DailyNote {
@@ -277,6 +309,12 @@ export interface DailyNote {
 
 // Context passed to Decision Engine
 export interface HealthContext {
+  /**
+   * Injected wall clock. The engine reads time ONLY from here — never from
+   * `new Date()` — so a decision is reproducible for a given input, and a
+   * server-side recompute of the same context yields the same answer.
+   */
+  now: Date;
   profile: UserProfile;
   currentWeight: number;
   todayState: DailyState;
@@ -285,43 +323,49 @@ export interface HealthContext {
   recentWorkouts: WorkoutRecord[];
   weightHistory?: WeightRecord[];
   todayWorkout?: WorkoutRecord;
+  /** 由 domain/decideWorkoutMode 预先算出的决策（传入即复用，避免二次推断）。 */
+  trainingDecision?: import('../domain/types').WorkoutDecision;
   hasIncompleteData?: boolean;
 }
 
-// Primary Aggregated View Model for App
+/**
+ * 页面视图模型 = 原始记录（今日切片）+ 派生指标 + 决策结果。
+ * 展示层只读不改算：任何数字都能在 domain/ 里找到唯一公式。
+ */
 export interface TodayData {
   date: string;
-  displayDate: string; // "Thursday, September 24"
-  timeGreeting: string; // "GOOD MORNING."
+  displayDate: string; // "丙午年 · 九月廿五 · 星期五"
+  timeGreeting: string; // "朝安。/昼安。/夜安。"
   profile: UserProfile;
-  weight: {
-    current: number;
-    monthDelta: number; // e.g. -0.8
-  };
-  state: DailyState;
+  /** Which meal the current recommendation targets (same rule as f_meal). */
+  mealSlot: 'breakfast' | 'lunch' | 'dinner';
+
+  // ---- 原始记录（今日切片） ----
   todos: TodoItem[];
   notes: DailyNote[];
-  nutritionSummary: {
-    consumedCalories: number;
-    targetCalories: number;
-    consumedProtein: number;
-    targetProtein: number;
-    meals: MealRecord[];
+  todayMeals: MealRecord[];
+
+  // ---- 派生指标 ----
+  tasks: import('../domain/types').TaskProgress;
+  weight: import('../domain/types').WeightSummary;
+  nutrition: import('../domain/types').NutritionSummary;
+  sleep: import('../domain/types').SleepSummary;
+  activity: import('../domain/types').ActivitySummary;
+  journal: import('../domain/types').JournalSummary;
+  state: DailyState;
+  /** 图表输入：近三十日每日代表值（升序）。 */
+  weightSeries: { date: string; weight: number }[];
+
+  // ---- 决策与模型 ----
+  training: import('../domain/types').TrainingSummary;
+  dataQuality: {
+    flags: import('../domain/types').DataQuality[];
+    reviewCount: number;
   };
+  forecast: WeightForecast;
   nextMeal: MealRecommendation;
   nextWorkout: WorkoutRecommendation;
   dietQuality: DietQualityAssessment;
-  weightTrend: WeightTrendResult;
-  weightForecast: WeightForecast;
-  recentLifeLogs: LifeLog[];
-  weeklyLifeStats: WeeklyLifeStat[];
-  recentStats: {
-    weightChange30d: number;
-    workoutsThisWeek: number;
-    avgDailyProtein: number;
-    avgSleepHours: number;
-  };
-  personalNote: string;
 }
 
 // Inputs for creation
@@ -333,6 +377,8 @@ export interface CreateMealInput {
   foods?: string[];
   estimatedCalories: number;
   estimatedProtein: number;
+  /** 缺省视为手录；「照准」采纳建议时传 suggested。 */
+  source?: MealRecord['source'];
 }
 
 export interface CreateWorkoutInput {
@@ -340,18 +386,23 @@ export interface CreateWorkoutInput {
   time?: string;
   title: string;
   durationMinutes: number;
+  /** 缺省 estimated：由产品估算；用户计时才传 actual。 */
+  durationSource?: WorkoutRecord['durationSource'];
   exercises: BodyweightExercise[];
   perceivedDifficulty?: PerceivedDifficulty;
   completed?: boolean;
   feeling?: string;
+  category?: WorkoutCategory;
 }
 
 export interface CreateDailyStateInput {
   date?: string;
   weight?: number;
-  sleepHours: number;
-  energy: number;
-  soreness: number;
+  weightTime?: string;
+  /** 未传则保留当日既有之眠。 */
+  sleep?: SleepEntry;
+  energy?: number;
+  soreness?: number;
   notes?: string;
 }
 

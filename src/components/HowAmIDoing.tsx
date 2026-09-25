@@ -1,146 +1,134 @@
+// Inline 1–5 circles on the shared ruled rows; no metric cells. deslop-ignore-file 19 28
 import React from 'react';
-import { Moon, Sparkles, Activity } from 'lucide-react';
 import { DailyState } from '../types/health';
+import type { SleepSummary } from '../domain/types';
+import { formatNightDuration } from '../domain/format';
 
 interface HowAmIDoingProps {
   state: DailyState;
+  /** 今日与近七日之眠（单一来源解析后的结果）。 */
+  sleep: SleepSummary;
   onUpdateMetric: (key: 'energy' | 'soreness', val: number) => void;
 }
 
-export const HowAmIDoing: React.FC<HowAmIDoingProps> = ({
-  state,
-  onUpdateMetric,
-}) => {
+const LABEL = 'text-[12px] text-ink3 tracking-[0.1em] truncate';
+const VALUE = 'inkrow-value text-[13px] text-ink';
+
+export const HowAmIDoing: React.FC<HowAmIDoingProps> = ({ state, sleep, onUpdateMetric }) => {
   const getEnergyLabel = (val: number) => {
     switch (val) {
-      case 5: return '很充沛';
-      case 4: return '良好';
-      case 3: return '平稳';
-      case 2: return '偏累';
-      default: return '疲倦';
+      case 5:
+        return '甚充沛';
+      case 4:
+        return '健';
+      case 3:
+        return '平';
+      case 2:
+        return '微倦';
+      default:
+        return '惫';
     }
   };
 
   const getSorenessLabel = (val: number) => {
     switch (val) {
-      case 1: return '无酸痛';
-      case 2: return '轻微';
-      case 3: return '适度';
-      case 4: return '明显';
-      default: return '较强';
+      case 1:
+        return '无恙';
+      case 2:
+        return '微酸';
+      case 3:
+        return '酸楚';
+      case 4:
+        return '酸沉';
+      default:
+        return '沉痛';
     }
   };
 
-  const sleepHours = Math.floor(state.sleepHours);
-  const sleepMinutes = Math.round((state.sleepHours - sleepHours) * 60);
+  const night = sleep.today;
+
+  const dots = (value: number, key: 'energy' | 'soreness', label: string) => (
+    <span className="inkrow-mid flex gap-1">
+      {[1, 2, 3, 4, 5].map((lvl) => (
+        <button
+          key={lvl}
+          type="button"
+          onClick={() => onUpdateMetric(key, lvl)}
+          /* 热区 24×24（圆点视觉尺寸不变）；焦点环由全局 :focus-visible 提供 */
+          className="group w-6 h-6 grid place-items-center cursor-pointer"
+          aria-label={`${label}记为 ${lvl}/5`}
+          aria-pressed={value === lvl}
+        >
+          <span
+            className={`block w-3 h-3 rounded-full transition-colors duration-150 ${
+              lvl <= value ? 'bg-ink' : 'bg-hair group-hover:bg-linehover'
+            }`}
+          />
+        </button>
+      ))}
+    </span>
+  );
 
   return (
-    <section className="py-4 border-t border-[#ece7de] space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xs font-mono uppercase tracking-wider text-[#78716c]">
-          How am I doing? · 今日状态
-        </h2>
-        <span className="text-[11px] text-[#a8a29e] font-sans">
-          轻按圆点可随时调校体感
-        </span>
-      </div>
+    <div className="mt-5 pt-4 border-t border-line">
+      <div className="group-head">今日体感</div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Sleep Duration */}
-        <div className="py-3 px-3.5 rounded-xl bg-[#f7f5f0] border border-[#e8e2d8] space-y-1">
-          <div className="flex items-center justify-between text-xs text-[#78716c]">
-            <span className="flex items-center gap-1.5 font-sans">
-              <Moon className="w-3.5 h-3.5 text-[#6366f1]" />
-              <span>睡眠时长</span>
-            </span>
-            <span className="text-[11px] font-mono text-[#a8a29e]">
-              {state.sleepBedtime && state.sleepWakeup ? `${state.sleepBedtime} → ${state.sleepWakeup}` : '昨晚'}
-            </span>
-          </div>
-          <div className="text-xl font-serif text-[#1c1917] font-medium pt-0.5 tabular-nums">
-            {sleepHours}h {sleepMinutes > 0 ? `${sleepMinutes}m` : ''}
-          </div>
-          <div className="text-[11px] text-[#15803d] font-sans">
-            睡眠平稳，支持白天日常机能
-          </div>
+      <div className="mt-1">
+        <div className="inkrow inkrow-dotted">
+          <span className={LABEL}>夜眠</span>
+          <span className="leader" aria-hidden="true" />
+          <span className={VALUE}>
+            {night ? formatNightDuration(night.minutes) : '未录'}
+            {night?.source === 'interval' && (
+              <span className="hidden sm:inline text-ink3 text-[12px]">
+                {' '}
+                · {night.sleepStart}–{night.wakeTime}
+              </span>
+            )}
+          </span>
         </div>
 
-        {/* Energy 1-5 */}
-        <div className="py-3 px-3.5 rounded-xl bg-[#f7f5f0] border border-[#e8e2d8] space-y-1">
-          <div className="flex items-center justify-between text-xs text-[#78716c]">
-            <span className="flex items-center gap-1.5 font-sans">
-              <Sparkles className="w-3.5 h-3.5 text-[#d97706]" />
-              <span>精力感知</span>
-            </span>
-            <span className="text-xs text-[#1c1917] font-medium font-sans">
-              {getEnergyLabel(state.energy)}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 pt-1.5">
-            {[1, 2, 3, 4, 5].map((lvl) => (
-              <button
-                key={lvl}
-                type="button"
-                onClick={() => onUpdateMetric('energy', lvl)}
-                className="group p-0.5 focus:outline-hidden cursor-pointer"
-                title={`精力设为 ${lvl}/5`}
-              >
-                <span
-                  className={`block w-3.5 h-3.5 rounded-full transition-all duration-150 ${
-                    lvl <= state.energy
-                      ? 'bg-[#d97706]'
-                      : 'bg-[#ded8cc] group-hover:bg-[#c9c1b3]'
-                  }`}
-                />
-              </button>
-            ))}
-            <span className="ml-1 text-xs font-mono text-[#78716c] tabular-nums">
-              {state.energy}/5
-            </span>
-          </div>
-          <div className="text-[11px] text-[#78716c] font-sans">
-            输入自适应训练负荷的参考依据
-          </div>
+        <div className="inkrow inkrow-dotted">
+          <span className={LABEL}>近七夜</span>
+          <span className="leader" aria-hidden="true" />
+          <span className={VALUE}>
+            {sleep.nights}/{sleep.windowDays} 夜 · 均 {formatNightDuration(sleep.avgMinutes)}
+          </span>
         </div>
 
-        {/* Soreness 1-5 */}
-        <div className="py-3 px-3.5 rounded-xl bg-[#f7f5f0] border border-[#e8e2d8] space-y-1">
-          <div className="flex items-center justify-between text-xs text-[#78716c]">
-            <span className="flex items-center gap-1.5 font-sans">
-              <Activity className="w-3.5 h-3.5 text-[#78716c]" />
-              <span>肌肉酸痛</span>
-            </span>
-            <span className="text-xs text-[#1c1917] font-medium font-sans">
-              {getSorenessLabel(state.soreness)}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 pt-1.5">
-            {[1, 2, 3, 4, 5].map((lvl) => (
-              <button
-                key={lvl}
-                type="button"
-                onClick={() => onUpdateMetric('soreness', lvl)}
-                className="group p-0.5 focus:outline-hidden cursor-pointer"
-                title={`酸痛设为 ${lvl}/5`}
-              >
-                <span
-                  className={`block w-3.5 h-3.5 rounded-full transition-all duration-150 ${
-                    lvl <= state.soreness
-                      ? 'bg-[#78716c]'
-                      : 'bg-[#ded8cc] group-hover:bg-[#c9c1b3]'
-                  }`}
-                />
-              </button>
-            ))}
-            <span className="ml-1 text-xs font-mono text-[#78716c] tabular-nums">
-              {state.soreness}/5
-            </span>
-          </div>
-          <div className="text-[11px] text-[#78716c] font-sans">
-            引导身体在自重练习中避开过度酸胀
-          </div>
+        {/* 精力越高越好、酸痛越高越差：两套方向各自成行 */}
+        <div className="inkrow inkrow-dotted">
+          <span className={LABEL}>精力</span>
+          {dots(state.energy ?? 0, 'energy', '精力')}
+          <span className={VALUE}>
+            {state.energy === undefined ? (
+              <span className="text-ink3">未录</span>
+            ) : (
+              <>
+                <span className="font-semibold">{state.energy}</span>/5
+                <span className="text-accent font-medium ml-1.5">{getEnergyLabel(state.energy)}</span>
+              </>
+            )}
+          </span>
+        </div>
+
+        <div className="inkrow inkrow-dotted">
+          <span className={LABEL}>酸痛</span>
+          {dots(state.soreness ?? 0, 'soreness', '酸痛')}
+          <span className={VALUE}>
+            {state.soreness === undefined ? (
+              <span className="text-ink3">未录</span>
+            ) : (
+              <>
+                <span className="font-semibold">{state.soreness}</span>/5
+                <span className="text-accent font-medium ml-1.5">
+                  {getSorenessLabel(state.soreness)}
+                </span>
+              </>
+            )}
+          </span>
         </div>
       </div>
-    </section>
+    </div>
   );
 };

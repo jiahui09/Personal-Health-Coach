@@ -1,7 +1,8 @@
+// Serif for the audit title; mono only for rule ids and evidence keys. deslop-ignore-file 07 34
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
-import { DecisionTrace, RecommendationEvidenceTrace } from '../types/health';
+import { DecisionTrace, RecommendationEvidenceTrace, RuleStatus } from '../types/health';
 
 interface EvidenceModalProps {
   isOpen: boolean;
@@ -12,21 +13,76 @@ interface EvidenceModalProps {
   userContextSummary: string;
   evidenceTraces: RecommendationEvidenceTrace[];
   trace?: DecisionTrace;
-  ruleStatus?: string;
+  ruleStatus?: RuleStatus;
   ruleId?: string;
   ruleName?: string;
   equipmentNote?: string;
   translationNote?: string;
 }
 
+const RULE_STATUS_LABEL: Record<RuleStatus, string> = {
+  evidence_derived: 'evidence_derived · 文献之式',
+  evidence_constrained: 'evidence_constrained · 证据之束',
+  engineering_heuristic: 'engineering_heuristic · 工程权宜',
+};
+
+const RULE_STATUS_TEXT: Record<RuleStatus, string> = {
+  evidence_derived: 'text-accent',
+  evidence_constrained: 'text-tier2',
+  engineering_heuristic: 'text-ink2',
+};
+
+const STRENGTH_LABEL: Record<'High' | 'Moderate' | 'Limited', string> = {
+  High: '证据 强',
+  Moderate: '证据 中',
+  Limited: '证据 弱',
+};
+
+function formatValue(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+function TraceRows({ data }: { data: Record<string, unknown> }) {
+  const entries = Object.entries(data);
+  if (entries.length === 0) return null;
+  return (
+    <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 text-xs">
+      {entries.map(([key, value]) => (
+        <React.Fragment key={key}>
+          <dt className="text-ink2 truncate">{key}</dt>
+          <dd className="text-ink font-mono text-right tabular-nums break-all">
+            {formatValue(value)}
+          </dd>
+        </React.Fragment>
+      ))}
+    </dl>
+  );
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-2 pt-3 border-t border-line">
+      <h4 className="text-xs font-semibold text-ink2">{label}</h4>
+      {children}
+    </section>
+  );
+}
+
 export const EvidenceModal: React.FC<EvidenceModalProps> = ({
   isOpen,
   onClose,
-  type,
-  trace,
-  ruleId,
+  title,
+  recommendationSummary,
+  userContextSummary,
   evidenceTraces,
+  trace,
+  ruleStatus,
+  ruleId,
+  ruleName,
   equipmentNote,
+  translationNote,
 }) => {
   if (!isOpen) return null;
 
@@ -39,141 +95,165 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 bg-[#1c1917]/40 backdrop-blur-2xs cursor-pointer"
+          className="fixed inset-0 bg-ink/40 cursor-pointer"
         />
 
-        {/* Minimal Audit Sheet */}
+        {/* Audit sheet */}
         <motion.div
-          initial={{ scale: 0.97, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.97, opacity: 0 }}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 8 }}
           transition={{ duration: 0.15 }}
-          className="relative w-full max-w-md bg-[#faf8f5] border border-[#ded8cc] rounded-2xl p-6 shadow-xl z-10 space-y-4 font-sans text-xs text-[#44403c]"
+          className="relative w-full max-w-md max-h-[85vh] overflow-y-auto bg-paper border border-line rounded-lg p-5 shadow-md z-10 space-y-3 text-xs text-ink2"
         >
           {/* Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-[#e9e4dc]">
-            <h3 className="text-lg font-serif font-medium text-[#1c1917]">
-              Why this?
-            </h3>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-serif font-medium text-ink">{title}</h3>
+              <p className="text-xs text-ink2 mt-1">{recommendationSummary}</p>
+            </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-[#78716c] hover:text-[#1c1917] hover:bg-[#eeeae2] transition-colors cursor-pointer"
+              aria-label="阖之"
+              className="p-1.5 rounded-lg text-ink3 hover:text-ink hover:bg-surface transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Section: Your data */}
-          <div className="space-y-1">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#78716c]">
-              Your data
-            </div>
-            {type === 'meal' ? (
-              <div className="space-y-0.5 text-xs text-[#1c1917]">
-                <div>Weight: 68.4 kg</div>
-                <div>Goal: Fat loss</div>
-                <div>Protein today: 63 g</div>
+          {/* Context from the user's own records */}
+          <Section label="君之实录">
+            <p className="text-xs text-ink leading-relaxed">{userContextSummary}</p>
+          </Section>
+
+          {/* Which rule fired */}
+          {ruleId && (
+            <Section label="所中之规">
+              <div className="space-y-1">
+                <div className="font-mono text-[12px] text-ink break-all">{ruleId}</div>
+                {ruleName && <div className="text-xs text-ink2">{ruleName}</div>}
+                {ruleStatus && (
+                  <div className={`text-[12px] ${RULE_STATUS_TEXT[ruleStatus]}`}>
+                    {RULE_STATUS_LABEL[ruleStatus]}
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="space-y-0.5 text-xs text-[#1c1917]">
-                <div>Sleep: 7h 20m</div>
-                <div>Energy: 3/5</div>
-                <div>Soreness: 3/5</div>
-              </div>
-            )}
-          </div>
+            </Section>
+          )}
 
-          {/* Section: Calculated context */}
-          <div className="space-y-1">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#78716c]">
-              Calculated context
-            </div>
-            {type === 'meal' ? (
-              <div className="space-y-0.5 text-xs text-[#1c1917]">
-                <div>Protein reference: 96–137 g/day (1.4–2.0 g/kg)</div>
-                <div>Estimated energy reference: ≈ 1,950 kcal/day</div>
-              </div>
-            ) : (
-              <div className="space-y-0.5 text-xs text-[#1c1917]">
-                <div>Training state: Light (Intermediate balance)</div>
-                <div>Prescribed volume: 2 sets / movement (RIR 2–3)</div>
-              </div>
-            )}
-          </div>
-
-          {/* Section: Decision */}
-          <div className="space-y-1">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#78716c]">
-              Decision
-            </div>
-            <div className="text-xs text-[#1c1917]">
-              {type === 'meal'
-                ? 'A balanced, moderate-protein meal was selected (≈ 480–580 kcal, ≈ 35–45g protein).'
-                : '16 min Light session with moderate bodyweight volume.'}
-            </div>
-          </div>
-
-          {/* Section: Rules */}
-          <div className="space-y-1">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#78716c]">
-              Rules
-            </div>
-            <div className="font-mono text-[11px] text-[#57534e]">
-              {type === 'meal' ? (
-                <>
-                  <div>PROTEIN_TARGET_01</div>
-                  <div>MEAL_PROTEIN_GAP_01</div>
-                </>
-              ) : (
-                <>
-                  <div>WORKOUT_AUTOREGULATION_01</div>
-                  <div>CALISTHENICS_PROGRESSION_01</div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Section: Evidence */}
-          <div className="space-y-1">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#78716c]">
-              Evidence
-            </div>
-            <div className="text-xs text-[#1c1917]">
-              {type === 'meal' ? (
-                <div>Morton et al., 2018 · Schoenfeld & Aragon, 2018</div>
-              ) : (
-                <div>ACSM 2026 Position Stand · Helms et al., 2016</div>
-              )}
-            </div>
-          </div>
-
-          {/* Section: Limitation */}
-          <div className="space-y-1 pt-1 border-t border-[#eeeae2]">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-[#78716c]">
-              Limitation
-            </div>
-            <div className="text-[11px] text-[#78716c] leading-relaxed">
-              {type === 'meal' ? (
+          {/* Deterministic decision trace */}
+          {trace && (
+            <Section label="决策之迹">
+              <div className="space-y-3">
                 <div>
-                  Population-level evidence does not define an exact individual optimum. Meal templates use approximate nutritional values.
+                  <div className="text-[12px] text-ink3 mb-1">所入</div>
+                  <TraceRows data={trace.inputSnapshot} />
                 </div>
-              ) : (
                 <div>
-                  Product decision heuristic, not a clinically validated readiness threshold. Pull movements are limited without equipment.
+                  <div className="text-[12px] text-ink3 mb-1">所推之值</div>
+                  <TraceRows data={trace.derivedValues} />
                 </div>
-              )}
-            </div>
-          </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-[12px] text-ink3 mb-1">所循之规</div>
+                    <ul className="space-y-0.5 font-mono text-[12px] text-ink break-all">
+                      {trace.ruleIds.map((id) => (
+                        <li key={id}>{id}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-[12px] text-ink3 mb-1">信度</div>
+                    <div className="text-ink">
+                      {trace.confidence === 'high'
+                        ? '高'
+                        : trace.confidence === 'medium'
+                        ? '中'
+                        : '低'}
+                    </div>
+                  </div>
+                </div>
+                {trace.assumptions.length > 0 && (
+                  <div>
+                    <div className="text-[12px] text-ink3 mb-1">所设之前提</div>
+                    <ul className="space-y-1 text-ink2 leading-relaxed">
+                      {trace.assumptions.map((item) => (
+                        <li key={item} className="flex gap-1.5">
+                          <span className="text-ink4">·</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {trace.limitations.length > 0 && (
+                  <div>
+                    <div className="text-[12px] text-ink3 mb-1">局限</div>
+                    <ul className="space-y-1 text-ink2 leading-relaxed">
+                      {trace.limitations.map((item) => (
+                        <li key={item} className="flex gap-1.5">
+                          <span className="text-ink4">·</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </Section>
+          )}
 
-          {/* Close Button */}
-          <div className="pt-2">
-            <button
-              onClick={onClose}
-              className="w-full py-2 rounded-xl bg-[#1c1917] text-white text-xs font-medium hover:bg-[#332f2b] transition-colors cursor-pointer"
-            >
-              我知道了
-            </button>
-          </div>
+          {/* Evidence behind the recommendation */}
+          {evidenceTraces.length > 0 && (
+            <Section label="证据所出">
+              <ul className="space-y-2.5">
+                {evidenceTraces.map((item) => (
+                  <li key={item.evidenceId} className="space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs text-ink font-medium leading-snug">
+                        {item.reference.title}
+                      </span>
+                      <span className="shrink-0 text-[12px] text-ink3">
+                        {STRENGTH_LABEL[item.evidenceStrength]}
+                      </span>
+                    </div>
+                    <div className="text-[12px] text-ink3">
+                      {item.reference.organization} · {item.reference.year}
+                      {item.reference.url && (
+                        <a
+                          href={item.reference.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="ml-1.5 text-ink2 hover:text-ink underline"
+                        >
+                          原文
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[12px] text-ink2 leading-relaxed">{item.relevance}</p>
+                    <p className="text-[12px] text-ink4 leading-relaxed">
+                      局限：{item.reference.limitations}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          {/* Optional engineering notes */}
+          {(equipmentNote || translationNote) && (
+            <Section label="工程按语">
+              <div className="space-y-1 text-[12px] text-ink2 leading-relaxed">
+                {equipmentNote && <p>{equipmentNote}</p>}
+                {translationNote && <p>{translationNote}</p>}
+              </div>
+            </Section>
+          )}
+
+          {/* Close */}
+          <button onClick={onClose} className="btn-primary w-full">
+            览毕
+          </button>
         </motion.div>
       </div>
     </AnimatePresence>

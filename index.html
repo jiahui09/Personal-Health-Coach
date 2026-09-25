@@ -2,21 +2,24 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Personal Health Coach</title>
-    <meta name="description" content="A quiet, warm, single-page personal health companion and decision journal." />
-    <meta property="og:title" content="Personal Health Coach" />
-    <meta property="og:description" content="A quiet, warm, single-page personal health companion and decision journal." />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>个人健康手记</title>
+    <meta name="description" content="本地优先的个人健康手记：下一膳、今日之练、体重趋势，每条建议都附带规则与文献依据。" />
+    <meta name="theme-color" content="#f4f0e8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta property="og:site_name" content="个人健康手记" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:title" content="个人健康手记" />
+    <meta property="og:description" content="本地优先的个人健康手记：下一膳、今日之练、体重趋势，每条建议都附带规则与文献依据。" />
     <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Three web fonts by choice: Newsreader + Noto Serif SC (headings) / Plus Jakarta Sans (UI). deslop-ignore-file 33 -->
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300..600&family=Noto+Serif+SC:wght@400;500;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   </head>
-  <body class="bg-[#faf8f5] text-[#24272c] antialiased selection:bg-[#e4ded5] selection:text-[#191b1f]">
+  <!-- 旧模板的 body class（另一套配色 + 锁缩放）已清除：底色与字色由 @theme 令牌接管，首屏内联纸色防白闪 -->
+  <body style="background-color:#f4f0e8;color:#16120e;-webkit-font-smoothing:antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
-

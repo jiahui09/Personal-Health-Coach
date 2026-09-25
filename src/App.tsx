@@ -18,10 +18,14 @@ import { HowAmIDoing } from './components/HowAmIDoing';
 import { NextMealCard } from './components/NextMealCard';
 import { NextWorkoutCard } from './components/NextWorkoutCard';
 import { RecentSection } from './components/RecentSection';
-import { LifeSection } from './components/LifeSection';
+import { LifeEntries, LifeWeekStats } from './components/LifeSection';
 import { EvidenceModal } from './components/EvidenceModal';
 import { RecordSheet, RecordTab } from './components/RecordSheet';
-import { healthRepository } from './services/mockHealthRepository';
+import { DataQualityNote } from './components/DataQualityNote';
+import { formatAbs, formatNightDuration, toPercent } from './domain/format';
+import { validateWeightMeasurement } from './domain/weight';
+import { healthRepository, repositoryKind } from './services/repository';
+import { toRepositoryError } from './services/healthRepository';
 import {
   CreateDailyStateInput,
   CreateLifeLogInput,
@@ -34,9 +38,23 @@ import {
   TodayData,
 } from './types/health';
 
+const GOAL_CN: Record<string, string> = {
+  'fat loss': '减脂之期',
+  maintain: '守成之期',
+  'muscle gain': '增肌之期',
+  'general fitness': '日常强身',
+};
+
+const SLOT_CN: Record<string, string> = {
+  breakfast: '早膳',
+  lunch: '午膳',
+  dinner: '晚膳',
+};
+
 export default function App() {
   const [todayData, setTodayData] = useState<TodayData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Modals
   const [recordSheetOpen, setRecordSheetOpen] = useState(false);
@@ -61,17 +79,45 @@ export default function App() {
   // Subtle toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
+  // 生活纪事的分类筛选：右栏「本周之功」与通栏「近来手记」共用
+  const [lifeCategory, setLifeCategory] = useState<string | null>(null);
+
+  /** 御批回执:成功之报冠以「知道了 ·」,失败之报不冠 */
+  const showToast = (msg: string, ack = true) => {
+    setToastMessage(ack ? `知道了 · ${msg}` : msg);
     setTimeout(() => setToastMessage(null), 2400);
+  };
+
+  /**
+   * Error boundary for repository mutations. A transport / auth / conflict
+   * failure surfaces as a typed toast and reports false, so callers (notably
+   * the record sheet) never play success feedback for a save that did not land.
+   */
+  const runMutation = async (action: () => Promise<void>, failureMessage: string): Promise<boolean> => {
+    try {
+      await action();
+      return true;
+    } catch (err) {
+      const error = toRepositoryError(err);
+      console.error(`[App] ${failureMessage}:`, error);
+      showToast(`${failureMessage}（${error.code}）`, false);
+      return false;
+    }
   };
 
   const loadData = useCallback(async () => {
     try {
+      setLoadError(null);
       const today = await healthRepository.getToday();
       setTodayData(today);
     } catch (err) {
-      console.error('Failed to load health diary:', err);
+      const error = toRepositoryError(err);
+      console.error('Failed to load health diary:', error);
+      setLoadError(
+        error.code === 'not_implemented'
+          ? '云库（Supabase）既配而后端之法未通：请去 .env 中 VITE_SUPABASE_* 之项，或补其实作。'
+          : `手记取阅未成（${error.code}）`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -88,95 +134,113 @@ export default function App() {
   };
 
   // Actions: Meals
-  const handleSaveMeal = async (input: CreateMealInput) => {
-    await healthRepository.addMeal(input);
-    await loadData();
-    showToast('饮食已记入今日手记 ✓');
-  };
+  const handleSaveMeal = (input: CreateMealInput) =>
+    runMutation(async () => {
+      await healthRepository.addMeal(input);
+      await loadData();
+      showToast('膳食已录于册');
+    }, '膳食之录未成');
 
-  const handleQuickLogSuggestedMeal = async () => {
+  const handleQuickLogSuggestedMeal = () => {
     if (!todayData) return;
     const { nextMeal } = todayData;
-    await healthRepository.addMeal({
-      category: 'dinner',
-      name: nextMeal.mealName,
-      foods: nextMeal.suggestedItems,
-      estimatedCalories: nextMeal.estimatedCalories,
-      estimatedProtein: nextMeal.estimatedProtein,
-    });
-    await loadData();
-    showToast('已将建议餐食记入今日手记 ✓');
+    return runMutation(async () => {
+      await healthRepository.addMeal({
+        category: todayData.mealSlot,
+        name: nextMeal.mealName,
+        foods: nextMeal.suggestedItems,
+        estimatedCalories: nextMeal.estimatedCalories,
+        estimatedProtein: nextMeal.estimatedProtein,
+      });
+      await loadData();
+      showToast('建议之膳已录于册');
+    }, '建议之膳录之未成');
   };
 
   // Actions: Workouts
-  const handleSaveWorkout = async (input: CreateWorkoutInput) => {
-    await healthRepository.addWorkout(input);
-    await loadData();
-    showToast('徒手练习已完成并记录 ✓');
-  };
+  const handleSaveWorkout = (input: CreateWorkoutInput) =>
+    runMutation(async () => {
+      await healthRepository.addWorkout(input);
+      await loadData();
+      showToast('徒手课表已录毕');
+    }, '训练之录未成');
 
-  const handleCompleteTodayWorkout = async () => {
-    await healthRepository.completeTodayWorkout();
-    await loadData();
-    showToast('今日徒手锻炼已达成 ✓');
-  };
+  const handleCompleteTodayWorkout = () =>
+    runMutation(async () => {
+      await healthRepository.completeTodayWorkout();
+      await loadData();
+      showToast('今日徒手之练已毕');
+    }, '训练勾销未成');
 
   // Actions: Body & State
-  const handleSaveDailyState = async (input: CreateDailyStateInput) => {
-    await healthRepository.saveDailyState(input);
-    await loadData();
-    showToast('体征与状态已更新 ✓');
+  const handleSaveDailyState = (input: CreateDailyStateInput) =>
+    runMutation(async () => {
+      await healthRepository.saveDailyState(input);
+      await loadData();
+      showToast('体征状态已录');
+    }, '体征状态之录未成');
+
+  const handleUpdateMetricQuick = (key: 'energy' | 'soreness', val: number) => {
+    if (!todayData) return;
+    return runMutation(async () => {
+      // 只写这一项；当日其余字段（含睡眠）由 repository 保留，不互相覆盖
+      await healthRepository.saveDailyState({ [key]: val });
+      await loadData();
+      showToast(key === 'energy' ? `精力记为 ${val}/5` : `酸痛记为 ${val}/5`);
+    }, '状态改换未成');
   };
 
-  const handleUpdateMetricQuick = async (key: 'energy' | 'soreness', val: number) => {
-    if (!todayData) return;
-    await healthRepository.saveDailyState({
-      energy: key === 'energy' ? val : todayData.state.energy,
-      soreness: key === 'soreness' ? val : todayData.state.soreness,
-      sleepHours: todayData.state.sleepHours,
-    });
-    await loadData();
-    showToast(key === 'energy' ? `精力调至 ${val}/5` : `酸痛标记为 ${val}/5`);
-  };
+  /** 掷还一条误录之膳：原始记录可删，但绝不静默改写数值。 */
+  const handleDeleteMeal = (id: string) =>
+    runMutation(async () => {
+      await healthRepository.deleteMeal(id);
+      await loadData();
+      showToast('此膳已掷还');
+    }, '掷还未成');
 
   // Actions: Todos
-  const handleToggleTodo = async (id: string) => {
-    await healthRepository.toggleTodo(id);
-    await loadData();
-  };
+  const handleToggleTodo = (id: string) =>
+    runMutation(async () => {
+      await healthRepository.toggleTodo(id);
+      await loadData();
+    }, '此事勾选未成');
 
-  const handleAddTodo = async (title: string, estimatedMinutes: number = 20) => {
-    await healthRepository.addTodo({ title, estimatedMinutes });
-    await loadData();
-    showToast('待办已加入 TODAY 列表 ✓');
-  };
+  const handleAddTodo = (title: string, estimatedMinutes: number = 20) =>
+    runMutation(async () => {
+      await healthRepository.addTodo({ title, estimatedMinutes });
+      await loadData();
+      showToast('此事已列入今日之册');
+    }, '添事未成');
 
-  const handleDeleteTodo = async (id: string) => {
-    await healthRepository.deleteTodo(id);
-    await loadData();
-  };
+  const handleDeleteTodo = (id: string) =>
+    runMutation(async () => {
+      await healthRepository.deleteTodo(id);
+      await loadData();
+    }, '去事未成');
 
   // Actions: Notes & Life
-  const handleSaveNote = async (content: string, tags: string[]) => {
-    await healthRepository.addNote({ content, tags });
-    await loadData();
-    showToast('手记随笔已存入 ✓');
-  };
+  const handleSaveNote = (content: string, tags: string[]) =>
+    runMutation(async () => {
+      await healthRepository.addNote({ content, tags });
+      await loadData();
+      showToast('随笔已存入册');
+    }, '随笔之录未成');
 
-  const handleSaveLifeLog = async (input: CreateLifeLogInput) => {
-    await healthRepository.addLifeLog(input);
-    await loadData();
-    showToast('生活轨迹已同步记录 ✓');
-  };
+  const handleSaveLifeLog = (input: CreateLifeLogInput) =>
+    runMutation(async () => {
+      await healthRepository.addLifeLog(input);
+      await loadData();
+      showToast('生活轨迹已录');
+    }, '生活之录未成');
 
   // Evidence modal triggers
   const handleOpenMealEvidence = () => {
     if (!todayData) return;
     setActiveEvidenceTopic({
-      title: 'Next Meal 科学决策审计',
+      title: '下一膳 · 决策稽核',
       type: 'meal',
       recommendationSummary: `${todayData.nextMeal.mealName} (≈${todayData.nextMeal.energyRange ? `${todayData.nextMeal.energyRange.min}–${todayData.nextMeal.energyRange.max}` : todayData.nextMeal.estimatedCalories} kcal, ≈${todayData.nextMeal.proteinRange ? `${todayData.nextMeal.proteinRange.min}–${todayData.nextMeal.proteinRange.max}` : todayData.nextMeal.estimatedProtein}g P)`,
-      userContextSummary: `当前已记录蛋白质：${todayData.nutritionSummary.consumedProtein}g / 目标范围基准 ${todayData.nutritionSummary.targetProtein}g，已记录热量：${todayData.nutritionSummary.consumedCalories} / ${todayData.nutritionSummary.targetCalories} kcal，目标偏向 ${todayData.profile.goal}`,
+      userContextSummary: `当前已记录蛋白质：${todayData.nutrition.protein.consumed}g / 目标范围基准 ${todayData.nutrition.protein.target}g（${toPercent(todayData.nutrition.protein.ratio)}%），已记录热量：${todayData.nutrition.calories.consumed} / ${todayData.nutrition.calories.target} kcal，目标偏向 ${todayData.profile.goal}`,
       evidenceTraces: todayData.nextMeal.evidenceTraces,
       trace: todayData.nextMeal.trace,
       ruleStatus: todayData.nextMeal.ruleStatus,
@@ -189,42 +253,91 @@ export default function App() {
   const handleOpenWorkoutEvidence = () => {
     if (!todayData) return;
     setActiveEvidenceTopic({
-      title: 'Next Workout 科学决策审计',
+      title: '今日之练 · 决策稽核',
       type: 'workout',
-      recommendationSummary: `${todayData.nextWorkout.title} (${todayData.nextWorkout.sessionType})`,
-      userContextSummary: `主观精力感知：${todayData.state.energy}/5，肌肉酸痛：${todayData.state.soreness}/5，昨夜睡眠：${todayData.state.sleepHours}h，训练决策状态：${todayData.nextWorkout.trainingState}`,
+      recommendationSummary: `${todayData.nextWorkout.title} (${todayData.nextWorkout.sessionType}) · ${todayData.nextWorkout.reason}`,
+      userContextSummary: `主观精力感知：${todayData.state.energy ?? '未录'}/5，肌肉酸痛：${todayData.state.soreness ?? '未录'}/5，昨夜睡眠：${formatNightDuration(todayData.sleep.today?.minutes ?? null)}，判定原因：${todayData.training.decision.reasons.join('、')}，训练决策状态：${todayData.nextWorkout.trainingState}`,
       evidenceTraces: todayData.nextWorkout.evidenceTraces,
       trace: todayData.nextWorkout.trace,
       ruleStatus: todayData.nextWorkout.ruleStatus,
       ruleId: todayData.nextWorkout.ruleId,
       ruleName: todayData.nextWorkout.ruleName,
-      equipmentNote: '居家无器械条件下推力、下肢与核心全面覆盖；垂直与水平拉力 (Pull) 动作受限。',
+      equipmentNote: '居家无器械，推力、下肢与核心皆得覆盖；垂直、水平拉力 (Pull) 之动作受限。',
       translationNote: todayData.nextWorkout.engineeringTranslationNote,
     });
     setEvidenceModalOpen(true);
   };
 
-  const handleResetData = async () => {
-    if (window.confirm('确认重置手记为最初的 30 天平稳模拟数据？')) {
+  const handleResetData = () => {
+    if (!window.confirm('确认将手记复为最初之三十日平稳模拟之数？')) return;
+    return runMutation(async () => {
       await healthRepository.resetToDefault();
       await loadData();
-      showToast('手记已恢复为初始数据');
-    }
+      showToast('手记已复其初');
+    }, '复其初未成');
   };
 
   if (isLoading || !todayData) {
+    if (loadError) {
+      return (
+        <div className="min-h-screen bg-paper flex items-center justify-center px-6">
+          <div className="max-w-sm text-center space-y-3">
+            <p className="text-sm text-ink2">{loadError}</p>
+            <button
+              onClick={() => {
+                setIsLoading(true);
+                loadData();
+              }}
+              className="btn-primary"
+            >
+              再试一次
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="min-h-screen bg-[#faf8f5] flex items-center justify-center text-[#78716c] font-sans text-xs">
+      <div className="min-h-screen bg-paper flex items-center justify-center text-ink3 font-sans text-xs">
         <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#15803d] animate-ping" />
-          <span>翻开私人生活手记...</span>
+          {/* deslop-ignore-next-line 19 — literal 6px status dot */}
+          <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+          <span>手记启卷…</span>
         </div>
       </div>
     );
   }
 
+  /** 体重越常度之提示：由 domain 的校验函数判定，只在保存前求助二次确认。 */
+  const weightWarningFor = (value: number): string | null => {
+    if (!todayData) return null;
+    const quality = validateWeightMeasurement(
+      value,
+      todayData.weight.rollingMean7d,
+      todayData.weight.rollingMean7dDays
+    );
+    if (quality.flag !== 'needs_review') return null;
+    return `今录 ${value} 公斤，与近七日均重 ${String(
+      quality.detail.rollingMean7d
+    )} 公斤相差 ${formatAbs(Number(quality.detail.deltaKg))} 公斤，越常度之限。`;
+  };
+
+  /** 表单默认值取「今日既有记录」；今日未录即留空，不预填假数。 */
+  const recordDefaults = {
+    weight:
+      todayData.weight.latestDayKey === todayData.date
+        ? todayData.weight.latest ?? undefined
+        : undefined,
+    sleepStart: todayData.sleep.today?.sleepStart,
+    wakeTime: todayData.sleep.today?.wakeTime,
+    sleepMinutes:
+      todayData.sleep.today?.source === 'duration' ? todayData.sleep.today.minutes : undefined,
+    energy: todayData.state.energy,
+    soreness: todayData.state.soreness,
+  };
+
   return (
-    <div className="min-h-screen bg-[#faf8f5] text-[#24272c] selection:bg-[#e4ded5] selection:text-[#191b1f] pb-32">
+    <div className="min-h-screen text-ink selection:bg-accentsoft selection:text-ink pb-32">
       {/* Toast Feedback */}
       <AnimatePresence>
         {toastMessage && (
@@ -232,108 +345,154 @@ export default function App() {
             initial={{ opacity: 0, y: -16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -16 }}
-            className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#1c1917] text-white text-xs font-medium shadow-md flex items-center gap-1.5"
+            className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-ink text-white text-xs font-medium shadow-md flex items-center gap-1.5"
           >
-            <Check className="w-3.5 h-3.5 text-[#4ade80] stroke-[2.5]" />
+            <Check className="w-3.5 h-3.5 text-accentbright stroke-[2.5]" />
             <span>{toastMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Main Single-Page Natural Flow: Greeting -> TODAY -> BODY -> NEXT MEAL -> NEXT WORKOUT -> RECENT -> LIFE */}
-      <main className="w-full max-w-xl mx-auto px-5 sm:px-6">
-        {/* Greeting */}
+      {/* 单页手记流：刊头 → 左栏其一其二其三 → 右栏身体近况/体感/近况/生活纪事 → 通栏近来手记 */}
+      <main className="w-full max-w-[1160px] mx-auto px-3 sm:px-6 py-6">
+        {/* 版框：古书页式外粗内细双线，刊头、正文与页脚同入一框 */}
+        <div className="border-2 border-ink p-[3px]">
+        <div className="border border-ink/55 px-5 sm:px-8">
+        {/* 刊头与序 */}
         <HeaderGreeting
           displayDate={todayData.displayDate}
           timeGreeting={todayData.timeGreeting}
+          tasks={todayData.tasks}
+          storageLabel={repositoryKind === 'mock' ? '存于本机 · 私人手记' : '云库同步'}
           onOpenRecord={() => handleOpenRecord('meal')}
         />
 
-        {/* 1. TODAY (Todos, Checklist, Daily Note) */}
-        <TodayTasks
-          todos={todayData.todos}
-          notes={todayData.notes}
-          onToggleTodo={handleToggleTodo}
-          onAddTodo={handleAddTodo}
-          onDeleteTodo={handleDeleteTodo}
-          onOpenRecord={() => handleOpenRecord('note')}
+        {/* 数据待核：朱批只标记，不改数 */}
+        <DataQualityNote
+          flags={todayData.dataQuality.flags}
+          reviewCount={todayData.dataQuality.reviewCount}
         />
 
-        {/* 2. BODY (Weight & State) */}
-        <BodyOverview
-          currentWeight={todayData.weight.current}
-          monthDelta={todayData.weight.monthDelta}
-          onEditWeight={() => handleOpenRecord('body')}
-        />
+        {/* 奏折版式：左章目（其一其二其三）/ 右附目按行配对,三对章节横线跨栏同 y;
+            右栏次序按等高重排为 近况 / 生活纪事 / 身体近况+体感,DOM 次序仍按移动端既有顺序
+            （其一→其二→其三→身体近况→近况→生活纪事）,桌面位置全部由 lg:col/row-start 显式指定 */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1.45fr_auto_1fr] lg:gap-x-8 items-start">
+          {/* 折缝：桌面中缝 1px 竖线,移动端隐藏 */}
+          <div
+            aria-hidden="true"
+            className="hidden lg:block lg:self-stretch lg:col-start-2 lg:row-start-1 lg:row-span-3 w-px bg-line"
+          />
 
-        <HowAmIDoing
-          state={todayData.state}
-          onUpdateMetric={handleUpdateMetricQuick}
-        />
+          {/* 左章目（DOM 次序 = 移动端次序;桌面显式落位） */}
+          <div className="lg:col-start-1 lg:row-start-1">
+            <TodayTasks
+              todos={todayData.todos}
+              notes={todayData.notes}
+              tasks={todayData.tasks}
+              onToggleTodo={handleToggleTodo}
+              onAddTodo={handleAddTodo}
+              onDeleteTodo={handleDeleteTodo}
+              onOpenRecord={() => handleOpenRecord('note')}
+            />
+          </div>
+          <div className="lg:col-start-1 lg:row-start-2">
+            <NextMealCard
+              nextMeal={todayData.nextMeal}
+              slotLabel={SLOT_CN[todayData.mealSlot] ?? '今日'}
+              goalLabel={GOAL_CN[todayData.profile.goal] ?? todayData.profile.goal}
+              suggestedLoggedToday={
+                todayData.todayMeals.filter((meal) => meal.source === 'suggested').length
+              }
+              onOpenEvidence={handleOpenMealEvidence}
+              onQuickLogSuggested={handleQuickLogSuggestedMeal}
+              onAddCustomMeal={() => handleOpenRecord('meal')}
+            />
+          </div>
+          <div className="lg:col-start-1 lg:row-start-3">
+            <NextWorkoutCard
+              nextWorkout={todayData.nextWorkout}
+              decision={todayData.training.decision}
+              todaySession={todayData.training.todaySession}
+              isCompletedToday={todayData.training.todaySession !== null}
+              onCompleteWorkout={handleCompleteTodayWorkout}
+              onOpenEvidence={handleOpenWorkoutEvidence}
+              onCustomWorkout={() => handleOpenRecord('workout')}
+            />
+          </div>
 
-        {/* 3. NEXT MEAL */}
-        <NextMealCard
-          nextMeal={todayData.nextMeal}
-          onOpenEvidence={handleOpenMealEvidence}
-          onQuickLogSuggested={handleQuickLogSuggestedMeal}
-          onAddCustomMeal={() => handleOpenRecord('meal')}
-        />
+          {/* 右附目（DOM 次序仍为原移动端次序:身体近况 → 近况 → 生活纪事;
+              桌面落位由 row-start 重排为 近况 / 生活纪事 / 身体近况,以求三行等高） */}
+          {/* 身体近况 + 今日体感 → 桌面行三（与「今日之练」等高,体感本是训练状态之据） */}
+          <div className="lg:col-start-3 lg:row-start-3">
+            <BodyOverview weight={todayData.weight} onEditWeight={() => handleOpenRecord('body')} />
+            <div className="mt-4 lg:pr-9">
+              <HowAmIDoing
+                state={todayData.state}
+                sleep={todayData.sleep}
+                onUpdateMetric={handleUpdateMetricQuick}
+              />
+            </div>
+          </div>
 
-        {/* 4. NEXT WORKOUT (Bodyweight only) */}
-        <NextWorkoutCard
-          nextWorkout={todayData.nextWorkout}
-          isCompletedToday={todayData.nextWorkout.sessionType === 'Rest'}
-          onCompleteWorkout={handleCompleteTodayWorkout}
-          onOpenEvidence={handleOpenWorkoutEvidence}
-          onCustomWorkout={() => handleOpenRecord('workout')}
-        />
+          {/* 右附目：行一 近况（与「今日之事」等高） */}
+          <div className="lg:col-start-3 lg:row-start-1">
+            <RecentSection
+              weight={todayData.weight}
+              nutrition={todayData.nutrition}
+              sleep={todayData.sleep}
+              training={todayData.training}
+              forecast={todayData.forecast}
+              meals={todayData.todayMeals}
+              onDeleteMeal={handleDeleteMeal}
+            />
+          </div>
 
-        {/* 5. RECENT (Weight trend, forecast interval, training volume, sleep) */}
-        <RecentSection
-          currentWeight={todayData.weight.current}
-          weightTrend={todayData.weightTrend}
-          weightForecast={todayData.weightForecast}
-          workoutsThisWeek={todayData.recentStats.workoutsThisWeek}
-          avgSleepHours={todayData.recentStats.avgSleepHours}
-        />
+          {/* 右附目：行二 生活纪事 · 本周之功（与「下一膳」等高） */}
+          <div className="lg:col-start-3 lg:row-start-2">
+            <LifeWeekStats
+              activity={todayData.activity}
+              selectedCategory={lifeCategory}
+              onSelectCategory={setLifeCategory}
+            />
+          </div>        </div>
 
-        {/* 6. LIFE (This week hours & Recent moments) */}
-        <LifeSection
-          weeklyStats={todayData.weeklyLifeStats}
-          recentLogs={todayData.recentLifeLogs}
+        {/* 近来手记：通栏收尾（本周之功已在右栏，两栏因此等高） */}
+        <LifeEntries
+          journal={todayData.journal}
+          selectedCategory={lifeCategory}
+          onSelectCategory={setLifeCategory}
           onOpenAddLog={() => handleOpenRecord('note')}
         />
 
-        {/* Minimal Quiet Footer */}
-        <footer className="pt-8 pb-4 text-xs text-[#a8a29e] flex flex-col sm:flex-row items-center justify-between gap-3 font-sans border-t border-[#e9e4dc]">
+        {/* 页脚：2px 粗线收尾 */}
+        <footer className="mt-12 pt-6 pb-4 text-xs text-ink4 flex flex-col sm:flex-row items-center justify-between gap-3 font-sans border-t-2 border-ink">
           <div className="flex items-center gap-1.5">
-            <span>Personal Health Coach</span>
+            <span>个人健康手记</span>
             <span>·</span>
-            <span>Living Journal</span>
+            <span>{repositoryKind === 'mock' ? '存于本机' : '云库同步'}</span>
+            <span>·</span>
+            <span>不假模型 · 规则可稽</span>
           </div>
 
           <button
             onClick={handleResetData}
-            className="flex items-center gap-1 text-[#78716c] hover:text-[#1c1917] transition-colors cursor-pointer py-1"
-            title="重置为初始演示数据"
+            className="btn-link"
+            title="复为初始演示之数"
           >
             <RotateCcw className="w-3 h-3" />
-            <span>重置演示数据</span>
+            <span>复其初</span>
           </button>
         </footer>
+        </div>
+        </div>
       </main>
 
-      {/* Floating Action Button: "+ Record" */}
+      {/* 记一笔：右下墨色圆角块 */}
       <div className="fixed bottom-6 right-6 sm:right-8 z-40">
-        <motion.button
-          whileHover={{ scale: 1.04 }}
-          whileTap={{ scale: 0.96 }}
-          onClick={() => handleOpenRecord('meal')}
-          className="flex items-center gap-2 px-5 py-3 rounded-full bg-[#1c1917] hover:bg-[#2d2824] text-white font-medium text-xs shadow-xl transition-all duration-150 cursor-pointer"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>+ 记一笔</span>
-        </motion.button>
+        <button onClick={() => handleOpenRecord('meal')} className="btn-primary shadow-md">
+          <Plus className="w-4 h-4 shrink-0 stroke-[2.5]" />
+          <span>记一笔</span>
+        </button>
       </div>
 
       {/* Quick Record Bottom Sheet */}
@@ -346,6 +505,13 @@ export default function App() {
         onSaveDailyState={handleSaveDailyState}
         onSaveNote={handleSaveNote}
         onSaveLifeLog={handleSaveLifeLog}
+        todayIntake={{
+          mealCount: todayData.nutrition.mealCount,
+          caloriesKcal: todayData.nutrition.calories.consumed,
+          proteinG: todayData.nutrition.protein.consumed,
+        }}
+        defaults={recordDefaults}
+        weightWarningFor={weightWarningFor}
       />
 
       {/* Evidence Trace Modal */}

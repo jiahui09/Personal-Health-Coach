@@ -16,6 +16,7 @@ import {
   DietQualityAssessment,
   EnergyCalibration,
   HealthContext,
+  ForecastPeriod,
   MealRecord,
   MealRecommendation,
   PerceivedDifficulty,
@@ -25,10 +26,13 @@ import {
   UserProfile,
   WeightForecast,
   WeightRecord,
-  WeightTrendResult,
   WorkoutRecord,
   WorkoutRecommendation,
 } from '../types/health';
+import type { DataQuality, WorkoutReason } from '../domain/types';
+import { decideWorkoutMode } from '../domain/training';
+import { resolveSleepMinutes } from '../domain/sleep';
+import { trainingStateOf, WORKOUT_REASON_CN } from './decisionCopy';
 import { COMMON_FOOD_DATABASE, MEAL_TEMPLATES, MealTemplate } from '../data/foods';
 import { getEvidenceById } from './scientificEvidence';
 
@@ -78,9 +82,13 @@ export function f_RMR(
   let height: number;
   let age: number;
   let sex: 'male' | 'female' | 'other';
+  let weightIsPlaceholder = false;
 
   if (typeof profileOrWeight === 'object') {
-    currentWeight = profileOrWeight.currentWeight ?? profileOrWeight.weight ?? 68.4;
+    const provided = profileOrWeight.currentWeight ?? profileOrWeight.weight;
+    // 无实测体重时才退回占位值，并把这件事写进 notes/trace，绝不悄悄冒充测量
+    weightIsPlaceholder = !(typeof provided === 'number' && provided > 0);
+    currentWeight = weightIsPlaceholder ? 68.4 : (provided as number);
     height = profileOrWeight.height;
     age = profileOrWeight.age;
     sex = profileOrWeight.sex;
@@ -103,7 +111,9 @@ export function f_RMR(
     formula: `10 * ${currentWeight} + 6.25 * ${height} - 5 * ${age} + (${genderOffset})`,
     status: 'evidence_derived',
     evidenceIds: ['mifflin-1990'],
-    notes: 'Predicted RMR based on Mifflin-St Jeor population model. Individual metabolic variation typically ±10% due to NEAT, organ mass, and adaptive thermogenesis.',
+    notes: weightIsPlaceholder
+      ? 'Placeholder weight 68.4 kg used because no body-weight record was supplied: this RMR is indicative only, not a measurement. Predicted RMR based on Mifflin-St Jeor population model. Individual metabolic variation typically ±10% due to NEAT, organ mass, and adaptive thermogenesis.'
+      : 'Predicted RMR based on Mifflin-St Jeor population model. Individual metabolic variation typically ±10% due to NEAT, organ mass, and adaptive thermogenesis.',
   };
 }
 
@@ -209,139 +219,78 @@ export function f_energy_calibration(history: {
 }
 
 // ==========================================
-// 4. Weight Trend Analysis: f_weight_trend(weightHistory)
-// Status: evidence_constrained (rolling avg & linear trend)
-// ==========================================
-
-export function f_weight_trend(weightHistory: WeightRecord[]): WeightTrendResult {
-  if (weightHistory.length === 0) {
-    return {
-      rollingAverage7d: 68.4,
-      trendPerWeek: 0,
-      currentTrend: 'stable',
-      dataPointsCount: 0,
-    };
-  }
-
-  // 1. 7-day rolling average of latest available points
-  const recent7 = weightHistory.slice(-7);
-  const sum7 = recent7.reduce((acc, curr) => acc + curr.weight, 0);
-  const rollingAverage7d = Math.round((sum7 / recent7.length) * 10) / 10;
-
-  // 2. Linear slope across last 14-30 points
-  const slicePoints = weightHistory.slice(-21);
-  if (slicePoints.length < 2) {
-    return {
-      rollingAverage7d,
-      trendPerWeek: 0,
-      currentTrend: 'stable',
-      dataPointsCount: weightHistory.length,
-    };
-  }
-
-  // Simple linear regression: y = weight, x = day index
-  const n = slicePoints.length;
-  let sumX = 0;
-  let sumY = 0;
-  let sumXY = 0;
-  let sumXX = 0;
-  for (let i = 0; i < n; i++) {
-    sumX += i;
-    sumY += slicePoints[i].weight;
-    sumXY += i * slicePoints[i].weight;
-    sumXX += i * i;
-  }
-
-  const slopePerDay = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-  const trendPerWeek = Math.round(slopePerDay * 7 * 100) / 100;
-
-  let currentTrend: 'decreasing' | 'stable' | 'increasing' = 'stable';
-  if (trendPerWeek < -0.05) currentTrend = 'decreasing';
-  else if (trendPerWeek > 0.05) currentTrend = 'increasing';
-
-  return {
-    rollingAverage7d,
-    trendPerWeek,
-    currentTrend,
-    dataPointsCount: weightHistory.length,
-  };
-}
-
-// ==========================================
 // 5. Weight Forecast Intervals: f_weight_forecast(context)
-// Status: dynamic model / evidence_constrained
-// Source: Hall et al., 2011 (dynamic energy balance)
+// Status: engineering_heuristic scenario projection（情景外推，非承诺）
+// Source: Hall et al., 2011 (dynamic energy balance) 之递减思想
+// 注意：本函数只做「据趋势外推」，不是预测模型；数据存疑/不足时不出数。
 // ==========================================
 
 export function f_weight_forecast(context: {
-  currentWeight: number;
-  weightTrend: WeightTrendResult;
-  goal: string;
+  /** 最新实测体重；无则 null。 */
+  latestWeight: number | null;
+  /** 回归斜率（kg/周）；无则 null。 */
+  trendKgPerWeek: number | null;
+  /** 参与回归的有效日数。 */
+  basedOnDays: number;
+  inputWindowDays: number;
+  /** 体重数据质量：needs_review / insufficient 时不出数。 */
+  quality: DataQuality;
+  modelVersion: string;
 }): WeightForecast {
-  const { currentWeight, weightTrend } = context;
-  const weeklyRate = weightTrend.trendPerWeek; // e.g. -0.18 kg/week
+  const { latestWeight, trendKgPerWeek, basedOnDays, inputWindowDays, quality, modelVersion } =
+    context;
 
-  // Under Hall et al. dynamic adaptation, weight change slows down as body mass decreases
-  // Damping factor for metabolic slowdown
-  const damping4w = 0.95;
-  const damping8w = 0.88;
-  const damping12w = 0.80;
+  const withholdingReason: WeightForecast['withheldReason'] = quality.reasons.includes(
+    'weight_deviates_from_rolling_mean'
+  )
+    ? 'weight_deviates_from_rolling_mean'
+    : quality.flag === 'insufficient'
+    ? 'insufficient_weight_days'
+    : undefined;
+  const withheld = withholdingReason !== undefined || latestWeight === null || trendKgPerWeek === null;
 
-  const delta4w = weeklyRate * 4 * damping4w;
-  const delta8w = weeklyRate * 8 * damping8w;
-  const delta12w = weeklyRate * 12 * damping12w;
+  // Under Hall et al. dynamic adaptation, weight change slows down as body mass decreases.
+  const damping = { 4: 0.95, 8: 0.88, 12: 0.8 } as const;
+  const spread = { 4: 0.35, 8: 0.55, 12: 0.75 } as const;
 
-  // Prediction intervals: ±0.35kg at 4w, ±0.55kg at 8w, ±0.75kg at 12w
-  const est4 = currentWeight + delta4w;
-  const est8 = currentWeight + delta8w;
-  const est12 = currentWeight + delta12w;
-
-  const fourWeeks = {
-    weeks: 4,
-    range: {
-      min: Math.round((est4 - 0.35) * 10) / 10,
-      max: Math.round((est4 + 0.35) * 10) / 10,
-    },
-    unit: 'kg',
-    label: '4 周预测区间',
+  const makePeriod = (weeks: 4 | 8 | 12, label: string): ForecastPeriod => {
+    if (withheld || latestWeight === null || trendKgPerWeek === null) {
+      return { weeks, unit: 'kg', label, range: { min: 0, max: 0 } };
+    }
+    const estimate = latestWeight + trendKgPerWeek * weeks * damping[weeks];
+    const half = spread[weeks];
+    return {
+      weeks,
+      unit: 'kg',
+      label,
+      range: {
+        min: Math.round((estimate - half) * 10) / 10,
+        max: Math.round((estimate + half) * 10) / 10,
+      },
+    };
   };
 
-  const eightWeeks = {
-    weeks: 8,
-    range: {
-      min: Math.round((est8 - 0.55) * 10) / 10,
-      max: Math.round((est8 + 0.55) * 10) / 10,
-    },
-    unit: 'kg',
-    label: '8 周预测区间',
-  };
-
-  const twelveWeeks = {
-    weeks: 12,
-    range: {
-      min: Math.round((est12 - 0.75) * 10) / 10,
-      max: Math.round((est12 + 0.75) * 10) / 10,
-    },
-    unit: 'kg',
-    label: '12 周预测区间',
-  };
-
-  const confidence: 'low' | 'medium' | 'high' =
-    weightTrend.dataPointsCount >= 20 ? 'medium' : 'low';
+  const round1 = (n: number): number => Math.round(n * 10) / 10;
 
   return {
-    fourWeeks,
-    eightWeeks,
-    twelveWeeks,
-    confidence,
+    fourWeeks: makePeriod(4, '4 周情景区间'),
+    eightWeeks: makePeriod(8, '8 周情景区间'),
+    twelveWeeks: makePeriod(12, '12 周情景区间'),
+    confidence: withheld ? 'low' : basedOnDays >= 20 ? 'medium' : 'low',
+    modelVersion,
+    method: 'scenario_trend_projection',
+    inputWindowDays,
+    basedOnDays,
+    withheld,
+    withheldReason: withholdingReason,
     assumptions: [
       '保持当前能量摄入水平与身体活动节律',
       '代谢适应符合 Hall et al. 2011 动态非线性递减规律',
       '无突发肠道水钠潴留或极端饮食结构剧变',
     ],
     limitations: [
-      '预测为统计置信区间 (Prediction Interval)，非确定性单一数值',
-      '短期内糖原储备增减与食盐摄入会导致 ±1kg 的急性非脂肪体重波动',
+      `仅为情景外推（${round1(trendKgPerWeek ?? 0)} kg/周 × 周数 × 衰减），非承诺、非目标值`,
+      '短期内糖原之储耗与食盐之摄入，会致 ±1kg 急性非脂肪体重之波动',
     ],
   };
 }
@@ -479,29 +428,31 @@ export function f_diet_quality(
 // Status: engineering_heuristic ranking over scientific constraints
 // ==========================================
 
+/** Time-of-day slot shared by the meal rules and the UI caption. */
+export function f_meal_slot(hour: number): 'breakfast' | 'lunch' | 'dinner' {
+  return hour < 10 ? 'breakfast' : hour < 15 ? 'lunch' : 'dinner';
+}
+
 export function f_meal_candidates(
   context: HealthContext,
-  proteinGap: number,
-  calorieRoom: number
+  _proteinGap: number,
+  _calorieRoom: number
 ): MealTemplate[] {
-  const currentHour = new Date().getHours();
-  const mealTime = currentHour < 10 ? 'breakfast' : currentHour < 15 ? 'lunch' : 'dinner';
+  // Time-of-day comes from the injected clock, so the ranking is reproducible.
+  const mealTime = f_meal_slot(context.now.getHours());
 
-  // Filter templates
-  return MEAL_TEMPLATES.filter((tpl) => {
-    // Basic time fit
-    if (tpl.suitabilityTime !== 'any' && tpl.suitabilityTime !== mealTime) {
-      if (mealTime === 'dinner' && tpl.suitabilityTime === 'breakfast') return false;
-      if (mealTime === 'breakfast' && tpl.suitabilityTime === 'dinner') return false;
-    }
-    // Goal fit
-    return true;
-  });
+  // Keep templates that are plausible for this time of day; the caller ranks them.
+  return MEAL_TEMPLATES.filter(
+    (tpl) => tpl.suitabilityTime === 'any' || tpl.suitabilityTime === mealTime
+  );
 }
 
 export function f_meal(context: HealthContext): MealRecommendation {
   const { profile, todayMeals } = context;
   const currentWeight = context.currentWeight || profile.currentWeight;
+
+  // Data completeness decides how much the recommendation may claim.
+  const hasIncompleteData = context.hasIncompleteData === true || todayMeals.length === 0;
 
   // 1. Inputs Snapshot
   const consumedCalories = todayMeals.reduce((sum, m) => sum + m.estimatedCalories, 0);
@@ -560,7 +511,7 @@ export function f_meal(context: HealthContext): MealRecommendation {
   const proteinMax = Math.round(bestTemplate.approxProtein + 5);
 
   const ruleId = 'RULE_MEAL_CANDIDATE_OPTIMIZATION_03';
-  const ruleName = '多维约束候选餐食启发式匹配';
+  const ruleName = '以多维约束启选候选之膳（启发式排序）';
   const ruleStatus: RuleStatus = 'engineering_heuristic';
 
   const trace: DecisionTrace = {
@@ -589,10 +540,10 @@ export function f_meal(context: HealthContext): MealRecommendation {
       '餐食评分公式 (proteinFit + energyFit - repetitionPenalty) 属于工程启发式排序',
     ],
     limitations: [
-      '食物成分基于标准全食物数据库估计，实际生熟重量比与烹饪用油会带来 ±15% 的热量变动',
-      'Morton 2018 提供了群体平台证据，并不保证该单餐适合所有胃肠消化速度个体',
+      '食物成分依标准全食物数据库估算；实际生熟之比与烹饪用油，可致 ±15% 热量之浮动',
+      'Morton 2018 提供群体平台之证，并不保证此单膳合于一切胃肠消化速度之个体',
     ],
-    confidence: 'high',
+    confidence: hasIncompleteData ? 'low' : 'high',
   };
 
   const evidenceTraces = [
@@ -631,14 +582,14 @@ export function f_meal(context: HealthContext): MealRecommendation {
     estimatedProtein: bestTemplate.approxProtein,
     energyRange: { min: energyMin, max: energyMax },
     proteinRange: { min: proteinMin, max: proteinMax },
-    reason: `平衡补充 ≈${proteinMin}–${proteinMax}g 蛋白质与全食物膳食纤维，适配今日减脂平稳节律。`,
+    reason: `均衡补 ≈${proteinMin}–${proteinMax}g 蛋白质与全食膳食纤维，合于今日减脂之节律。`,
     ruleId,
     ruleName,
     ruleStatus,
     trace,
     evidenceTraces,
     isUncertaintyNoted: true,
-    uncertaintyMessage: '热量与蛋白质为估算区间，实际数值受烹饪控油及食材批次影响。',
+    uncertaintyMessage: '热量与蛋白质乃估算之区间，实值受控油与食材批次之影响。',
   };
 }
 
@@ -648,51 +599,54 @@ export function f_meal(context: HealthContext): MealRecommendation {
 // ==========================================
 
 export function f_training_state(input: {
-  sleepHours: number;
-  energy: number;
-  soreness: number;
+  sleepHours: number | null;
+  energy: number | null;
+  soreness: number | null;
   workoutCompletedToday: boolean;
 }): {
   state: TrainingState;
   status: 'engineering_heuristic';
   heuristicReason: string;
+  /** 机器可判的判定原因（页面文案据此生成，不再各写一套）。 */
+  reasons: WorkoutReason[];
   disclaimer: 'Product heuristic. Not a clinically validated readiness score.';
 } {
   const { sleepHours, energy, soreness, workoutCompletedToday } = input;
   const disclaimer = 'Product heuristic. Not a clinically validated readiness score.' as const;
 
-  if (workoutCompletedToday) {
-    return {
-      state: 'REST',
-      status: 'engineering_heuristic',
-      heuristicReason: '今日已完成既定训练，神经肌肉系统转入自然恢复期',
-      disclaimer,
-    };
-  }
+  const decision = decideWorkoutMode({
+    sleepMinutes: sleepHours === null ? null : sleepHours * 60,
+    energy,
+    soreness,
+    completedToday: workoutCompletedToday,
+  });
 
-  // Engineering heuristic rules (explicitly documented as heuristics)
-  if (energy <= 2 || soreness >= 4) {
-    return {
-      state: 'RECOVERY',
-      status: 'engineering_heuristic',
-      heuristicReason: '主观精力偏低 (<=2) 或酸痛显著 (>=4)，调度低刺激拉伸与慢速核心激活',
-      disclaimer,
-    };
-  }
-
-  if (sleepHours < 6.0 || energy === 3 || soreness === 3) {
-    return {
-      state: 'LIGHT',
-      status: 'engineering_heuristic',
-      heuristicReason: '体感平稳或睡眠偏短，采用温和容量的徒手维持循环',
-      disclaimer,
-    };
+  const { highSorenessMin, lowEnergyMax, shortSleepHours } = decision.thresholds;
+  let heuristicReason: string;
+  switch (decision.mode) {
+    case 'rest':
+      heuristicReason = '今日既定之练已毕，神经肌肉转入自然恢复之期';
+      break;
+    case 'recovery':
+      heuristicReason = `主观${decision.reasons
+        .map((reason) => WORKOUT_REASON_CN[reason])
+        .join('且')}（酸痛 ≥${highSorenessMin} 或 精力 ≤${lowEnergyMax}），故调低刺激之拉伸与缓速核心之激活`;
+      break;
+    case 'light':
+      heuristicReason = `体感平稳或眠稍短（< ${shortSleepHours} 时），取温和容量之徒手维持循环`;
+      break;
+    default:
+      heuristicReason =
+        decision.reasons[0] === 'no_wellbeing_record'
+          ? '今日尚未录体感，故按常规课表安排；录其精力与酸痛后自动改判'
+          : '精力与睡眠俱足且无明显酸痛，行完整之徒手渐进循环';
   }
 
   return {
-    state: 'NORMAL',
+    state: trainingStateOf(decision.mode),
     status: 'engineering_heuristic',
-    heuristicReason: '精力与睡眠充足且无明显肌肉酸痛，执行完整徒手渐进循环',
+    heuristicReason,
+    reasons: decision.reasons,
     disclaimer,
   };
 }
@@ -757,7 +711,7 @@ export function f_progression(
       recommendedSets: 3,
       recommendedReps: '10–12 次',
       progressionNote: '保持动作顶点离心停顿 1 秒，专注机械张力控制',
-      variationUpgrade: exerciseName.includes('Knee') ? '标准俯卧撑 (Push-up)' : undefined,
+      variationUpgrade: exerciseName.includes('Knee') ? '标准俯卧撑' : undefined,
       status,
       translationNote,
     };
@@ -780,10 +734,11 @@ export function f_progression(
 export function f_workout(context: HealthContext): WorkoutRecommendation {
   const { todayState, todayWorkout, recentWorkouts } = context;
 
+  const sleepMinutes = resolveSleepMinutes(todayState.sleep)?.minutes ?? null;
   const trainingStateDecision = f_training_state({
-    sleepHours: todayState.sleepHours,
-    energy: todayState.energy,
-    soreness: todayState.soreness,
+    sleepHours: sleepMinutes === null ? null : sleepMinutes / 60,
+    energy: todayState.energy ?? null,
+    soreness: todayState.soreness ?? null,
     workoutCompletedToday: !!(todayWorkout && todayWorkout.completed),
   });
 
@@ -794,8 +749,8 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
   let sessionType: 'Normal session' | 'Light session' | 'Recovery session' | 'Rest' = 'Light session';
   let durationMinutes = 16;
   let exercises: BodyweightExercise[] = [];
-  let recoveryGuidance = '保持呼吸深长，不追求酸胀力竭，给身心留下充裕余量。';
-  let reason = '以温和自重激活下肢与推力肌群，促进血液循环与神经舒缓。';
+  let recoveryGuidance = '呼吸深长，不逐酸胀力竭，身心留有余量。';
+  let reason = '以温和自重激活下肢与推力之肌群，通血脉而缓神经。';
   let ruleId = 'RULE_WORKOUT_LIGHT_BODYWEIGHT_01';
   let ruleName = '自重低负荷神经维持循环';
 
@@ -804,8 +759,8 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
     sessionType = 'Rest';
     durationMinutes = 0;
     exercises = [];
-    reason = '今日已完成既定身体练习，给肌纤维与神经系统留出自主重构时间。';
-    recoveryGuidance = '多补充温水，保持规律作息，准备迎接明天的充沛精力。';
+    reason = '今日既定之身练已毕，为肌纤维与神经系统留自主重构之隙。';
+    recoveryGuidance = '多饮温水，作息有常，以待明日之充沛精力。';
     ruleId = 'RULE_WORKOUT_REST_STATE_01';
     ruleName = '自主生理恢复休整';
   } else if (trainingState === 'RECOVERY') {
@@ -813,12 +768,12 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
     sessionType = 'Recovery session';
     durationMinutes = 12;
     exercises = [
-      { name: '死虫式 (Dead Bug)', sets: 2, repsOrDuration: '每侧 6 次', movementPattern: 'core', progressionNote: '腰背贴紧地面，动作放慢' },
-      { name: '双腿臀桥 (Glute Bridge)', sets: 2, repsOrDuration: '10 次', movementPattern: 'posterior chain', progressionNote: '顶峰收缩 2 秒，激活臀大肌' },
-      { name: '原地踏步慢动作 (March)', sets: 2, repsOrDuration: '45 秒', movementPattern: 'lower body', progressionNote: '保持躯干稳定，轻快呼吸' },
+      { name: '死虫式', sets: 2, repsOrDuration: '每侧 6 次', movementPattern: 'core', progressionNote: '腰背贴紧地面，动作放慢' },
+      { name: '双腿臀桥', sets: 2, repsOrDuration: '10 次', movementPattern: 'posterior chain', progressionNote: '顶峰收缩 2 秒，激活臀大肌' },
+      { name: '原地踏步慢动作', sets: 2, repsOrDuration: '45 秒', movementPattern: 'lower body', progressionNote: '保持躯干稳定，轻快呼吸' },
     ];
-    reason = '基于主观酸痛感知或精力偏低，回避高机械张力动作，仅作轻度血液流动舒展。';
-    recoveryGuidance = '动作以无痛与舒展为基准，结束后可温水沐浴。';
+    reason = '依主观酸痛或精力偏低，避高机械张力之动作，仅作轻度血行舒展。';
+    recoveryGuidance = '动作以无痛舒展为度，毕后可温水沐身。';
     ruleId = 'RULE_WORKOUT_RECOVERY_FLOW_01';
     ruleName = '低负荷主动恢复流';
   } else if (trainingState === 'NORMAL') {
@@ -826,14 +781,14 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
     sessionType = 'Normal session';
     durationMinutes = 20;
     exercises = [
-      { name: '徒手深蹲 (Squat)', sets: 3, repsOrDuration: '12 次', movementPattern: 'lower body', progressionNote: '全脚掌踩实，臀部向后下沉' },
-      { name: '标准俯卧撑 (Push-up)', sets: 3, repsOrDuration: '8–10 次', movementPattern: 'push', progressionNote: '核心收紧，慢下快推' },
-      { name: '交替后箭步蹲 (Reverse Lunge)', sets: 2, repsOrDuration: '每侧 10 次', movementPattern: 'lower body', progressionNote: '保护前膝不过度前移' },
-      { name: '单腿臀桥 (Single-leg Bridge)', sets: 2, repsOrDuration: '每侧 8 次', movementPattern: 'posterior chain', progressionNote: '强化骨盆后倾稳定' },
-      { name: '平板支撑 (Plank)', sets: 2, repsOrDuration: '35 秒', movementPattern: 'core', progressionNote: '肘部下压地面，避免塌腰' },
+      { name: '徒手深蹲', sets: 3, repsOrDuration: '12 次', movementPattern: 'lower body', progressionNote: '全脚掌踩实，臀部向后下沉' },
+      { name: '标准俯卧撑', sets: 3, repsOrDuration: '8–10 次', movementPattern: 'push', progressionNote: '核心收紧，慢下快推' },
+      { name: '交替后箭步蹲', sets: 2, repsOrDuration: '每侧 10 次', movementPattern: 'lower body', progressionNote: '保护前膝不过度前移' },
+      { name: '单腿臀桥', sets: 2, repsOrDuration: '每侧 8 次', movementPattern: 'posterior chain', progressionNote: '强化骨盆后倾稳定' },
+      { name: '平板支撑', sets: 2, repsOrDuration: '35 秒', movementPattern: 'core', progressionNote: '肘部下压地面，避免塌腰' },
     ];
-    reason = '精力与睡眠良好，安排覆盖全身推力、下肢与后链的抗阻渐进练习。';
-    recoveryGuidance = '组间休息 60–90 秒，预留 2 次力竭储备 (RIR 2)。';
+    reason = '精力与睡眠俱佳，故安排覆盖全身推力、下肢与后链之抗阻渐进练习。';
+    recoveryGuidance = '组间歇 60–90 秒，预留 2 次力竭之备 (RIR 2)。';
     ruleId = 'RULE_WORKOUT_NORMAL_PROGRESSION_01';
     ruleName = '复合自重多关节进阶循环';
   } else {
@@ -842,26 +797,27 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
     sessionType = 'Light session';
     durationMinutes = 16;
     exercises = [
-      { name: '徒手深蹲 (Squat)', sets: 2, repsOrDuration: '10 次', movementPattern: 'lower body', progressionNote: '节奏平稳，下蹲 2 秒' },
-      { name: '跪姿俯卧撑 (Knee Push-up)', sets: 2, repsOrDuration: '8 次', movementPattern: 'push', progressionNote: '肩胛平稳下沉' },
-      { name: '双腿臀桥 (Glute Bridge)', sets: 2, repsOrDuration: '10 次', movementPattern: 'posterior chain', progressionNote: '顶峰停顿 1 秒' },
-      { name: '平板支撑 (Plank)', sets: 2, repsOrDuration: '30 秒', movementPattern: 'core', progressionNote: '保持脊柱中立' },
+      { name: '徒手深蹲', sets: 2, repsOrDuration: '10 次', movementPattern: 'lower body', progressionNote: '节奏平稳，下蹲 2 秒' },
+      { name: '跪姿俯卧撑', sets: 2, repsOrDuration: '8 次', movementPattern: 'push', progressionNote: '肩胛平稳下沉' },
+      { name: '双腿臀桥', sets: 2, repsOrDuration: '10 次', movementPattern: 'posterior chain', progressionNote: '顶峰停顿 1 秒' },
+      { name: '平板支撑', sets: 2, repsOrDuration: '30 秒', movementPattern: 'core', progressionNote: '保持脊柱中立' },
     ];
-    reason = '体感平稳，以 16 分钟基础动作激活各大肌群，不施加过多中枢神经疲劳。';
+    reason = '体感平稳，以十六分钟基础动作激活诸大肌群，不加中枢神经之劳。';
     ruleId = 'RULE_WORKOUT_LIGHT_CYCLE_01';
     ruleName = '徒手低负荷神经维持循环';
   }
 
   const trace: DecisionTrace = {
     inputSnapshot: {
-      sleepHours: todayState.sleepHours,
-      energyScore: todayState.energy,
-      sorenessScore: todayState.soreness,
+      sleepHours: sleepMinutes === null ? null : Math.round((sleepMinutes / 60) * 100) / 100,
+      energyScore: todayState.energy ?? null,
+      sorenessScore: todayState.soreness ?? null,
       workoutCompletedToday: !!(todayWorkout && todayWorkout.completed),
       weeklySessionsSoFar: trainingVolume.weeklySessions,
     },
     derivedValues: {
       trainingState,
+      decisionReasons: trainingStateDecision.reasons,
       targetDurationMinutes: durationMinutes,
       exerciseCount: exercises.length,
       heuristicDecision: trainingStateDecision.heuristicReason,
@@ -872,7 +828,7 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
     assumptions: [
       '仅使用徒手自重 (bodyweight only)，推力、下肢与深层核心具备良好力学刺激，拉力动作因无单杠受限',
       '精力/酸痛阈值 (Energy <= 2, Soreness >= 4) 为产品工程启发式判定，并非临床级准备度指标',
-      '每次练习采用 RIR 2–3 (保留 2–3 次力竭) 的自主节律调节',
+      '每次练习采 RIR 2–3（留 2–3 次至力竭）之自主节律调节',
     ],
     limitations: [
       '居家无器械条件下垂直拉力 (Pull-up) 动作受限，未来如增设弹力带或单杠可进一步补全背部后链刺激',
@@ -884,7 +840,7 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
   const evidenceTraces = [
     {
       evidenceId: 'who-2020',
-      relevance: '落实每周至少 2 天全身主要肌群抗阻强化的公共卫生建议。',
+      relevance: '落实每周至少两日全身主要肌群抗阻强化之公共卫生建议。',
       evidenceStrength: 'High' as const,
       reference: getEvidenceById('who-2020')!,
     },
@@ -908,10 +864,11 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
     trainingState,
     trainingStateHeuristicNote: trainingStateDecision.heuristicReason,
     durationMinutes,
+    durationSource: 'estimated' as const,
     reason,
     exercises,
     recoveryGuidance,
-    progressionTip: '动作标准高于次数，顶点稍作停顿，体验身体关节与肌群的稳定张力。',
+    progressionTip: '动作之准先于次数，顶点稍停，以体关节与肌群之稳定张力。',
     equipmentCoverage: {
       push: 'well covered',
       lowerBody: 'well covered',
@@ -919,7 +876,7 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
       posteriorChain: 'moderately covered',
       pull: 'limited (no pull-up bar / external equipment)',
     },
-    engineeringTranslationNote: 'ACSM 提供了渐进抗阻原则，具体 2×10 深蹲与俯卧撑级数属于工程实现。',
+    engineeringTranslationNote: 'ACSM 提供渐进抗阻之原则，具体 2×10 深蹲与俯卧撑级数属工程实现。',
     ruleId,
     ruleName,
     ruleStatus: 'engineering_heuristic',
