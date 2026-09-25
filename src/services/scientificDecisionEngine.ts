@@ -1,30 +1,40 @@
 /**
- * Scientific Decision Engine (V2.1 Audited)
+ * Scientific Decision Engine (V3 Living Journal Audited)
  *
  * Deterministic, Auditable, Evidence-Grounded Decision Engine for Personal Health Coach.
  *
  * Mathematical / Pure Function Paradigm:
  *   Personal Data x -> Scientific Rules -> Deterministic Functions -> Next Action y
  *
- * LLM STATUS: OFF (No generative hallucinations, no external AI API calls for decisions).
+ * LLM STATUS: OFF (No generative hallucinations, zero external AI API calls for health advice).
  * Contract: Given identical context x and rule version, output y is bit-identical and fully traceable.
  */
 
 import {
+  DietQualityAssessment,
   EnergyCalibration,
   HealthContext,
   MealRecommendation,
+  WeightForecast,
+  WeightRecord,
+  WeightTrendResult,
   WorkoutRecommendation,
 } from '../types/health';
 import {
   ENGINE_VERSION,
+  f_diet_quality,
   f_energy_calibration,
+  f_energy_prior,
   f_meal,
+  f_meal_candidates,
   f_progression,
   f_protein,
   f_RMR,
   f_TDEE,
   f_training_state,
+  f_training_volume,
+  f_weight_forecast,
+  f_weight_trend,
   f_workout,
 } from './scientificRules';
 
@@ -63,6 +73,27 @@ export class ScientificDecisionEngine {
    */
   recommendNextWorkout(context: HealthContext): WorkoutRecommendation {
     return f_workout(context);
+  }
+
+  /**
+   * Calculate 7-day rolling average & linear weekly trend
+   */
+  computeWeightTrend(weightHistory: WeightRecord[]): WeightTrendResult {
+    return f_weight_trend(weightHistory);
+  }
+
+  /**
+   * Calculate 4w, 8w, 12w prediction intervals based on Hall et al. dynamic energy balance
+   */
+  computeWeightForecast(currentWeight: number, weightTrend: WeightTrendResult, goal: string): WeightForecast {
+    return f_weight_forecast({ currentWeight, weightTrend, goal });
+  }
+
+  /**
+   * Assess daily diet quality against WHO and Dietary Guidelines criteria
+   */
+  assessDietQuality(context: HealthContext): DietQualityAssessment {
+    return f_diet_quality(context.todayMeals, context.recentMeals);
   }
 
   /**
@@ -124,12 +155,18 @@ export const recommendationEngine = scientificDecisionEngine;
 
 // Export underlying functions for testing and verification
 export {
+  f_diet_quality,
   f_energy_calibration,
+  f_energy_prior,
   f_meal,
+  f_meal_candidates,
   f_progression,
   f_protein,
   f_RMR,
   f_TDEE,
   f_training_state,
+  f_training_volume,
+  f_weight_forecast,
+  f_weight_trend,
   f_workout,
 };

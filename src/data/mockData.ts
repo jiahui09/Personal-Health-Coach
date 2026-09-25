@@ -1,13 +1,16 @@
 /**
- * Personal Health Coach - Clean Mock Dataset
- * Contains only the 5 core categories required to inform Next Meal & Next Workout.
+ * Personal Health Coach · Living Journal - Clean Mock Dataset (V3)
  * Anchor date: 2026-09-24
  */
 
 import {
+  DailyNote,
   DailyState,
+  LifeLog,
   MealRecord,
+  TodoItem,
   UserProfile,
+  WeeklyLifeStat,
   WeightRecord,
   WorkoutRecord,
 } from '../types/health';
@@ -98,26 +101,123 @@ export const INITIAL_RECENT_WORKOUTS: WorkoutRecord[] = [
     time: '18:15',
     title: '徒手基础循环',
     durationMinutes: 20,
+    exercises: [
+      { name: '徒手深蹲', sets: 3, repsOrDuration: '12 次', movementPattern: 'lower body' },
+      { name: '标准俯卧撑', sets: 3, repsOrDuration: '10 次', movementPattern: 'push' },
+      { name: '双腿臀桥', sets: 2, repsOrDuration: '12 次', movementPattern: 'posterior chain' },
+      { name: '平板支撑', sets: 2, repsOrDuration: '30 秒', movementPattern: 'core' },
+    ],
     perceivedDifficulty: 'moderate',
     completed: true,
-    exercises: [
-      { name: '徒手深蹲 (Squat)', sets: 3, repsOrDuration: '12 次' },
-      { name: '标准俯卧撑 (Push-up)', sets: 3, repsOrDuration: '10 次' },
-      { name: '平板支撑 (Plank)', sets: 3, repsOrDuration: '30 秒' },
-    ],
   },
   {
     id: 'wo-2',
     date: '2026-09-22',
-    time: '17:45',
-    title: '下肢与核心自重节律',
-    durationMinutes: 22,
-    perceivedDifficulty: 'moderate',
-    completed: true,
+    time: '19:00',
+    title: '下肢与核心轻负荷循环',
+    durationMinutes: 16,
     exercises: [
-      { name: '交替后退箭步蹲 (Reverse Lunge)', sets: 3, repsOrDuration: '8 次 / 侧' },
-      { name: '臀桥 (Glute Bridge)', sets: 3, repsOrDuration: '12 次' },
-      { name: '死虫子 (Dead Bug)', sets: 3, repsOrDuration: '10 次 / 侧' },
+      { name: '徒手深蹲', sets: 2, repsOrDuration: '10 次', movementPattern: 'lower body' },
+      { name: '死虫式', sets: 2, repsOrDuration: '每侧 6 次', movementPattern: 'core' },
+      { name: '双腿臀桥', sets: 2, repsOrDuration: '10 次', movementPattern: 'posterior chain' },
     ],
+    perceivedDifficulty: 'light',
+    completed: true,
+  },
+];
+
+// V3 TODAY: Todos
+export const INITIAL_TODOS: TodoItem[] = [
+  {
+    id: 'todo-1',
+    title: '完成产品核心架构手记',
+    date: TODAY_STR,
+    estimatedMinutes: 45,
+    priority: 'high',
+    completed: false,
+    category: 'work',
+  },
+  {
+    id: 'todo-2',
+    title: '阅读 1 篇抗阻训练文献',
+    date: TODAY_STR,
+    estimatedMinutes: 30,
+    priority: 'medium',
+    completed: false,
+    category: 'reading',
+  },
+  {
+    id: 'todo-3',
+    title: '徒手自重轻量练习 (16 min)',
+    date: TODAY_STR,
+    estimatedMinutes: 16,
+    priority: 'medium',
+    completed: false,
+    category: 'workout',
+  },
+  {
+    id: 'todo-4',
+    title: '采购新鲜蔬菜与优质蛋白质食材',
+    date: TODAY_STR,
+    estimatedMinutes: 20,
+    priority: 'low',
+    completed: true,
+    category: 'life',
+  },
+];
+
+// V3 LIFE: Life logs & moments
+export const INITIAL_LIFE_LOGS: LifeLog[] = [
+  {
+    id: 'life-1',
+    date: '2026-09-24',
+    title: '完成 Living Journal 核心架构解耦',
+    content: '彻底厘清 evidence_derived、evidence_constrained 与 engineering_heuristic 的三层边界，不留含糊地落地为纯函数。',
+    category: 'Coding',
+    durationMinutes: 240,
+    project: 'Personal Health Coach',
+  },
+  {
+    id: 'life-2',
+    date: '2026-09-23',
+    title: '深入研读 Hall 2011 动态非线性能量模型',
+    content: '摆脱静态 3500 kcal = 1 lb 的机械假设，理解机体代谢自适应与减脂减速的自然生理规律。',
+    category: 'Learning',
+    durationMinutes: 180,
+    project: 'Metabolic Foundations',
+  },
+  {
+    id: 'life-3',
+    date: '2026-09-22',
+    title: '开始纯徒手自重渐进抗阻训练',
+    content: '专注于动作控制、离心张力与力竭预留 (RIR 2)，不依赖器械，身体依然有扎实的张力反馈。',
+    category: 'Exercise',
+    durationMinutes: 45,
+  },
+  {
+    id: 'life-4',
+    date: '2026-09-21',
+    title: '研读 Morton 2018 与 Schoenfeld 2018 全文',
+    content: '厘清群体平台拐点与单餐实用建议的差异，明确文献的统计性质与个体局限性。',
+    category: 'Reading',
+    durationMinutes: 120,
+  },
+];
+
+// Factual Weekly Stats (Zero value judgments, pure facts)
+export const INITIAL_WEEKLY_LIFE_STATS: WeeklyLifeStat[] = [
+  { category: 'Coding', hours: 8.4 },
+  { category: 'Learning', hours: 6.2 },
+  { category: 'Exercise', hours: 1.5, sessions: 3 },
+  { category: 'Reading', hours: 2.1 },
+];
+
+export const INITIAL_DAILY_NOTES: DailyNote[] = [
+  {
+    id: 'note-1',
+    date: TODAY_STR,
+    content: '今天终于把这个项目的核心模型想清楚了。记录事实，模型计算，给出下一步，持续观察模型预测与真实结果的差异。',
+    tags: ['#architecture', '#living-journal'],
+    timestamp: '14:20',
   },
 ];

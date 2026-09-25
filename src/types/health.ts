@@ -1,10 +1,17 @@
 /**
- * Personal Health Coach - V2.1 Lean & Scientific Type Definitions
- * 
- * Strict separation of:
- * 1. Evidence-derived model (formula & numbers explicitly provided by literature)
- * 2. Evidence-constrained model (ranges & directions provided by science, translated by rules)
- * 3. Engineering heuristic (practical product logic, explicitly marked as heuristic)
+ * Personal Health Coach · Living Journal (V3 Product Definition)
+ *
+ * Strict three domains:
+ * 1. TODAY: Daily action items (Todos, Daily Note, "+ Record")
+ * 2. BODY: Current physiological state, Next Meal, Next Workout, Weight trend & forecast
+ * 3. LIFE: Longitudinal activity hours (Coding, Learning, Exercise, Reading) & Recent moments
+ *
+ * Strict scientific model categorization:
+ * - evidence_derived: Direct formulas/equations from literature (e.g. Mifflin-St Jeor 1990)
+ * - evidence_constrained: Constraints/ranges from meta-analyses/guidelines (e.g. Morton 2018, WHO diet)
+ * - engineering_heuristic: Product logic/rules bridging practice (e.g. energy threshold, meal ranking)
+ *
+ * LLM = OFF. Deterministic TypeScript pure functions: y = f(x).
  */
 
 export type FitnessGoal = 'fat loss' | 'maintain' | 'muscle gain' | 'general fitness';
@@ -99,8 +106,9 @@ export interface EvidenceReference {
     | 'review_practical_recommendation'
     | 'position_stand'
     | 'public_health_guideline'
-    | 'autoregulation_framework';
-  topic: 'nutrition' | 'exercise' | 'metabolism' | 'recovery';
+    | 'autoregulation_framework'
+    | 'dynamic_energy_model';
+  topic: 'nutrition' | 'exercise' | 'metabolism' | 'recovery' | 'sleep';
   claim: string;
   limitations: string;
   url?: string;
@@ -135,8 +143,8 @@ export interface EnergyCalibration {
 export interface MealRecommendation {
   mealName: string;
   suggestedItems: string[];
-  estimatedCalories: number; // Midpoint for logging convenience
-  estimatedProtein: number;  // Midpoint for logging convenience
+  estimatedCalories: number; // Midpoint for quick logging
+  estimatedProtein: number;  // Midpoint for quick logging
   energyRange: { min: number; max: number }; // Honest estimated energy range (no fake single integer)
   proteinRange: { min: number; max: number }; // Honest protein range
   reason: string;
@@ -175,6 +183,99 @@ export interface WorkoutRecommendation {
   isUncertaintyNoted?: boolean;
 }
 
+// ==========================================
+// V3 New Models: Trends, Forecasts, Food & Diet
+// ==========================================
+
+export interface WeightTrendResult {
+  rollingAverage7d: number;
+  trendPerWeek: number; // kg per week (e.g. -0.18)
+  currentTrend: 'decreasing' | 'stable' | 'increasing';
+  dataPointsCount: number;
+}
+
+export interface ForecastPeriod {
+  weeks: number;
+  range: { min: number; max: number }; // kg range e.g. { min: 67.6, max: 68.3 }
+  unit: string;
+  label: string;
+}
+
+export interface WeightForecast {
+  fourWeeks: ForecastPeriod;
+  eightWeeks: ForecastPeriod;
+  twelveWeeks: ForecastPeriod;
+  confidence: 'low' | 'medium' | 'high';
+  assumptions: string[];
+  limitations: string[];
+}
+
+export interface FoodItem {
+  id: string;
+  name: string;
+  foodGroup: 'protein' | 'vegetable' | 'fruit' | 'grain' | 'dairy' | 'fat' | 'legume';
+  serving: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  sodium: number; // mg
+}
+
+export interface DietQualityAssessment {
+  scoreCategory: 'optimal' | 'adequate' | 'needs_attention';
+  fruitAndVegetableServings: number;
+  fiberGrams: number;
+  wholeGrainsPresent: boolean;
+  excessFreeSugar: boolean;
+  foodDiversityScore: number;
+  ruleStatus: 'evidence_constrained';
+  constraintsNotes: string[];
+  evidenceIds: string[];
+}
+
+// ==========================================
+// V3 Journal & Life Domain Types
+// ==========================================
+
+export interface TodoItem {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  estimatedMinutes?: number;
+  priority?: 'low' | 'medium' | 'high';
+  completed: boolean;
+  category?: 'workout' | 'reading' | 'work' | 'life';
+}
+
+export type LifeCategory = 'Coding' | 'Learning' | 'Exercise' | 'Reading' | 'Life';
+
+export interface LifeLog {
+  id: string;
+  date: string; // YYYY-MM-DD
+  title: string;
+  content: string;
+  category: LifeCategory;
+  durationMinutes: number;
+  project?: string;
+}
+
+export interface WeeklyLifeStat {
+  category: LifeCategory;
+  hours: number;
+  sessions?: number;
+}
+
+export interface DailyNote {
+  id: string;
+  date: string;
+  content: string;
+  tags: string[];
+  timestamp: string;
+}
+
+// Context passed to Decision Engine
 export interface HealthContext {
   profile: UserProfile;
   currentWeight: number;
@@ -182,20 +283,24 @@ export interface HealthContext {
   todayMeals: MealRecord[];
   recentMeals: MealRecord[];
   recentWorkouts: WorkoutRecord[];
+  weightHistory?: WeightRecord[];
   todayWorkout?: WorkoutRecord;
   hasIncompleteData?: boolean;
 }
 
+// Primary Aggregated View Model for App
 export interface TodayData {
   date: string;
   displayDate: string; // "Thursday, September 24"
-  timeGreeting: string; // "Good morning." / "Good afternoon." / "Good evening."
+  timeGreeting: string; // "GOOD MORNING."
   profile: UserProfile;
   weight: {
     current: number;
     monthDelta: number; // e.g. -0.8
   };
   state: DailyState;
+  todos: TodoItem[];
+  notes: DailyNote[];
   nutritionSummary: {
     consumedCalories: number;
     targetCalories: number;
@@ -205,6 +310,11 @@ export interface TodayData {
   };
   nextMeal: MealRecommendation;
   nextWorkout: WorkoutRecommendation;
+  dietQuality: DietQualityAssessment;
+  weightTrend: WeightTrendResult;
+  weightForecast: WeightForecast;
+  recentLifeLogs: LifeLog[];
+  weeklyLifeStats: WeeklyLifeStat[];
   recentStats: {
     weightChange30d: number;
     workoutsThisWeek: number;
@@ -243,4 +353,24 @@ export interface CreateDailyStateInput {
   energy: number;
   soreness: number;
   notes?: string;
+}
+
+export interface CreateTodoInput {
+  title: string;
+  estimatedMinutes?: number;
+  priority?: 'low' | 'medium' | 'high';
+  category?: 'workout' | 'reading' | 'work' | 'life';
+}
+
+export interface CreateLifeLogInput {
+  title: string;
+  content: string;
+  category: LifeCategory;
+  durationMinutes: number;
+  project?: string;
+}
+
+export interface CreateNoteInput {
+  content: string;
+  tags?: string[];
 }

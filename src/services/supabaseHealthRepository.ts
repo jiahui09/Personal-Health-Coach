@@ -6,11 +6,17 @@
 
 import {
   CreateDailyStateInput,
+  CreateLifeLogInput,
   CreateMealInput,
+  CreateNoteInput,
+  CreateTodoInput,
   CreateWorkoutInput,
+  DailyNote,
   DailyState,
+  LifeLog,
   MealRecord,
   TodayData,
+  TodoItem,
   UserProfile,
   WeightRecord,
   WorkoutRecord,
@@ -63,6 +69,34 @@ export class SupabaseHealthRepository implements HealthRepository {
   }
 
   async addWeight(_weight: number, _date?: string): Promise<WeightRecord> {
+    throw new Error('SupabaseHealthRepository not connected yet.');
+  }
+
+  async getTodos(): Promise<TodoItem[]> {
+    throw new Error('SupabaseHealthRepository not connected yet.');
+  }
+
+  async addTodo(_input: CreateTodoInput): Promise<TodoItem> {
+    throw new Error('SupabaseHealthRepository not connected yet.');
+  }
+
+  async toggleTodo(_id: string): Promise<TodoItem> {
+    throw new Error('SupabaseHealthRepository not connected yet.');
+  }
+
+  async deleteTodo(_id: string): Promise<void> {
+    throw new Error('SupabaseHealthRepository not connected yet.');
+  }
+
+  async getLifeLogs(): Promise<LifeLog[]> {
+    throw new Error('SupabaseHealthRepository not connected yet.');
+  }
+
+  async addLifeLog(_input: CreateLifeLogInput): Promise<LifeLog> {
+    throw new Error('SupabaseHealthRepository not connected yet.');
+  }
+
+  async addNote(_input: CreateNoteInput): Promise<DailyNote> {
     throw new Error('SupabaseHealthRepository not connected yet.');
   }
 
