@@ -222,7 +222,8 @@ export class SupabaseRest {
     const session: SupabaseSession = {
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
-      expiresAt: this.now() + data.expires_in * 1000,
+      // Supabase 总会返回 expires_in；缺失时按 1 小时处理（保守,到期会再刷新）
+      expiresAt: this.now() + (data.expires_in ?? 3600) * 1000,
       userId: data.user?.id ?? this.session.userId,
       email: data.user?.email ?? this.session.email,
     };
