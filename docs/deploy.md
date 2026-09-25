@@ -250,6 +250,17 @@ curl "$PROJECT_URL/rest/v1/weight_records?select=*" \
 
 改环境变量后**必须重新部署一次**才会生效（Deployments → Retry deployment，或推一个新提交）。
 
+### 4b. 上线前自检（一条命令,不需要数据库密码）
+
+```bash
+SUPABASE_URL=https://<ref>.supabase.co \
+SUPABASE_ANON_KEY=<anon public key> \
+node scripts/verify-supabase.mjs
+```
+
+它依次检查：URL 格式 → 网关在线（无 key 被拒）→ **六张表都存在** → **RLS 生效**（匿名读必须 0 行）
+→ 匿名不可写。任何一项 FAIL 都会给出对应处置，全 PASS 才继续部署。
+
 ### 5. 首次进入：登录 + 建档
 
 1. 打开站点 → 显示**登录页**（不是空白页：未登录时数据方法会抛 `auth`，页面据此切到登录页）。
