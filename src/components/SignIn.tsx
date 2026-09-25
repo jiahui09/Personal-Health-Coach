@@ -1,6 +1,7 @@
 // Serif for the wordmark and the single primary action. deslop-ignore-file 07
-import React, { useState } from 'react';
-import { Mail, Check } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Mail, Check, AlertTriangle } from 'lucide-react';
+import { clearMagicLinkHash, readAuthErrorFromHash } from '../services/supabaseRest';
 
 interface SignInProps {
   /** 发送登录邮件；返回 false 表示失败（错误信息由 App 弹出）。 */
@@ -15,6 +16,16 @@ export const SignIn: React.FC<SignInProps> = ({ onSendLink }) => {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** 邮件链接失败回跳时 GoTrue 会带回原因（例如链接已过期）。 */
+  const [linkError, setLinkError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const error = readAuthErrorFromHash();
+    if (error) {
+      setLinkError(error);
+      clearMagicLinkHash();
+    }
+  }, []);
 
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
@@ -38,6 +49,13 @@ export const SignIn: React.FC<SignInProps> = ({ onSendLink }) => {
             个人健康手记
           </div>
         </div>
+
+        {linkError && (
+          <p className="mt-5 flex items-start gap-1.5 text-[12px] text-danger leading-relaxed">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>登录链接无效或已过期（{linkError}）：请重新发送一封。</span>
+          </p>
+        )}
 
         {sent ? (
           <div className="mt-6 space-y-2">
@@ -82,6 +100,10 @@ export const SignIn: React.FC<SignInProps> = ({ onSendLink }) => {
             </button>
             <p className="text-[12px] text-ink3 leading-relaxed">
               数据存于你的 Supabase 账号（行级安全按登录身份隔离），本机不再保留副本。
+            </p>
+            {/* 当前站点：用于与 Supabase 的 Site URL / Redirect URLs 对照 */}
+            <p className="text-[12px] text-ink4 tabular-nums">
+              当前站点 {typeof window === 'undefined' ? '' : window.location.origin}
             </p>
           </form>
         )}

@@ -105,9 +105,8 @@ export class SupabaseHealthRepository implements HealthRepository {
           clearMagicLinkHash();
         })
         .catch(() => clearMagicLinkHash());
-    } else if (hash.includes('error_description=')) {
-      clearMagicLinkHash();
     }
+    // 失败回跳（如链接过期）不清 hash：交给登录页读出原因后再清,否则用户只看到「又回到登录页」
   }
 
   private emitAuth(session: SupabaseSession | null): void {

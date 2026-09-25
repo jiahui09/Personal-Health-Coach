@@ -114,6 +114,21 @@ export default function App() {
     loadData();
   }, [loadData]);
 
+  // 云端登录态变化（magic link 回跳建立会话 / 退出）→ 立即重新取数，避免停在登录页
+  useEffect(() => {
+    const unsubscribe = healthRepository.onAuthChange((user) => {
+      if (user) {
+        setIsLoading(true);
+        setNeedsSignIn(false);
+        void loadData();
+      } else if (repositoryKind === 'supabase') {
+        setTodayData(null);
+        setNeedsSignIn(true);
+      }
+    });
+    return unsubscribe;
+  }, [loadData]);
+
   /** 云端登录：发送 magic link（点击邮件后回跳并建立会话）。 */
   const handleSendLoginLink = (email: string) =>
     runMutation(async () => {

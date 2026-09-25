@@ -277,6 +277,18 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
   } catch (err) {
     assert(err instanceof SupabaseError && err.kind === 'network', '网络异常 → network');
   }
+
+  // 响应体缺失（代理/网关异常）：不崩,视为会话失效
+  {
+    const storage = authedStorage(Date.now() - 1000); // 已过期 → 触发刷新
+    const { fetchImpl } = makeFetch([
+      { method: 'GET', match: () => true, status: 200, body: undefined },
+      { method: 'POST', match: (u) => u.includes('grant_type=refresh_token'), status: 200, body: undefined },
+    ]);
+    const broken = new SupabaseRest(cfg, { fetchImpl, storage });
+    assert((await broken.ensureSession()) === null, '刷新响应为空 → 会话失效（不抛异常）');
+    assert(broken.getSession() === null, '失效会话被清除');
+  }
   ok('错误映射：401/403→auth、404→not_found、409→conflict、5xx→unknown、断网→network');
 }
 
@@ -333,7 +345,12 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
     { method: 'GET', match: (u) => u.includes('/todos'), body: seed.todos.map((t, i) => ({ id: `t-${i}`, ...todoToRow(UID, t) })) },
   ];
   const { fetchImpl } = makeFetch(routes);
-  const repo = new SupabaseHealthRepository(cfg, { fetchImpl, storage, clock: () => NOW });
+  const repo = new SupabaseHealthRepository(cfg, {
+    fetchImpl,
+    storage,
+    clock: () => NOW,
+    now: () => NOW.getTime(),
+  });
   const today = await repo.getToday();
   assert(today.profileStatus === 'complete', '云端档案齐备 → complete');
   assert(today.date === '2026-09-25', '日期来自注入时钟');
@@ -360,7 +377,12 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
     { method: 'DELETE', match: (u) => u.includes('/meals'), body: null },
   ];
   const { fetchImpl, calls } = makeFetch(routes);
-  const repo = new SupabaseHealthRepository(cfg, { fetchImpl, storage, clock: () => NOW });
+  const repo = new SupabaseHealthRepository(cfg, {
+    fetchImpl,
+    storage,
+    clock: () => NOW,
+    now: () => NOW.getTime(),
+  });
 
   const updated = await repo.addWeight(57);
   assert(updated.weight === 57, '同日再录返回更新后的记录');

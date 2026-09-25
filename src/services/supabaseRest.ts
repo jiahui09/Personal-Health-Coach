@@ -191,7 +191,8 @@ export class SupabaseRest {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!response.ok) return null;
-    const user = (await response.json()) as { id?: string; email?: string | null };
+    const user = (await response.json().catch(() => null)) as { id?: string; email?: string | null } | null;
+    if (!user) return null;
     return user.id ? { id: user.id, email: user.email ?? null } : null;
   }
 
@@ -207,12 +208,17 @@ export class SupabaseRest {
       this.writeSession(null);
       return null;
     }
-    const data = (await response.json()) as {
-      access_token: string;
-      refresh_token: string;
-      expires_in: number;
+    const data = (await response.json().catch(() => null)) as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
       user?: { id: string; email?: string | null };
-    };
+    } | null;
+    if (!data?.access_token || !data.refresh_token) {
+      // 空体/半截响应（代理或网关异常）→ 视为会话失效,而不是把整页打崩
+      this.writeSession(null);
+      return null;
+    }
     const session: SupabaseSession = {
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
@@ -311,6 +317,18 @@ export class SupabaseRest {
 export function readMagicLinkHash(): string {
   if (typeof window === 'undefined') return '';
   return window.location.hash ?? '';
+}
+
+/** magic link 失败时 GoTrue 会把原因放在 hash 里（如 otp_expired）；读出来给登录页显示。 */
+export function readAuthErrorFromHash(): string | null {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash;
+  if (!hash.includes('error')) return null;
+  const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+  const code = params.get('error_code') ?? params.get('error');
+  const description = params.get('error_description');
+  if (!code && !description) return null;
+  return [code, description?.replace(/\+/g, ' ')].filter(Boolean).join('：');
 }
 
 export function clearMagicLinkHash(): void {
