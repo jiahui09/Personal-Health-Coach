@@ -24,13 +24,11 @@ import {
   ENGINE_VERSION,
   f_diet_quality,
   f_energy_calibration,
-  f_energy_prior,
   f_meal,
   f_meal_candidates,
   f_progression,
   f_protein,
   f_RMR,
-  f_TDEE,
   f_training_state,
   f_training_volume,
   f_weight_forecast,
@@ -44,8 +42,8 @@ export interface DecisionEvaluationResult {
   llmStatus: 'OFF';
   contextSummary: {
     currentWeight: number;
-    dailyCalorieTarget: number;
-    dailyProteinTarget: number;
+    dailyCalorieTarget: number | null;
+    dailyProteinTarget: number | null;
     consumedCalories: number;
     consumedProtein: number;
     energy: number | null;
@@ -123,8 +121,8 @@ export class ScientificDecisionEngine {
       llmStatus: 'OFF',
       contextSummary: {
         currentWeight: context.currentWeight,
-        dailyCalorieTarget: context.profile.dailyCalorieTarget,
-        dailyProteinTarget: context.profile.dailyProteinTarget,
+        dailyCalorieTarget: context.targets ? context.targets.caloriesKcal : null,
+        dailyProteinTarget: context.targets ? context.targets.proteinG : null,
         consumedCalories,
         consumedProtein,
         energy: context.todayState.energy ?? null,
@@ -161,13 +159,11 @@ export const recommendationEngine = scientificDecisionEngine;
 export {
   f_diet_quality,
   f_energy_calibration,
-  f_energy_prior,
   f_meal,
   f_meal_candidates,
   f_progression,
   f_protein,
   f_RMR,
-  f_TDEE,
   f_training_state,
   f_training_volume,
   f_weight_forecast,

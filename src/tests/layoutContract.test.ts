@@ -25,6 +25,7 @@ const srcDir = resolve(here, '..');
 const compDir = resolve(srcDir, 'components');
 
 const read = (p: string) => readFileSync(p, 'utf8');
+const { existsSync } = await import('node:fs');
 const componentFiles = readdirSync(compDir).filter((f) => f.endsWith('.tsx'));
 const comp = (f: string) => read(resolve(compDir, f));
 /** 仓库根（用于校验文档承接了口径说明）。 */
@@ -48,7 +49,9 @@ const SECTIONED = [
   'NextWorkoutCard.tsx',
   'BodyOverview.tsx',
   'RecentSection.tsx',
-  'LifeSection.tsx',
+  'HowAmIDoing.tsx',
+  'BodyProfile.tsx',
+  'ForecastBand.tsx',
 ];
 for (const f of SECTIONED) {
   const src = comp(f);
@@ -100,14 +103,6 @@ for (const cls of ['bg-ink', 'bg-accent', 'bg-danger']) {
   assert(meter.includes(cls), `RuleMeter fill tone ${cls} comes from tokens`);
 }
 assert(comp('RecentSection.tsx').includes('RuleMeter'), '近况 carries the intake/goal meters');
-// 生活纪事的占比条与计量条同列（同一共列网格,故全页条同起同止）
-const life = comp('LifeSection.tsx');
-assert(life.includes('inkrow-meter') && life.includes('aria-hidden'), 'share rows carry the same 3px rule meter');
-assert(life.includes('style={{ width:'), 'share meter width encodes the ratio');
-assert(life.includes('aria-label') && life.includes('占本周'), 'share rows expose their ratio to AT');
-for (const cls of ['bg-ink', 'bg-accent']) {
-  assert(life.includes(cls), `share meter tone ${cls} comes from tokens`);
-}
 
 // --- 6. 御批 copy layer ----------------------------------------------------------
 assert(app.includes('知道了 · '), 'success toasts are acknowledged with 知道了 ·');
@@ -134,7 +129,7 @@ for (const f of ['TodayTasks.tsx', 'BodyOverview.tsx', 'RecentSection.tsx', 'Nex
 }
 
 // 三级横线：版式骨架不再用 linesoft（表单控件底仍可）
-const skeleton = ['TodayTasks.tsx', 'BodyOverview.tsx', 'HowAmIDoing.tsx', 'RecentSection.tsx', 'LifeSection.tsx', 'NextWorkoutCard.tsx', 'NextMealCard.tsx', 'WeightTrendChart.tsx'];
+const skeleton = ['TodayTasks.tsx', 'BodyOverview.tsx', 'HowAmIDoing.tsx', 'RecentSection.tsx', 'NextWorkoutCard.tsx', 'NextMealCard.tsx', 'WeightTrendChart.tsx'];
 for (const f of skeleton) {
   assert(!comp(f).includes('border-linesoft'), `${f} 只用 L2 实线 / L3 点线,不用 linesoft`);
 }
@@ -145,7 +140,11 @@ assert(sectionHead.includes('border-b-2 border-ink'), '章节题 2px 墨线仍�
 assert(sectionHead.includes('border-b border-line'), '章节题下补 1px 细线（外粗内细）');
 
 // 解释性文案归 README：页面组件不得出现方法学说明
-const FORBIDDEN_COPY = ['非首末', '不予修改', '仅标记', '仅指', '非健康度', '非承诺', '先补记录', '做线性回归', '原始记录'];
+const FORBIDDEN_COPY = [
+  '非首末', '不予修改', '仅标记', '仅指', '非健康度', '非承诺', '先补记录', '做线性回归', '原始记录',
+  // 自我说明类：刊头/页脚/按钮里的多余注释（第 17 条删除,不得回流）
+  '存于本机', '不假模型', '日省吾身', '缘由',
+];
 for (const f of [...skeleton, 'DataQualityNote.tsx']) {
   const copy = copyOf(comp(f));
   for (const phrase of FORBIDDEN_COPY) {
@@ -156,5 +155,15 @@ for (const phrase of FORBIDDEN_COPY) {
   assert(!copyOf(app).includes(phrase), `App 不得写方法学说明（${phrase}）→ 归 README`);
 }
 assert(read(resolve(root, 'README.md')).includes('术语与口径'), 'README 承接被删除的口径说明');
+
+// --- 9. 刊头/入口不留冗余（第 17 条） ------------------------------------------
+const header = comp('HeaderGreeting.tsx');
+assert(!header.includes('<button'), '刊头不放动作按钮（录一笔只在右下 FAB 一处）');
+assert(!copyOf(header).includes('日省吾身'), '刊头不写副题式自我说明');
+assert(!existsSync(resolve(compDir, 'EvidenceModal.tsx')), '稽核弹窗已删除（无入口的组件不留死代码）');
+for (const f of componentFiles) {
+  assert(!comp(f).includes('EvidenceModal'), `${f} 不得再引用已删除的稽核弹窗`);
+}
+assert(!css.includes('.btn-ghost'), '无使用者的 .btn-ghost 已清除（动作两级）');
 
 console.log('ALL LAYOUT CONTRACT TESTS PASSED.');

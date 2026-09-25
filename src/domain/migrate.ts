@@ -13,9 +13,7 @@
  */
 
 import type {
-  DailyNote,
   DailyState,
-  LifeLog,
   MealRecord,
   SleepEntry,
   TodoItem,
@@ -32,8 +30,6 @@ export const STORAGE_KEYS = {
   MEALS: 'phc_meals_v3',
   WORKOUTS: 'phc_workouts_v3',
   TODOS: 'phc_todos_v3',
-  LIFE_LOGS: 'phc_lifelogs_v3',
-  NOTES: 'phc_notes_v3',
   AUTH: 'phc_auth_v3',
 } as const;
 
@@ -184,36 +180,35 @@ export function migrateMeals(raw: unknown): MealRecord[] {
   }));
 }
 
-export function migrateLifeLogs(raw: unknown): LifeLog[] {
-  return asArray(raw).map((item) => ({
-    id: str(item.id, 'life-x'),
-    date: str(item.date, ''),
-    title: str(item.title, ''),
-    content: typeof item.content === 'string' ? item.content : '',
-    category:
-      item.category === 'Coding' ||
-      item.category === 'Learning' ||
-      item.category === 'Exercise' ||
-      item.category === 'Reading' ||
-      item.category === 'Life'
-        ? item.category
-        : 'Life',
-    durationMinutes: num(item.durationMinutes, 0),
-    project: typeof item.project === 'string' ? item.project : undefined,
-  }));
-}
-
-export function migrateNotes(raw: unknown): DailyNote[] {
-  return asArray(raw).map((item) => ({
-    id: str(item.id, 'note-x'),
-    date: str(item.date, ''),
-    content: str(item.content, ''),
-    tags: Array.isArray(item.tags) ? (item.tags as string[]) : [],
-    timestamp: str(item.timestamp, '00:00'),
-  }));
-}
-
-export function migrateProfile(raw: unknown, fallback: UserProfile): UserProfile {
-  if (!isRecord(raw)) return fallback;
-  return { ...fallback, ...(raw as Partial<UserProfile>) };
+/**
+ * 只取认识的字段并做类型净化；**不与默认档案合并**。
+ * 传入的 raw 必须是「存储里确实存在的对象」——键不存在时由调用方决定用不用种子。
+ */
+export function migrateProfile(raw: unknown): UserProfile {
+  if (!isRecord(raw)) return {};
+  const profile: UserProfile = {};
+  if (raw.sex === 'male' || raw.sex === 'female' || raw.sex === 'other') profile.sex = raw.sex;
+  if (typeof raw.birthYear === 'number') profile.birthYear = raw.birthYear;
+  if (typeof raw.heightCm === 'number') profile.heightCm = raw.heightCm;
+  if (
+    raw.activityLevel === 'sedentary' ||
+    raw.activityLevel === 'light' ||
+    raw.activityLevel === 'moderate' ||
+    raw.activityLevel === 'active' ||
+    raw.activityLevel === 'very_active'
+  ) {
+    profile.activityLevel = raw.activityLevel;
+  }
+  if (typeof raw.waistCm === 'number') profile.waistCm = raw.waistCm;
+  if (
+    raw.goal === 'fat loss' ||
+    raw.goal === 'maintain' ||
+    raw.goal === 'muscle gain' ||
+    raw.goal === 'general fitness'
+  ) {
+    profile.goal = raw.goal;
+  }
+  if (raw.goalSource === 'user' || raw.goalSource === 'advice') profile.goalSource = raw.goalSource;
+  if (typeof raw.name === 'string') profile.name = raw.name;
+  return profile;
 }

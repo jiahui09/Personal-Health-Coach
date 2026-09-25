@@ -13,6 +13,7 @@
  * 9. Clock injection: the engine reads time only from `context.now`
  */
 
+import { totalDailyEnergy } from '../domain/body';
 import { scientificDecisionEngine } from '../services/scientificDecisionEngine';
 
 import {
@@ -21,7 +22,6 @@ import {
   f_progression,
   f_protein,
   f_RMR,
-  f_TDEE,
   f_training_state,
   f_workout,
 } from '../services/scientificRules';
@@ -52,14 +52,13 @@ export function runScientificAuditTests() {
   console.log('   ✓ f_RMR passed.');
 
   // ==========================================
-  // Test 2: f_TDEE (Engineering Range)
-  // ==========================================
-  console.log('2. Testing f_TDEE (Energy range, not fake single integer)...');
-  const tdee = f_TDEE(1649, false);
-  assert(tdee.estimatedEnergyRange.min === Math.round(1649 * 1.15), 'TDEE min calculation mismatch');
-  assert(tdee.estimatedEnergyRange.max === Math.round(1649 * 1.25), 'TDEE max calculation mismatch');
-  assert(tdee.status === 'engineering_heuristic', 'TDEE activity assumption must be engineering_heuristic');
-  console.log('   ✓ f_TDEE passed.');
+  // Test 2: 总消耗 = RMR × PAL（domain/body：真实活动系数,不再是写死的久坐区间）
+  console.log('2. Testing totalDailyEnergy (RMR × PAL by activity level)...');
+  const tdeeSedentary = totalDailyEnergy(1649, 'sedentary');
+  const tdeeLight = totalDailyEnergy(1649, 'light');
+  assert(tdeeSedentary !== null && tdeeSedentary.kcal === Math.round(1649 * 1.2), 'sedentary PAL 1.2');
+  assert(tdeeLight !== null && tdeeLight.kcal === Math.round(1649 * 1.375), 'light PAL 1.375');
+  console.log('   ✓ totalDailyEnergy passed.');
 
   // ==========================================
   // Test 3: f_protein (Morton 2018 Range)
@@ -134,20 +133,22 @@ export function runScientificAuditTests() {
 
   const baseProfile: UserProfile = {
     name: 'Test User',
-    age: 28,
     sex: 'male',
-    height: 175,
-    currentWeight: 68.4,
+    birthYear: 1998,
+    heightCm: 175,
+    activityLevel: 'light',
+    waistCm: 84,
     goal: 'fat loss',
-    dailyCalorieTarget: 1820,
-    dailyProteinTarget: 123,
+    goalSource: 'user',
   };
+  const testTargets = { caloriesKcal: 1820, proteinG: 123, proteinRange: { min: 96, max: 137 }, kcalFromTdee: 2275, ratio: 0.8, floored: false, targetRateKgPerWeek: { min: 0.34, max: 0.68 }, direction: 'lose' as const };
 
   // Edge case A: missing meal data (0 meals logged today)
   const contextSparse: HealthContext = {
     now: new Date('2026-09-24T13:00:00'),
     profile: baseProfile,
     currentWeight: 68.4,
+    targets: testTargets,
     todayState: { date: '2026-09-24', sleep: { kind: 'duration', minutes: 450 }, energy: 4, soreness: 2 },
     todayMeals: [],
     recentMeals: [],
@@ -171,6 +172,7 @@ export function runScientificAuditTests() {
     now: new Date('2026-09-24T13:00:00'),
     profile: baseProfile,
     currentWeight: 68.4,
+    targets: testTargets,
     todayState: { date: '2026-09-24', sleep: { kind: 'duration', minutes: 432 }, energy: 4, soreness: 2 },
     todayMeals: [
       {
@@ -205,6 +207,7 @@ export function runScientificAuditTests() {
     now: new Date('2026-09-24T13:00:00'),
     profile: baseProfile,
     currentWeight: 68.4,
+    targets: testTargets,
     todayState: { date: '2026-09-24', sleep: { kind: 'duration', minutes: 420 }, energy: 4, soreness: 5 },
     todayMeals: [],
     recentMeals: [],
@@ -219,6 +222,7 @@ export function runScientificAuditTests() {
     now: new Date('2026-09-24T13:00:00'),
     profile: baseProfile,
     currentWeight: 68.4,
+    targets: testTargets,
     todayState: { date: '2026-09-24', sleep: { kind: 'duration', minutes: 480 }, energy: 4, soreness: 1 },
     todayMeals: [],
     recentMeals: [],

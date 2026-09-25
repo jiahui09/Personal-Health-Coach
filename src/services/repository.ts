@@ -25,8 +25,5 @@ export function createHealthRepository(kind: RepositoryKind = resolveRepositoryK
   return kind === 'supabase' ? new SupabaseHealthRepository() : new MockHealthRepository();
 }
 
-/** Which implementation this build resolved to (surfaced in logs / footer). */
-export const repositoryKind: RepositoryKind = resolveRepositoryKind();
-
 /** The singleton the UI talks to. */
 export const healthRepository: HealthRepository = createHealthRepository();

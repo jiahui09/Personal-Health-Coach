@@ -31,8 +31,10 @@ const presentationFiles: [string, string][] = [
   ['BodyOverview.tsx', comp('BodyOverview.tsx')],
   ['HowAmIDoing.tsx', comp('HowAmIDoing.tsx')],
   ['RecentSection.tsx', comp('RecentSection.tsx')],
-  ['LifeSection.tsx', comp('LifeSection.tsx')],
   ['DataQualityNote.tsx', comp('DataQualityNote.tsx')],
+  ['BodyProfile.tsx', comp('BodyProfile.tsx')],
+  ['ForecastBand.tsx', comp('ForecastBand.tsx')],
+  ['ProfileSheet.tsx', comp('ProfileSheet.tsx')],
   ['NextMealCard.tsx', comp('NextMealCard.tsx')],
   ['NextWorkoutCard.tsx', comp('NextWorkoutCard.tsx')],
 ];
@@ -55,7 +57,7 @@ for (const [name, text] of presentationFiles) {
 
 // --- 2. 阈值只在 policy，规则只引用 policy -------------------------------
 const policy = src('src/domain/policy.ts');
-for (const key of ['TRAINING_POLICY', 'SLEEP_POLICY', 'WEIGHT_POLICY', 'NUTRITION_POLICY', 'ACTIVITY_POLICY']) {
+for (const key of ['TRAINING_POLICY', 'SLEEP_POLICY', 'WEIGHT_POLICY', 'NUTRITION_POLICY', 'TARGET_POLICY']) {
   assert(policy.includes(key), `policy.ts 必须集中声明 ${key}`);
 }
 assert(src('src/domain/training.ts').includes('policy.highSorenessMin'), '训练阈值取自 policy');
@@ -68,13 +70,17 @@ const requiredFormulas: [string, string][] = [
   ['src/domain/tasks.ts', 'calculateTaskProgress'],
   ['src/domain/nutrition.ts', 'calculateNutritionProgress'],
   ['src/domain/sleep.ts', 'sleepSummary'],
+  ['src/domain/body.ts', 'bmiCategory'],
+  ['src/domain/body.ts', 'mifflinStJeor'],
+  ['src/domain/body.ts', 'totalDailyEnergy'],
+  ['src/domain/composition.ts', 'adviseWeightGoal'],
+  ['src/domain/composition.ts', 'deriveNutritionTargets'],
+  ['src/domain/composition.ts', 'decideTrainingTarget'],
   ['src/domain/weight.ts', 'endpointChangeKg'],
   ['src/domain/weight.ts', 'regressionSlopePerDay'],
   ['src/domain/weight.ts', 'validateWeightMeasurement'],
   ['src/domain/training.ts', 'decideWorkoutMode'],
   ['src/domain/training.ts', 'resistanceProgress'],
-  ['src/domain/activity.ts', 'activitySummary'],
-  ['src/domain/activity.ts', 'journalSummary'],
 ];
 for (const [file, symbol] of requiredFormulas) {
   assert(src(file).includes(symbol), `${file} 必须提供 ${symbol}`);
@@ -88,7 +94,6 @@ const statisticsComponents = [
   'BodyOverview.tsx',
   'HowAmIDoing.tsx',
   'RecentSection.tsx',
-  'LifeSection.tsx',
   'DataQualityNote.tsx',
 ];
 for (const name of statisticsComponents) {
@@ -111,9 +116,9 @@ assert(app.includes('weight={todayData.weight}'), '身体近况消费 WeightSumm
 assert(comp('NextMealCard.tsx').includes('未入账'), '下一膳必须声明其为计划、未入账');
 assert(comp('NextWorkoutCard.tsx').includes('估算'), '建议时长必须标注为估算');
 assert(comp('NextWorkoutCard.tsx').includes('describeWorkoutDecision'), '训练判定原因由决策结果生成');
-assert(comp('RecentSection.tsx').includes('情景外推'), '预测必须标为情景外推');
-assert(comp('RecentSection.tsx').includes('forecast.withheld'), '数据存疑时预测须可暂阙');
-assert(comp('RecentSection.tsx').includes('modelVersion'), '预测必须展示模型出处');
+assert(comp('ForecastBand.tsx').includes('情景外推'), '预测必须标为情景外推');
+assert(comp('ForecastBand.tsx').includes('forecast.withheld'), '数据存疑时预测须可暂阙');
+assert(comp('ForecastBand.tsx').includes('modelVersion'), '预测必须展示模型出处');
 
 // --- 6. 御批词表与关键措辞 ----------------------------------------------
 assert(app.includes('知道了 · '), '成功回执冠「知道了 ·」');

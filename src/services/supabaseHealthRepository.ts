@@ -9,14 +9,10 @@
 
 import {
   CreateDailyStateInput,
-  CreateLifeLogInput,
   CreateMealInput,
-  CreateNoteInput,
   CreateTodoInput,
   CreateWorkoutInput,
-  DailyNote,
   DailyState,
-  LifeLog,
   MealRecord,
   TodayData,
   TodoItem,
@@ -129,22 +125,6 @@ export class SupabaseHealthRepository implements HealthRepository {
 
   async deleteTodo(_id: string): Promise<void> {
     this.fail('deleteTodo');
-  }
-
-  async getLifeLogs(_since?: string): Promise<LifeLog[]> {
-    this.fail('getLifeLogs');
-  }
-
-  async addLifeLog(_input: CreateLifeLogInput): Promise<LifeLog> {
-    this.fail('addLifeLog');
-  }
-
-  async getNotes(_since?: string): Promise<DailyNote[]> {
-    this.fail('getNotes');
-  }
-
-  async addNote(_input: CreateNoteInput): Promise<DailyNote> {
-    this.fail('addNote');
   }
 
   async resetToDefault(): Promise<void> {

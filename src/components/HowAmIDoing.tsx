@@ -3,6 +3,7 @@ import React from 'react';
 import { DailyState } from '../types/health';
 import type { SleepSummary } from '../domain/types';
 import { formatNightDuration } from '../domain/format';
+import { SectionHead } from './SectionHead';
 
 interface HowAmIDoingProps {
   state: DailyState;
@@ -70,65 +71,73 @@ export const HowAmIDoing: React.FC<HowAmIDoingProps> = ({ state, sleep, onUpdate
   );
 
   return (
-    <div className="mt-5 pt-4 border-t border-line">
-      <div className="group-head">今日体感</div>
+    <section className="pt-10 lg:pr-9">
+      {/* 附目章节头：与其余六章同规格；不设朱批（无裁决可批） */}
+      <SectionHead title="今日体感" />
 
-      <div className="mt-1">
-        <div className="inkrow inkrow-dotted">
-          <span className={LABEL}>夜眠</span>
-          <span className="leader" aria-hidden="true" />
-          <span className={VALUE}>
-            {night ? formatNightDuration(night.minutes) : '未录'}
-            {night?.source === 'interval' && (
-              <span className="hidden sm:inline text-ink3 text-[12px]">
-                {' '}
-                · {night.sleepStart}–{night.wakeTime}
-              </span>
-            )}
-          </span>
-        </div>
-
-        <div className="inkrow inkrow-dotted">
-          <span className={LABEL}>近七夜</span>
-          <span className="leader" aria-hidden="true" />
-          <span className={VALUE}>
-            {sleep.nights}/{sleep.windowDays} 夜 · 均 {formatNightDuration(sleep.avgMinutes)}
-          </span>
-        </div>
-
-        {/* 精力越高越好、酸痛越高越差：两套方向各自成行 */}
-        <div className="inkrow inkrow-dotted">
-          <span className={LABEL}>精力</span>
-          {dots(state.energy ?? 0, 'energy', '精力')}
-          <span className={VALUE}>
-            {state.energy === undefined ? (
-              <span className="text-ink3">未录</span>
-            ) : (
-              <>
-                <span className="font-semibold">{state.energy}</span>/5
-                <span className="text-accent font-medium ml-1.5">{getEnergyLabel(state.energy)}</span>
-              </>
-            )}
-          </span>
-        </div>
-
-        <div className="inkrow inkrow-dotted">
-          <span className={LABEL}>酸痛</span>
-          {dots(state.soreness ?? 0, 'soreness', '酸痛')}
-          <span className={VALUE}>
-            {state.soreness === undefined ? (
-              <span className="text-ink3">未录</span>
-            ) : (
-              <>
-                <span className="font-semibold">{state.soreness}</span>/5
-                <span className="text-accent font-medium ml-1.5">
-                  {getSorenessLabel(state.soreness)}
+      {/* 四个事实两栏并置：左为眠,右为体感,省掉一整列空白 */}
+      <div className="mt-4 grid gap-x-8 sm:grid-cols-2">
+        <div>
+          <div className="inkrow inkrow-dotted">
+            <span className={LABEL}>夜眠</span>
+            <span className="leader" aria-hidden="true" />
+            <span className={VALUE}>
+              {night ? formatNightDuration(night.minutes) : '未录'}
+              {night?.source === 'interval' && (
+                <span className="hidden sm:inline text-ink3 text-[12px]">
+                  {' '}
+                  · {night.sleepStart}–{night.wakeTime}
                 </span>
-              </>
-            )}
-          </span>
+              )}
+            </span>
+          </div>
+
+          <div className="inkrow inkrow-dotted">
+            <span className={LABEL}>近七夜</span>
+            <span className="leader" aria-hidden="true" />
+            <span className={VALUE}>
+              {sleep.nights}/{sleep.windowDays} 夜 · 均 {formatNightDuration(sleep.avgMinutes)}
+            </span>
+          </div>
+        </div>
+
+        <div>
+          {/* 精力越高越好、酸痛越高越差：两套方向各自成行 */}
+          <div className="inkrow inkrow-dotted">
+            <span className={LABEL}>精力</span>
+            {dots(state.energy ?? 0, 'energy', '精力')}
+            <span className={VALUE}>
+              {state.energy === undefined ? (
+                <span className="text-ink3">未录</span>
+              ) : (
+                <>
+                  <span className="font-semibold">{state.energy}</span>/5
+                  <span className="text-accent font-medium ml-1.5">
+                    {getEnergyLabel(state.energy)}
+                  </span>
+                </>
+              )}
+            </span>
+          </div>
+
+          <div className="inkrow inkrow-dotted">
+            <span className={LABEL}>酸痛</span>
+            {dots(state.soreness ?? 0, 'soreness', '酸痛')}
+            <span className={VALUE}>
+              {state.soreness === undefined ? (
+                <span className="text-ink3">未录</span>
+              ) : (
+                <>
+                  <span className="font-semibold">{state.soreness}</span>/5
+                  <span className="text-accent font-medium ml-1.5">
+                    {getSorenessLabel(state.soreness)}
+                  </span>
+                </>
+              )}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 };

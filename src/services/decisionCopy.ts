@@ -1,8 +1,8 @@
 /**
- * 决策结果的中文表述（唯一出处）
+ * 决策与体征的中文表述（唯一出处）
  *
- * 训练状态、原因、阈值句都由这里生成：规则层写进 heuristicReason，
- * 页面写进可见句子，二者不会各说一套。
+ * 训练状态、原因、阈值句、体征档标签都由这里生成：
+ * 规则层写进 heuristicReason，页面写进可见句子，二者不会各说一套。
  */
 
 import type { TrainingState } from '../types/health';
@@ -60,3 +60,55 @@ export function describeWorkoutReasons(decision: WorkoutDecision): string {
 export function describeWorkoutDecision(decision: WorkoutDecision): string {
   return `定为${WORKOUT_MODE_CN[decision.mode]} · ${describeWorkoutReasons(decision)}`;
 }
+
+// ---------------- 体征档（Raw → Derived → Decision） ----------------
+
+export const SEX_CN: Record<'female' | 'male' | 'other', string> = {
+  female: '女',
+  male: '男',
+  other: '其他',
+};
+
+export const ACTIVITY_CN: Record<
+  'sedentary' | 'light' | 'moderate' | 'active' | 'very_active',
+  { label: string; hint: string }
+> = {
+  sedentary: { label: '久坐', hint: '几乎不运动 · PAL 1.2' },
+  light: { label: '轻', hint: '每周 1–2 练 · PAL 1.375' },
+  moderate: { label: '中', hint: '每周 3–4 练 · PAL 1.55' },
+  active: { label: '高', hint: '每周 5–6 练 · PAL 1.725' },
+  very_active: { label: '极高', hint: '每日训练或体力工作 · PAL 1.9' },
+};
+
+export const BMI_CATEGORY_CN: Record<
+  'underweight' | 'normal' | 'overweight' | 'obese_1' | 'obese_2',
+  string
+> = {
+  underweight: '偏瘦',
+  normal: '正常',
+  overweight: '超重',
+  obese_1: '肥胖一度',
+  obese_2: '肥胖二度',
+};
+
+export const DIRECTION_CN: Record<'lose' | 'maintain' | 'gain', string> = {
+  lose: '减脂',
+  maintain: '维持',
+  gain: '增重',
+};
+
+export const GOAL_CN: Record<string, string> = {
+  'fat loss': '减脂之期',
+  maintain: '守成之期',
+  'muscle gain': '增肌之期',
+  'general fitness': '日常强身',
+};
+
+/** 体征档缺项的中文名，用于「未建档」提示。 */
+export const PROFILE_FIELD_CN: Record<string, string> = {
+  sex: '性别',
+  birthYear: '出生年',
+  heightCm: '身高',
+  activityLevel: '活动水平',
+  goal: '目标',
+};

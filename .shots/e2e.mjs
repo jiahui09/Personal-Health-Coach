@@ -1,10 +1,11 @@
 /**
  * 端到端流程验证（headless chromium + CDP，独立 profile）
  *
- * 覆盖本轮数据语义改造后的关键交互：
- *   1. 进食：需填分子分母 → 入账 → 成功回执「知道了 · …已录于册」
- *   2. 手记：文字与时长皆空不可提交；只填时长亦可入账（纯计时手帐行）
- *   3. 体征：就寝/起身时刻 → 时长由时刻推得（7h20m）；体重越常度需二次确认
+ * 主线：未建档 → 页面不显示任何人体数字 → 立档 → 派生 BMI/代谢/目标 → 记录流程照常。
+ *   1. 清空档案 → 「体征档 · 未建档」与「下一膳」不出建议
+ *   2. 立档（男/1990/175/轻/腰围 84）→ BMI、RMR、TDEE、每日目标、抗阻处方出现
+ *   3. 进食：填分子分母 → 入账 → 回执
+ *   4. 体征：就寝/起身 → 时长由时刻推得；异常体重二次确认后原样保存
  */
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -52,9 +53,24 @@ const send = (m, q = {}) =>
     p.set(i, (x) => (x.error ? rej(new Error(x.error.message)) : res(x.result)));
     ws.send(JSON.stringify({ id: i, method: m, params: q }));
   });
-const ev = async (e) => (await send('Runtime.evaluate', { expression: e, returnByValue: true })).result.value;
+/** 求值并把页面里的异常显式抛出（否则 undefined 会静默吞掉失败原因）。 */
+const ev = async (e) => {
+  const r = await send('Runtime.evaluate', { expression: e, returnByValue: true });
+  if (r.exceptionDetails) {
+    throw new Error('page eval failed: ' + (r.exceptionDetails.exception?.description || '').split('\n')[0]);
+  }
+  return r.result.value;
+};
 
-/** React 受控输入：必须走原生 setter + input 事件 */
+const waitFor = async (expr, timeout = 4000) => {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await ev(expr)) return true;
+    await sleep(150);
+  }
+  return false;
+};
+
 const setInput = (selectorIndexExpr, value) => `(() => {
   const input = ${selectorIndexExpr};
   if (!input) return 'no-input';
@@ -65,56 +81,72 @@ const setInput = (selectorIndexExpr, value) => `(() => {
 })()`;
 
 const clickText = (text) =>
-  `[...document.querySelectorAll('button')].find(b => b.textContent.includes(${JSON.stringify(
+  `(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.includes(${JSON.stringify(
     text
-  )})).click()`;
+  )})); if (!b) return 'no-button'; b.click(); return 'clicked'; })()`;
 
-/** 等到条件成立（最多 timeout ms），避免动画/状态竞态导致误判 */
-const waitFor = async (expr, timeout = 4000) => {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    if (await ev(expr)) return true;
-    await sleep(150);
-  }
-  return false;
-};
+const clickExact = (text) =>
+  `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(
+    text
+  )})?.click()`;
 
-/** 先等面板出现，再切页签，并等到该页签的表单确实渲染出来 */
-const openSheet = async (tabText) => {
-  if (!(await waitFor(`!!document.querySelector('form')`, 500))) {
-    await ev(clickText('记一笔'));
-  }
-  await waitFor(`!!document.querySelector('form')`);
-  if (tabText) {
-    await ev(
-      `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(
-        tabText
-      )})?.click()`
-    );
-    await waitFor(`document.querySelector('form').innerText.includes(${JSON.stringify(tabText)})`);
-    await sleep(250);
-  }
+const load = async () => {
+  await send('Page.navigate', { url: 'http://localhost:3000/' });
+  await waitFor(`document.querySelectorAll("main section").length >= 5`, 12000);
+  await sleep(600);
 };
 
 await send('Page.enable');
-await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-await send('Page.navigate', { url: 'http://localhost:3000/' });
-for (let i = 0; i < 24; i++) {
-  if (await ev('document.querySelectorAll("main").length')) break;
-  await sleep(750);
-}
-await sleep(1000);
+await send('Emulation.setDeviceMetricsOverride', {
+  width: 1440,
+  height: 900,
+  deviceScaleFactor: 1,
+  mobile: false,
+});
+await load();
 
-// --- 1. 进食：必须填数,入账后弹回执 -------------------------------------
-await openSheet();
-const mealNameSet = await ev(setInput(`[...document.querySelectorAll('form input[type=text]')][0]`, '测试餐 · 三文鱼'));
-const kcalSet = await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][0]`, '520'));
-const proteinSet = await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][1]`, '38'));
+// --- 1. 清空档案：页面不得再显示任何人体数字 -----------------------------
+await ev(`localStorage.setItem('phc_profile_v3', '{}')`);
+await load();
+const noProfileText = await ev(`document.body.innerText`);
+console.log('未建档：体征档显示未建档:', noProfileText.includes('未建档'));
+console.log('未建档：下一膳不出建议:', noProfileText.includes('未建档：先录身高'));
+const fakeLines = noProfileText
+  .split('\n')
+  .filter((l) => l.includes('体重指数') || l.includes('每日热量') || l.includes('每周抗阻'));
+console.log('未建档：不显示伪造的人体数字:', fakeLines.length === 0, fakeLines.slice(0, 3).join(' // '));
+
+// --- 2. 立档 → 派生 BMI / 代谢 / 目标 ------------------------------------
+console.log('立档点击:', await ev(clickText('立档')));
+await waitFor(`!!document.querySelector('form')`);
+console.log('档案表单已开:', await ev(`document.querySelector('form').innerText.includes('出生年')`));
+await ev(clickExact('男'));
+await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][0]`, '1990'));
+await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][1]`, '175'));
+await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][2]`, '84'));
+await ev(clickText('轻'));
+await sleep(200);
+console.log('表单可提交:', !(await ev(`document.querySelector('form button[type=submit]').disabled`)));
+await ev(`document.querySelector('form button[type=submit]').click()`);
+const closed = await waitFor(`!document.querySelector('form')`, 5000);
+console.log('表单已存并关闭:', closed);
+await sleep(900);
+console.log('档案已落盘:', await ev(`(localStorage.getItem('phc_profile_v3')||'').includes('heightCm')`));
+const profiled = await ev(`document.body.innerText`);
+console.log('立档后出现体重指数:', /体重指数/.test(profiled) && /正常|超重|偏瘦|肥胖/.test(profiled));
+console.log('立档后出现静息/总消耗:', profiled.includes('静息代谢') && profiled.includes('总消耗'));
+console.log('立档后出现每日目标与抗阻:', profiled.includes('每日热量') && profiled.includes('每周抗阻'));
+console.log('立档后下一膳给建议:', !profiled.includes('未建档：先录身高'));
+
+// --- 3. 进食：填数入账 ---------------------------------------------------
+await ev(clickText('记一笔'));
+await waitFor(`!!document.querySelector('form')`);
+await ev(setInput(`[...document.querySelectorAll('form input[type=text]')][0]`, '测试餐 · 三文鱼'));
+await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][0]`, '520'));
+await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][1]`, '38'));
 await sleep(200);
 await ev(`document.querySelector('form button[type=submit]').click()`);
-await waitFor(`!document.querySelector('form')`, 3000);
-console.log('meal inputs set:', mealNameSet, kcalSet, proteinSet);
-console.log('sheet closed after meal save:', await ev(`!document.querySelector('form')`));
+await waitFor(`!document.querySelector('form')`, 5000);
 console.log(
   'toast:',
   await ev(
@@ -122,78 +154,55 @@ console.log(
   )
 );
 
-// --- 2. 手记：空则不可提交；只填时长可入账 -------------------------------
-await openSheet('手记');
-console.log(
-  'tab is 手记:',
-  await ev(`document.querySelector('form').innerText.includes('所记之事（可只计时长）')`)
-);
-console.log(
-  'note submit disabled when empty:',
-  await ev(`(() => { const b = document.querySelector('form button[type=submit]'); return b ? b.disabled : 'no form'; })()`)
-);
-await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][0]`, '90'));
-await sleep(200);
-console.log(
-  'note submit enabled with duration only:',
-  await ev(`(() => { const b = document.querySelector('form button[type=submit]'); return b ? !b.disabled : 'no form'; })()`)
-);
-await ev(`document.querySelector('form button[type=submit]').click()`);
-await waitFor(`!document.querySelector('form')`, 3000);
-await sleep(400);
-const lifeText = await ev(
-  `[...document.querySelectorAll('main section')].map(s=>s.innerText).join(' ')`
-);
-// 只计时长的手帐行：计入「本周之功」（4h + 1.5h = 5.5 时），但不计入「近来手记」条数
-console.log('duration-only entry summed into 本周之功 (5.5 时):', lifeText.includes('5.5'));
-console.log('journal count unchanged (4 条):', /近七日 4 条/.test(lifeText));
-
-// --- 3. 体征：时刻推时长 + 异常体重二次确认 -----------------------------
-await openSheet('体征');
-console.log('tab is 体征:', await ev(`document.querySelector('form').innerText.includes('昨夜之眠')`));
-const sleepStartSet = await ev(setInput(`[...document.querySelectorAll('form input[type=time]')][0]`, '00:55'));
-const wakeSet = await ev(setInput(`[...document.querySelectorAll('form input[type=time]')][1]`, '08:15'));
+// --- 4. 体征：时刻推时长 + 异常体重二次确认 ------------------------------
+await ev(clickText('记一笔'));
+await waitFor(`!!document.querySelector('form')`);
+await ev(clickExact('体征'));
+await waitFor(`document.querySelector('form').innerText.includes('昨夜之眠')`);
+await ev(setInput(`[...document.querySelectorAll('form input[type=time]')][0]`, '00:55'));
+await ev(setInput(`[...document.querySelectorAll('form input[type=time]')][1]`, '08:15'));
 await sleep(300);
-console.log('sleep inputs set:', sleepStartSet, wakeSet);
 console.log(
   'sleep duration derived from clocks:',
   await ev(`document.querySelector('form').innerText.includes('7h20m')`)
 );
 
-// 体重 57 与近七日均重（约 68）相差近 11kg → 需二次确认
 await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][0]`, '57'));
 await sleep(300);
 const firstLabel = await ev(`document.querySelector('form button[type=submit]').textContent.trim()`);
 await ev(`document.querySelector('form button[type=submit]').click()`);
 await sleep(400);
-const stillOpen = await ev(`!!document.querySelector('form')`);
 const secondLabel = await ev(`document.querySelector('form button[type=submit]').textContent.trim()`);
 await ev(`document.querySelector('form button[type=submit]').click()`);
-await waitFor(`!document.querySelector('form')`, 3000);
-console.log('anomaly weight asks confirmation:', firstLabel, '→', secondLabel, '(panel stayed open:', stillOpen + ')');
-console.log('sheet closed after confirming weight:', await ev(`!document.querySelector('form')`));
-
-// 体重原样保留，未被系统改写
+await waitFor(`!document.querySelector('form')`, 5000);
+console.log(
+  'anomaly weight asks confirmation (仍要录之 → 照准):',
+  firstLabel === '仍要录之' && secondLabel === '照准'
+);
+await sleep(800);
 const bodyText = await ev(`document.body.innerText`);
-console.log('weight kept verbatim (57) and flagged:', bodyText.includes('57 公斤') && bodyText.includes('待核'));
-
-// 睡眠时长来自时刻而非手录
+console.log('weight kept verbatim (57) and flagged:', bodyText.includes('待核') && bodyText.includes('57'));
 console.log('sleep shown as 7h20m:', bodyText.includes('7h20m'));
 
 // 页面不得出现方法学说明（口径归 README）
 const BANNED = ['非首末', '不予修改', '仅标记', '仅指', '非健康度', '非承诺', '做线性回归', '原始记录'];
-const found = BANNED.filter((w) => bodyText.includes(w));
-console.log('no methodology copy on page:', found.length === 0, found.join(','));
+console.log('no methodology copy on page:', BANNED.filter((w) => bodyText.includes(w)).length === 0);
 
-// 计量条同起同止（共列网格）
+// 计量条同起同止：按「轴」（名列左缘）分组，同轴内中列与值列必须完全一致
 console.log(
-  'meter columns aligned:',
+  'meter columns aligned per axis:',
   await ev(`(() => {
     const rows = [...document.querySelectorAll('main .inkrow')];
-    const mids = rows.map((r) => Math.round(r.children[1].getBoundingClientRect().left));
-    const vals = rows.map((r) => Math.round(r.children[2].getBoundingClientRect().left));
-    const ok = (a) => new Set(a).size <= 2;
-    return ok(mids) && ok(vals);
+    const axes = new Map();
+    for (const r of rows) {
+      const label = Math.round(r.children[0].getBoundingClientRect().left);
+      const mid = Math.round(r.children[1].getBoundingClientRect().left);
+      const val = Math.round(r.children[2].getBoundingClientRect().left);
+      if (!axes.has(label)) axes.set(label, { mid: new Set(), val: new Set() });
+      axes.get(label).mid.add(mid);
+      axes.get(label).val.add(val);
+    }
+    return [...axes.values()].every((a) => a.mid.size === 1 && a.val.size === 1);
   })()`)
 );
 

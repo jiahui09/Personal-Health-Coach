@@ -1,6 +1,6 @@
 // Serif for the chapter heading and the meal name; measured numbers stay sans. deslop-ignore-file 07
 import React from 'react';
-import { Check, Plus, HelpCircle } from 'lucide-react';
+import { Check, Plus } from 'lucide-react';
 import { MealRecommendation } from '../types/health';
 import { SectionHead } from './SectionHead';
 
@@ -10,7 +10,6 @@ interface NextMealCardProps {
   goalLabel: string;
   /** 今日已入账的建议膳数（同膳重复照准的提示，避免无意识重复录入）。 */
   suggestedLoggedToday: number;
-  onOpenEvidence: () => void;
   onQuickLogSuggested: () => void;
   onAddCustomMeal: () => void;
 }
@@ -20,7 +19,6 @@ export const NextMealCard: React.FC<NextMealCardProps> = ({
   slotLabel,
   goalLabel,
   suggestedLoggedToday,
-  onOpenEvidence,
   onQuickLogSuggested,
   onAddCustomMeal,
 }) => {
@@ -44,6 +42,10 @@ export const NextMealCard: React.FC<NextMealCardProps> = ({
       />
 
       <div className="mt-5">
+        {nextMeal.unavailable ? (
+          <p className="text-[15px] leading-[1.95] text-ink2">{nextMeal.reason}</p>
+        ) : (
+          <>
         <div className="font-serif text-[27px] sm:text-[31px] font-bold text-ink leading-[1.35]">
           {nextMeal.mealName}
         </div>
@@ -59,6 +61,8 @@ export const NextMealCard: React.FC<NextMealCardProps> = ({
           <p className="mt-2 text-[12px] text-danger">
             今日已照准 {suggestedLoggedToday} 次 · 请核是否重复
           </p>
+        )}
+          </>
         )}
 
         {/* 动作脚注行：左数值组（墨）,右动作组（御批）；窄屏整行另起,不再浮在菜名上方 */}
@@ -79,10 +83,6 @@ export const NextMealCard: React.FC<NextMealCardProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap justify-end">
-            <button onClick={onOpenEvidence} className="btn-ghost">
-              <HelpCircle className="w-3.5 h-3.5 shrink-0" />
-              <span>缘由</span>
-            </button>
             <button onClick={onAddCustomMeal} className="btn-link px-2">
               <Plus className="w-3.5 h-3.5 shrink-0" />
               <span>别录一品</span>

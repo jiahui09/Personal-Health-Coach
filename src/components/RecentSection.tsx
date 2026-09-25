@@ -1,7 +1,7 @@
 // Serif for the section heading only; facts read as ruled journal rows. deslop-ignore-file 07
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
-import { MealRecord, WeightForecast } from '../types/health';
+import { MealRecord } from '../types/health';
 import type {
   NutritionSummary,
   SleepSummary,
@@ -20,7 +20,6 @@ interface RecentSectionProps {
   nutrition: NutritionSummary;
   sleep: SleepSummary;
   training: TrainingSummary;
-  forecast: WeightForecast;
   /** 今日已入账的膳（供核对与逐条掷还）。 */
   meals: MealRecord[];
   onDeleteMeal: (id: string) => void;
@@ -46,11 +45,9 @@ export const RecentSection: React.FC<RecentSectionProps> = ({
   nutrition,
   sleep,
   training,
-  forecast,
   meals,
   onDeleteMeal,
 }) => {
-  const [showForecastDetails, setShowForecastDetails] = useState(false);
   const [showMealLog, setShowMealLog] = useState(false);
 
   const { resistance } = training;
@@ -75,7 +72,9 @@ export const RecentSection: React.FC<RecentSectionProps> = ({
             '数据不足'
           ) : (
             <>
-              均 <span className="font-semibold">{weight.rollingMean7d}</span> 公斤 ·{' '}
+              <span className="hidden sm:inline">均 </span>
+              <span className="font-semibold">{weight.rollingMean7d}</span>
+              <span className="hidden sm:inline"> 公斤</span> ·{' '}
               <span className="font-semibold">
                 {trendAbs === null ? '—' : `${trendSign}${trendAbs}`}
               </span>
@@ -110,7 +109,7 @@ export const RecentSection: React.FC<RecentSectionProps> = ({
         />
       </div>
 
-      {/* 二、今日所食 */}
+      {/* 二、今日所食：目标来自体征档派生值 */}
       <div className="mt-5 pt-4 border-t border-line">
         <div className="flex items-baseline justify-between gap-3">
           <button onClick={() => setShowMealLog(!showMealLog)} className="btn-link">
@@ -195,63 +194,6 @@ export const RecentSection: React.FC<RecentSectionProps> = ({
                   </button>
                 </span>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 三、情景外推 */}
-      <div className="mt-5 pt-4 border-t border-line">
-        <div className="flex items-baseline justify-between">
-          <span className="group-head">情景外推 · 公斤</span>
-          <button onClick={() => setShowForecastDetails(!showForecastDetails)} className="btn-link">
-            <span>{showForecastDetails ? '掩其推据' : '推演所据'}</span>
-            {showForecastDetails ? (
-              <ChevronUp className="w-3 h-3" />
-            ) : (
-              <ChevronDown className="w-3 h-3" />
-            )}
-          </button>
-        </div>
-
-        {forecast.withheld ? (
-          <p className="mt-2 text-[13px] text-ink2">今录存疑或数据不足 · 暂不出推演</p>
-        ) : (
-          <div className="mt-1">
-            <FactRow label="四周">
-              <span className="font-semibold">
-                {forecast.fourWeeks.range.min}–{forecast.fourWeeks.range.max}
-              </span>{' '}
-              公斤
-            </FactRow>
-            <FactRow label="八周">
-              <span className="font-semibold">
-                {forecast.eightWeeks.range.min}–{forecast.eightWeeks.range.max}
-              </span>{' '}
-              公斤
-            </FactRow>
-            <FactRow label="十二周">
-              <span className="font-semibold">
-                {forecast.twelveWeeks.range.min}–{forecast.twelveWeeks.range.max}
-              </span>{' '}
-              公斤
-            </FactRow>
-          </div>
-        )}
-
-        {showForecastDetails && (
-          <div className="mt-2 pt-2 border-t border-line text-[12px] text-ink3 space-y-1">
-            <div className="tabular-nums">
-              模型 {forecast.modelVersion} · 据近三十日 {forecast.basedOnDays}/
-              {forecast.inputWindowDays} 日
-            </div>
-            <div>前提</div>
-            {forecast.assumptions.map((item) => (
-              <div key={item}>· {item}</div>
-            ))}
-            <div className="pt-1">局限</div>
-            {forecast.limitations.map((item) => (
-              <div key={item}>· {item}</div>
             ))}
           </div>
         )}

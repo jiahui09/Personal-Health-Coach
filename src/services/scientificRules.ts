@@ -19,13 +19,9 @@ import {
   ForecastPeriod,
   MealRecord,
   MealRecommendation,
-  PerceivedDifficulty,
   RuleStatus,
-  TodayData,
   TrainingState,
-  UserProfile,
   WeightForecast,
-  WeightRecord,
   WorkoutRecord,
   WorkoutRecommendation,
 } from '../types/health';
@@ -33,6 +29,7 @@ import type { DataQuality, WorkoutReason } from '../domain/types';
 import { decideWorkoutMode } from '../domain/training';
 import { resolveSleepMinutes } from '../domain/sleep';
 import { trainingStateOf, WORKOUT_REASON_CN } from './decisionCopy';
+import { ageYears } from '../domain/body';
 import { COMMON_FOOD_DATABASE, MEAL_TEMPLATES, MealTemplate } from '../data/foods';
 import { getEvidenceById } from './scientificEvidence';
 
@@ -116,64 +113,6 @@ export function f_RMR(
       : 'Predicted RMR based on Mifflin-St Jeor population model. Individual metabolic variation typically ±10% due to NEAT, organ mass, and adaptive thermogenesis.',
   };
 }
-
-// ==========================================
-// 2. Daily Energy Prior: f_energy_prior(profile, activity)
-// Status: engineering_heuristic
-// ==========================================
-
-export interface EnergyPriorEstimation {
-  estimatedEnergyRange: { min: number; max: number }; // kcal / day
-  midpoint: number;
-  activityAssumption: string;
-  status: 'engineering_heuristic';
-  notes: string;
-}
-
-/**
- * Estimates daily energy requirement prior based on predicted RMR + activity factor.
- * Activity factor is an estimation parameter, not a measured physiological constant.
- */
-export function f_energy_prior(
-  profile: UserProfile,
-  hasActiveTrainingToday: boolean = false
-): EnergyPriorEstimation {
-  const rmr = f_RMR(profile).value;
-  // Sedentary baseline PAL 1.15 - 1.25
-  const baseMin = 1.15;
-  const baseMax = 1.25;
-  const sessionKcal = hasActiveTrainingToday ? 150 : 0;
-
-  const min = Math.round(rmr * baseMin + (sessionKcal > 0 ? 100 : 0));
-  const max = Math.round(rmr * baseMax + (sessionKcal > 0 ? 200 : 0));
-  const midpoint = Math.round((min + max) / 2);
-
-  return {
-    estimatedEnergyRange: { min, max },
-    midpoint,
-    activityAssumption: hasActiveTrainingToday
-      ? 'Sedentary baseline (PAL 1.15–1.25) + moderate bodyweight session (~100–200 kcal)'
-      : 'Sedentary baseline multiplier range (PAL 1.15–1.25)',
-    status: 'engineering_heuristic',
-    notes: 'Output is an estimated range, avoiding pseudo-exact single integers. Activity multiplier is an estimation model assumption.',
-  };
-}
-
-// Legacy alias for compatibility
-export const f_TDEE = (predictedRmr: number, activeExerciseToday: boolean = false) => {
-  const baseMinFactor = 1.15;
-  const baseMaxFactor = 1.25;
-  const exerciseAddon = activeExerciseToday ? 150 : 0;
-  const min = Math.round(predictedRmr * baseMinFactor + (exerciseAddon > 0 ? 100 : 0));
-  const max = Math.round(predictedRmr * baseMaxFactor + (exerciseAddon > 0 ? 200 : 0));
-  return {
-    estimatedEnergyRange: { min, max },
-    midpoint: Math.round((min + max) / 2),
-    status: 'engineering_heuristic' as const,
-    activityAssumption: activeExerciseToday ? 'Sedentary baseline + exercise' : 'Sedentary baseline',
-    notes: 'Estimated energy range',
-  };
-};
 
 // ==========================================
 // 3. Long-Term Energy Calibration: f_energy_calibration
@@ -447,9 +386,52 @@ export function f_meal_candidates(
   );
 }
 
+/** 未建档时的空建议：只说明原因，不编造菜名与数字。 */
+export function unavailableMealRecommendation(reason: string): MealRecommendation {
+  return {
+    unavailable: true,
+    mealName: '暂无建议',
+    suggestedItems: [],
+    estimatedCalories: 0,
+    estimatedProtein: 0,
+    energyRange: { min: 0, max: 0 },
+    proteinRange: { min: 0, max: 0 },
+    reason,
+    ruleId: 'RULE_MEAL_NEEDS_PROFILE_01',
+    ruleName: '未建档不出建议',
+    ruleStatus: 'engineering_heuristic',
+    trace: {
+      inputSnapshot: {},
+      derivedValues: {},
+      ruleIds: ['RULE_MEAL_NEEDS_PROFILE_01'],
+      ruleStatuses: ['engineering_heuristic'],
+      evidenceIds: [],
+      assumptions: [],
+      limitations: ['资料不足时不给建议，避免用默认人体数据冒充你'],
+      confidence: 'low',
+    },
+    evidenceTraces: [],
+    isUncertaintyNoted: true,
+  };
+}
+
 export function f_meal(context: HealthContext): MealRecommendation {
-  const { profile, todayMeals } = context;
-  const currentWeight = context.currentWeight || profile.currentWeight;
+  const { profile, todayMeals, targets } = context;
+  const currentWeight = context.currentWeight;
+  const age = profile.birthYear === undefined ? null : ageYears(profile.birthYear, context.now);
+
+  // 未建档或目标算不出时不编造建议（页面显示原因）
+  if (
+    !targets ||
+    !(currentWeight > 0) ||
+    !profile.heightCm ||
+    age === null ||
+    (profile.sex !== 'male' && profile.sex !== 'female' && profile.sex !== 'other')
+  ) {
+    return unavailableMealRecommendation(
+      '未建档：先录身高、性别、出生年、活动水平与一次体重，方有目标可依'
+    );
+  }
 
   // Data completeness decides how much the recommendation may claim.
   const hasIncompleteData = context.hasIncompleteData === true || todayMeals.length === 0;
@@ -461,19 +443,18 @@ export function f_meal(context: HealthContext): MealRecommendation {
   // 2. Evidence-derived & constrained derivations
   const rmrResult = f_RMR({
     currentWeight,
-    height: profile.height,
-    age: profile.age,
+    height: profile.heightCm,
+    age,
     sex: profile.sex,
   });
-  const energyPrior = f_energy_prior(profile, !!context.todayWorkout);
-  const proteinTargetRange = f_protein(currentWeight, profile.goal);
+  const proteinTargetRange = f_protein(currentWeight, profile.goal ?? 'general fitness');
   const perMealProtein = f_per_meal_protein(currentWeight);
   const dietQuality = f_diet_quality(todayMeals, context.recentMeals);
 
-  // Engineering calculation
-  const targetCalories = profile.dailyCalorieTarget || energyPrior.midpoint;
+  // 目标热量与蛋白均取自 domain 的派生结果（档案里不再有这两个常量）
+  const targetCalories = targets.caloriesKcal;
   const calorieRoom = Math.max(0, targetCalories - consumedCalories);
-  const proteinGap = Math.max(0, (profile.dailyProteinTarget || 110) - consumedProtein);
+  const proteinGap = Math.max(0, targets.proteinG - consumedProtein);
 
   // 3. Candidate evaluation & heuristic ranking
   const candidates = f_meal_candidates(context, proteinGap, calorieRoom);
@@ -517,8 +498,8 @@ export function f_meal(context: HealthContext): MealRecommendation {
   const trace: DecisionTrace = {
     inputSnapshot: {
       currentWeight,
-      age: profile.age,
-      sex: profile.sex,
+      age,
+      sex: profile.sex ?? null,
       consumedCalories,
       consumedProtein,
       calorieRoom,
@@ -526,7 +507,9 @@ export function f_meal(context: HealthContext): MealRecommendation {
     },
     derivedValues: {
       predictedRMR: rmrResult.value,
-      dailyEnergyRange: `${energyPrior.estimatedEnergyRange.min}–${energyPrior.estimatedEnergyRange.max} kcal`,
+      totalDailyEnergyKcal: targets.kcalFromTdee,
+      dailyCalorieTarget: targets.caloriesKcal,
+      dailyProteinTarget: targets.proteinG,
       proteinReferenceRange: `${proteinTargetRange.proteinRange.min}–${proteinTargetRange.proteinRange.max} g/day`,
       perMealProteinReference: `${perMealProtein.perMealRange.min}–${perMealProtein.perMealRange.max} g`,
       dietQualityStatus: dietQuality.scoreCategory,

@@ -43,7 +43,7 @@ const PROBE = [
   "    sec: (s.querySelector('h2') || s).textContent.trim().slice(0, 8),",
   '    box: r(s),',
   '  }));',
-  "  const actions = [...document.querySelectorAll('main section button')].filter((b) => /缘由|另择|别录|依此录|毕此一练|推演/.test(b.textContent)).map((b) => ({ txt: b.textContent.trim().slice(0, 8), box: r(b) }));",
+  "  const actions = [...document.querySelectorAll('main section button')].filter((b) => /另择|别录|依此录|毕此一练|推演|照准/.test(b.textContent)).map((b) => ({ txt: b.textContent.trim().slice(0, 8), box: r(b) }));",
   "  const overflow = [...document.querySelectorAll('*')].filter((e) => e.getBoundingClientRect().width > 0 && e.getBoundingClientRect().right > innerWidth + 1).length;",
   "  const secOf = (e) => { const s = e.closest('section'); return s ? (s.querySelector('h2')?.textContent.trim().slice(0,8) || '?') : '-'; };",
   "  const rows = [...document.querySelectorAll('main .inkrow, main .inklist-row')].map((row) => {",
@@ -57,7 +57,12 @@ const PROBE = [
   "    n: s.querySelectorAll('.inkrow, .inklist-row').length + s.querySelectorAll('p').length +",
   "       s.querySelectorAll('h2').length + s.querySelectorAll('.group-head').length,",
   "  }));",
-  '  return JSON.stringify({ heads, sections, actions, rows, lines, overflow, docH: document.documentElement.scrollHeight, vw: innerWidth });',
+  "  const grid = [...document.querySelectorAll('main div.grid')].find((g) => g.querySelector('section'));",
+  "  const cells = grid ? [...grid.children].filter((c) => c.querySelector('section')) : [];",
+  "  const byRow = {};",
+  "  for (const c of cells) { const k = r(c).t; (byRow[k] ||= []).push(r(c).h); }",
+  "  const rowSlack = Object.entries(byRow).filter(([, hs]) => hs.length > 1).map(([t, hs]) => Math.max(...hs) - Math.min(...hs));",
+  '  return JSON.stringify({ heads, sections, actions, rows, lines, rowSlack, overflow, docH: document.documentElement.scrollHeight, vw: innerWidth });',
   '})()',
 ].join('\n');
 
@@ -85,6 +90,13 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
 const ok = (cond, label, detail) => { console.log((cond ? 'PASS  ' : 'FAIL  ') + label + (cond ? '' : '  → ' + detail)); if (!cond) fails.push(label); };
 
 ok(d.overflow === 0, `overflow = 0 @${width}px`, '有元素越界: ' + d.overflow);
+if (width >= 1024) {
+  ok(
+    (d.rowSlack || []).every((s2) => s2 <= 110),
+    '配对行无大块留白（单元高差 ≤110px）',
+    JSON.stringify(d.rowSlack)
+  );
+}
 
 // 共列网格：同一章节内所有行文行的名/中/值三列必须各自对齐（条与点线同轴）
 const bySec = new Map();
@@ -96,25 +108,33 @@ for (const [sec, items] of bySec) {
   const uniq = (list, key) => [...new Set(list.map((x) => x[key]))];
   const stats = items.filter((x) => x.kind !== undefined && x.grid === 'stat');
   const lists = items.filter((x) => x.grid === 'list');
-  if (stats.length > 0) {
-    const label = uniq(stats, 'labelL');
-    const mid = uniq(stats, 'midL');
-    const midW = uniq(stats, 'midW');
-    const val = uniq(stats, 'valL');
-    ok(
-      label.length === 1 && mid.length === 1 && midW.length === 1 && val.length === 1,
-      `共列网格对齐 · ${sec}`,
-      `名列 ${JSON.stringify(label)} 中列 ${JSON.stringify(mid)} 宽 ${JSON.stringify(midW)} 值列 ${JSON.stringify(val)}`
-    );
-    const tall = stats.filter((x) => x.valH > 24);
-    ok(tall.length === 0, `值列不折行 · ${sec}`, JSON.stringify(tall.map((x) => [x.label, x.valH])));
-    const bars = stats.filter((x) => x.kind === 'bar');
-    if (bars.length >= 2) {
+  // 按轴分组：一栏一轴；同轴内名/中/值三列必须完全对齐（通栏两栏并置时即两条轴）
+  const axes = new Map();
+  for (const row of stats) {
+    if (!axes.has(row.labelL)) axes.set(row.labelL, []);
+    axes.get(row.labelL).push(row);
+  }
+  for (const [axisLeft, items] of axes) {
+    const uniq = (key) => [...new Set(items.map((x) => x[key]))];
+    const mid = uniq('midL');
+    const midW = uniq('midW');
+    const val = uniq('valL');
+    const tall = items.filter((x) => x.valH > 24);
+    ok(tall.length === 0, `值列不折行 · ${sec}@${axisLeft}`, JSON.stringify(tall.map((x) => [x.label, x.valH])));
+    if (items.length >= 2) {
       ok(
-        new Set(bars.map((b) => b.midL)).size === 1 && new Set(bars.map((b) => b.midW)).size === 1,
-        `计量条同起同止 · ${sec}`,
-        JSON.stringify(bars.map((b) => [b.midL, b.midW]))
+        mid.length === 1 && midW.length === 1 && val.length === 1,
+        `共列网格对齐 · ${sec}@${axisLeft}`,
+        `中列 ${JSON.stringify(mid)} 宽 ${JSON.stringify(midW)} 值列 ${JSON.stringify(val)}`
       );
+      const bars = items.filter((x) => x.kind === 'bar');
+      if (bars.length >= 2) {
+        ok(
+          new Set(bars.map((b) => b.midL)).size === 1 && new Set(bars.map((b) => b.midW)).size === 1,
+          `计量条同起同止 · ${sec}@${axisLeft}`,
+          JSON.stringify(bars.map((b) => [b.midL, b.midW]))
+        );
+      }
     }
   }
   if (lists.length > 0) {
@@ -129,7 +149,7 @@ for (const [sec, items] of bySec) {
 // 行数上限：版面「简洁」的可执行定义
 const LINE_CAPS = {
   今日之事: 16, 下一膳: 13, 今日之练: 15,
-  身体近况: 8, 近况: 11, 生活纪事: 12, 近来手记: 24,
+  身体近况: 8, 今日体感: 6, 体征档: 11, 情景外推: 5, 近况: 9,
 };
 for (const { sec, n } of d.lines) {
   const cap = LINE_CAPS[sec];

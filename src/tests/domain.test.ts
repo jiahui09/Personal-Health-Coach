@@ -3,23 +3,19 @@
  *
  * 固定 clock：2026-09-25（星期五）21:30 —— 本周一为 2026-09-21。
  * 覆盖：任务完成率、营养余量/超额、睡眠时长与均值、体重端点/斜率/质量、
- *       时间窗口（本周 vs 近七日）、训练决策与抗阻进度、活动与手记的分野。
+ *       时间窗口（本周 vs 近七日）、训练决策与抗阻进度。
  */
 
 import {
-  ACTIVITY_POLICY,
   SLEEP_POLICY,
   TRAINING_POLICY,
   WEIGHT_POLICY,
-  activitySummary,
   calculateNutritionProgress,
   calculateTaskProgress,
   decideWorkoutMode,
   formatNightDuration,
   intervalMinutes,
-  journalSummary,
   makeDayContext,
-  minutesToHours,
   regressionSlopePerDay,
   resistanceProgress,
   resolveSleepMinutes,
@@ -29,7 +25,7 @@ import {
   weightSummary,
 } from '../domain';
 import { buildNutritionSummary } from '../domain/nutrition';
-import type { DailyState, LifeLog, MealRecord, TodoItem, WeightRecord, WorkoutRecord } from '../types/health';
+import type { DailyState, MealRecord, TodoItem, WeightRecord, WorkoutRecord } from '../types/health';
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -199,36 +195,7 @@ function dayWorkout(date: string, category: WorkoutRecord['category']): WorkoutR
   };
 }
 
-// ---------------- 6. 生活纪事（活动）与近来手记（文字） ----------------
-const lifeLog = (
-  id: string,
-  date: string,
-  category: LifeLog['category'],
-  durationMinutes: number,
-  content?: string
-): LifeLog => ({ id, date, title: id, content, category, durationMinutes });
-
-const logs: LifeLog[] = [
-  lifeLog('l1', '2026-09-25', 'Coding', 300, '写码一段'),
-  lifeLog('l2', '2026-09-24', 'Learning', 180, '研学一段'),
-  lifeLog('l3', '2026-09-23', 'Exercise', 48),
-  lifeLog('l4', '2026-09-22', 'Reading', 120, '披阅一段'),
-  lifeLog('l5', '2026-09-18', 'Coding', 999, '上周之记'), // 本周之外
-];
-const activity = activitySummary(logs, ctx);
-assert(activity.totalMinutes === 648, `本周合计应为 648 分，得 ${activity.totalMinutes}`);
-assert(minutesToHours(activity.totalMinutes) === 10.8, '10.8 时由分钟求和后一次转时');
-const coding = activity.byCategory.find((row) => row.category === 'Coding');
-assert(coding?.minutes === 300 && coding.sessions === 1, '分类时长与次数都取自同一批 ActivityLog');
-assert(approx(activity.byCategory.reduce((sum, row) => sum + row.share, 0), 1), '占比之和为 1（按分钟算）');
-
-const journal = journalSummary(logs, ctx);
-assert(journal.count === 3, `近七日手记只数有文字的行（3 条），得 ${journal.count}`);
-assert(!journal.entries.some((entry) => entry.id === 'l3'), '只有时长的活动不计入手记条数');
-assert(ACTIVITY_POLICY.journalWindowDays === 7, '手记窗口来自 policy');
-ok('生活纪事与近来手记：活动计时长、手记数文字，互不冒充');
-
-// ---------------- 7. 营养质量与餐数 ----------------
+// ---------------- 6. 营养质量与餐数 ----------------
 const meals: MealRecord[] = [
   {
     id: 'm1',

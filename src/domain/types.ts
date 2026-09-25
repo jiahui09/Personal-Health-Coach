@@ -5,7 +5,7 @@
  * 展示层拿到它们之后只负责措辞。
  */
 
-import type { LifeCategory, LifeLog, WorkoutRecord } from '../types/health';
+import type { WorkoutRecord } from '../types/health';
 import type { EvidenceStatus } from './policy';
 
 // ---------------- 数据质量（Decision） ----------------
@@ -25,6 +25,55 @@ export interface DataQuality {
   detail: Record<string, number>;
   /** 与参照相比的方向（如体重高于/低于近七日均重），由 domain 判定。 */
   comparison?: 'above' | 'below';
+}
+
+// ---------------- 体征档（Derived + Decision） ----------------
+
+/** 体征全景：未建档/未录的字段一律 null，页面据此显示「未录」。 */
+export interface BodySummary {
+  complete: boolean;
+  missing: string[];
+  ageYears: number | null;
+  heightCm: number | null;
+  sex: 'female' | 'male' | 'other' | null;
+  activityLevel: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active' | null;
+  waistCm: number | null;
+  weightKg: number | null;
+  bmi: number | null;
+  bmiCategory: 'underweight' | 'normal' | 'overweight' | 'obese_1' | 'obese_2' | null;
+  waist: { limitCm: number; elevated: boolean } | null;
+  rmrKcal: number | null;
+  tdeeKcal: number | null;
+  pal: number | null;
+}
+
+/** 每日目标（由 TDEE 与目标方向派生，不再是档案里的常量）。 */
+export interface NutritionTargets {
+  caloriesKcal: number;
+  proteinG: number;
+  proteinRange: { min: number; max: number };
+  kcalFromTdee: number;
+  ratio: number;
+  /** 是否被安全下限托住（低于下限时如实告知）。 */
+  floored: boolean;
+  targetRateKgPerWeek: { min: number; max: number } | null;
+  direction: 'lose' | 'maintain' | 'gain';
+}
+
+export interface WeightGoalAdvice {
+  /** 应用据 BMI/腰围给出的建议方向。 */
+  direction: 'lose' | 'maintain' | 'gain';
+  reasons: string[];
+  /** 用户自选目标与建议相悖。 */
+  conflicting: boolean;
+  goalDirection: 'lose' | 'maintain' | 'gain';
+}
+
+export interface TrainingTarget {
+  resistanceDaysPerWeek: number;
+  sessionMinutes: { min: number; max: number };
+  /** 人群基线（WHO 每周 ≥2 日）。 */
+  baseline: number;
 }
 
 // ---------------- 今日任务（Derived） ----------------
@@ -167,28 +216,3 @@ export interface TrainingSummary {
   resistance: ResistanceProgress;
 }
 
-// ---------------- 生活纪事 / 手记（Derived） ----------------
-
-export interface ActivityCategorySummary {
-  category: LifeCategory;
-  minutes: number;
-  /** 该分类的记录条数（「某一行为之次数」）。 */
-  sessions: number;
-  /** 占本窗口总时长的比例（0–1，按分钟算）。 */
-  share: number;
-}
-
-export interface ActivitySummary {
-  /** 窗口说明，直接可读（如「本周（周一起）」）。 */
-  windowLabel: string;
-  totalMinutes: number;
-  byCategory: ActivityCategorySummary[];
-  /** 有实际时长的记录。 */
-  logs: LifeLog[];
-}
-
-export interface JournalSummary {
-  windowLabel: string;
-  count: number;
-  entries: LifeLog[];
-}

@@ -50,6 +50,8 @@
 ## 3. 数据源分层清单
 
 ### Raw（只增不改的事实）
+
+| `UserProfile` | `sex, birthYear, heightCm, activityLevel, waistCm?, goal` | **只有原始输入**：年龄由出生年派生、体重只来自记录、目标热量/蛋白由派生得出 |
 | 类型 | 关键字段 | 说明 |
 |---|---|---|
 | `WeightRecord` | `date, time?, weight, source` | 同日可多条；`date` 是唯一窗口字段 |
@@ -57,15 +59,13 @@
 | `WorkoutRecord` | `date, durationMinutes, durationSource, category, completed` | 类别是结构化事实 |
 | `DailyState` | `date, sleep?, energy?, soreness?, notes?` | 字段可缺席（未录 ≠ 默认值） |
 | `TodoItem` | `date, title, estimatedMinutes, status` | `estimatedMinutes` 是计划 |
-| `LifeLog` | `date, title, content?, category, durationMinutes` | 活动与手记共用；有文字即手记，有时长即活动 |
-| `DailyNote` | `date, content, tags, timestamp` | 案头小记 |
 | `UserProfile` | `goal, dailyCalorieTarget, dailyProteinTarget, …` | `currentWeight` 仅作引擎入参缓存，页面不读 |
 
 ### Derived（`src/domain/`，纯函数，无 React/无时钟/无 IO）
-`TaskProgress`、`WeightSummary`（含 `DailyWeightPoint[]`）、`NutritionSummary`、`SleepSummary`、`TrainingSummary.resistance`、`ActivitySummary`、`JournalSummary`。
+`TaskProgress`、`WeightSummary`（含 `DailyWeightPoint[]`）、`NutritionSummary`、`SleepSummary`、`TrainingSummary.resistance`、`BodySummary`（BMI/腰围判定/RMR/TDEE）、`NutritionTargets`（每日热量与蛋白）。
 
 ### Decision（Derived + Policy）
-`WorkoutDecision{mode, reasons[]}`、`DataQuality{flag, reasons[], detail, comparison}`、`WeightForecast{method, modelVersion, basedOnDays, withheld}`。
+`WorkoutDecision{mode, reasons[]}`、`DataQuality{flag, reasons[], detail, comparison}`、`WeightForecast{method, modelVersion, basedOnDays, withheld}`、`WeightGoalAdvice{direction, reasons[], conflicting}`（建议减/守/增）、`TrainingTarget{resistanceDaysPerWeek, sessionMinutes}`。
 
 ### Presentation
 组件与 `src/services/decisionCopy.ts`（`WORKOUT_REASON_CN`、`describeTrainingPolicy`、`describeWorkoutDecision`）、`src/utils/calendar.ts`（干支/星期/时段问候）。
@@ -186,7 +186,7 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 
 ## 10. 版面与文案纪律（与数据层的分工）
 
-- 页面只呈现**事实 + 一句短批**：方法学、阈值理由、模型出处一律不进正文（README「术语与口径」与「推演所据」面板承接）。
+- 页面只呈现**事实 + 一句短批**：方法学、阈值理由、模型出处一律不进正文（README「术语与口径」与「推演所据」面板承接）；刊头不重复「录一笔」、页脚不写「存于本机 / 不假模型」之类自我说明，决策痕迹留在数据层。
 - 所有统计行走 `.inkrow` 共列网格（名｜中列｜值），计量条与点线引导同列 → 全页同起同止；`.inklist-row` 只保证首尾对齐。
 - 线条三级：L1 2px 墨（章节题双线/刊头/页脚）、L2 1px 实线（分组、动作脚注）、L3 1px 点线（名录行、引导线）。
 - 可执行门槛：`.shots/layout-probe.mjs --check`（条 Δ=0、值列不折行、章节行数上限）与 `src/tests/layoutContract.test.ts`（禁方法学文案、禁 linesoft 骨架、双线章节题）。

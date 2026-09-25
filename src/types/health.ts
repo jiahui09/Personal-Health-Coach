@@ -2,9 +2,10 @@
  * Personal Health Coach · Living Journal (V3 Product Definition)
  *
  * Strict three domains:
- * 1. TODAY: Daily action items (Todos, Daily Note, "+ Record")
- * 2. BODY: Current physiological state, Next Meal, Next Workout, Weight trend & forecast
- * 3. LIFE: Longitudinal activity hours (Coding, Learning, Exercise, Reading) & Recent moments
+ * 1. TODAY: 今日之事（待办）与今日饮食/训练记录
+ * 2. BODY: 体征（体重、睡眠、精力、酸痛）与下一膳 / 今日之练
+ *
+ * 手记与生活纪事已移除：本应用只做「锻炼 + 体征 + 饮食」的事实记录。
  *
  * Strict scientific model categorization:
  * - evidence_derived: Direct formulas/equations from literature (e.g. Mifflin-St Jeor 1990)
@@ -16,15 +17,29 @@
 
 export type FitnessGoal = 'fat loss' | 'maintain' | 'muscle gain' | 'general fitness';
 
+/** 活动水平 → PAL 系数（见 domain/body.ts：ACTIVITY_PAL）。 */
+export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
+
+/**
+ * 体征档（Raw）：只存「你告诉我的原始事实」。
+ *
+ * 这里刻意没有 age / currentWeight / dailyCalorieTarget / dailyProteinTarget：
+ *   年龄由 birthYear 派生（会随时间改变，不该存第二份）；
+ *   体重只来自 WeightRecord；
+ *   目标热量与蛋白由 domain/composition.ts 依 RMR/TDEE/目标算出。
+ */
 export interface UserProfile {
-  name: string;
-  age: number;
-  sex: 'female' | 'male' | 'other';
-  height: number; // cm
-  currentWeight: number; // kg
-  goal: FitnessGoal;
-  dailyCalorieTarget: number;
-  dailyProteinTarget: number; // grams
+  name?: string;
+  sex?: 'female' | 'male' | 'other';
+  birthYear?: number;
+  heightCm?: number;
+  activityLevel?: ActivityLevel;
+  /** 用户确认后的目标（建议由 adviseWeightGoal 给出）。 */
+  goal?: FitnessGoal;
+  /** 目标来源：自选，或采纳了应用建议。 */
+  goalSource?: 'user' | 'advice';
+  /** 腰围（cm，可选）：BMI 之外的第二证据，判断中心性肥胖。 */
+  waistCm?: number;
 }
 
 export interface WeightRecord {
@@ -167,6 +182,8 @@ export interface EnergyCalibration {
 
 // Next Action Recommendations
 export interface MealRecommendation {
+  /** 未建档等情形下不出建议，由页面显示原因。 */
+  unavailable?: boolean;
   mealName: string;
   suggestedItems: string[];
   estimatedCalories: number; // Midpoint for quick logging
@@ -285,28 +302,6 @@ export interface TodoItem {
   category?: 'workout' | 'reading' | 'work' | 'life';
 }
 
-export type LifeCategory = 'Coding' | 'Learning' | 'Exercise' | 'Reading' | 'Life';
-
-/** 活动记录（ActivityLog）与手记（JournalEntry）共用一张表：有 content 即手记，有时长即活动。 */
-export interface LifeLog {
-  id: string;
-  date: string; // YYYY-MM-DD
-  title: string;
-  /** 可以留空：只记时长的手帐行。 */
-  content?: string;
-  category: LifeCategory;
-  durationMinutes: number;
-  project?: string;
-}
-
-export interface DailyNote {
-  id: string;
-  date: string;
-  content: string;
-  tags: string[];
-  timestamp: string;
-}
-
 // Context passed to Decision Engine
 export interface HealthContext {
   /**
@@ -321,6 +316,8 @@ export interface HealthContext {
   todayMeals: MealRecord[];
   recentMeals: MealRecord[];
   recentWorkouts: WorkoutRecord[];
+  /** 由 domain 派生的每日目标；未建档传 null（引擎不得编造目标）。 */
+  targets?: import('../domain/types').NutritionTargets | null;
   weightHistory?: WeightRecord[];
   todayWorkout?: WorkoutRecord;
   /** 由 domain/decideWorkoutMode 预先算出的决策（传入即复用，避免二次推断）。 */
@@ -342,7 +339,6 @@ export interface TodayData {
 
   // ---- 原始记录（今日切片） ----
   todos: TodoItem[];
-  notes: DailyNote[];
   todayMeals: MealRecord[];
 
   // ---- 派生指标 ----
@@ -350,8 +346,6 @@ export interface TodayData {
   weight: import('../domain/types').WeightSummary;
   nutrition: import('../domain/types').NutritionSummary;
   sleep: import('../domain/types').SleepSummary;
-  activity: import('../domain/types').ActivitySummary;
-  journal: import('../domain/types').JournalSummary;
   state: DailyState;
   /** 图表输入：近三十日每日代表值（升序）。 */
   weightSeries: { date: string; weight: number }[];
@@ -366,6 +360,16 @@ export interface TodayData {
   nextMeal: MealRecommendation;
   nextWorkout: WorkoutRecommendation;
   dietQuality: DietQualityAssessment;
+
+  // ---- 体征档与处方（Raw → Derived → Decision） ----
+  /** 建档是否完整；不完整时目标与建议不编造。 */
+  profileStatus: 'complete' | 'incomplete';
+  missingProfileFields: string[];
+  body: import('../domain/types').BodySummary;
+  /** 由 TDEE 与目标派生的每日目标；未建档为 null。 */
+  targets: import('../domain/types').NutritionTargets | null;
+  goalAdvice: import('../domain/types').WeightGoalAdvice;
+  trainingTarget: import('../domain/types').TrainingTarget;
 }
 
 // Inputs for creation
@@ -413,15 +417,3 @@ export interface CreateTodoInput {
   category?: 'workout' | 'reading' | 'work' | 'life';
 }
 
-export interface CreateLifeLogInput {
-  title: string;
-  content: string;
-  category: LifeCategory;
-  durationMinutes: number;
-  project?: string;
-}
-
-export interface CreateNoteInput {
-  content: string;
-  tags?: string[];
-}

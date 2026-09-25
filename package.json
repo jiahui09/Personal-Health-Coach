@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "tsx src/tests/scientificAudit.test.ts && tsx src/tests/journalContract.test.ts && tsx src/tests/contrast.test.ts && tsx src/tests/domain.test.ts && tsx src/tests/migration.test.ts && tsx src/tests/presentationContract.test.ts && tsx src/tests/layoutContract.test.ts"
+    "test": "tsx src/tests/scientificAudit.test.ts && tsx src/tests/journalContract.test.ts && tsx src/tests/contrast.test.ts && tsx src/tests/domain.test.ts && tsx src/tests/body.test.ts && tsx src/tests/migration.test.ts && tsx src/tests/presentationContract.test.ts && tsx src/tests/layoutContract.test.ts"
   },
   "dependencies": {
     "lucide-react": "^0.546.0",

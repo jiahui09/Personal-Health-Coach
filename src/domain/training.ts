@@ -66,11 +66,11 @@ export function decideWorkoutMode(
 export function resistanceProgress(
   workouts: WorkoutRecord[],
   ctx: DayContext,
-  policy: TrainingDecisionPolicy = TRAINING_POLICY
+  /** 每周抗阻目标：由 decideTrainingTarget 依目标与活动水平给出。 */
+  target: number = TRAINING_POLICY.weeklyResistanceTarget
 ): ResistanceProgress {
   const thisWeek = workouts.filter((workout) => workout.completed && isInWeek(ctx, workout.date));
   const completed = thisWeek.filter((workout) => workout.category === 'resistance').length;
-  const target = policy.weeklyResistanceTarget;
   return {
     completed,
     target,
@@ -85,13 +85,13 @@ export function buildTrainingSummary(
   workouts: WorkoutRecord[],
   ctx: DayContext,
   decision: WorkoutDecision,
-  policy: TrainingDecisionPolicy = TRAINING_POLICY
+  resistanceTarget: number = TRAINING_POLICY.weeklyResistanceTarget
 ): TrainingSummary {
   const todaySession =
     workouts.find((workout) => workout.date === ctx.todayKey && workout.completed) ?? null;
   return {
     decision,
     todaySession,
-    resistance: resistanceProgress(workouts, ctx, policy),
+    resistance: resistanceProgress(workouts, ctx, resistanceTarget),
   };
 }

@@ -1,6 +1,6 @@
 // Serif for the chapter heading; instruction copy stays in the UI sans. deslop-ignore-file 07
 import React, { useState } from 'react';
-import { Check, HelpCircle } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { WorkoutRecommendation, WorkoutRecord } from '../types/health';
 import type { WorkoutDecision } from '../domain/types';
 import { describeWorkoutDecision } from '../services/decisionCopy';
@@ -14,7 +14,6 @@ interface NextWorkoutCardProps {
   todaySession: WorkoutRecord | null;
   isCompletedToday: boolean;
   onCompleteWorkout: () => void;
-  onOpenEvidence: () => void;
   onCustomWorkout: () => void;
 }
 
@@ -24,7 +23,6 @@ export const NextWorkoutCard: React.FC<NextWorkoutCardProps> = ({
   todaySession,
   isCompletedToday,
   onCompleteWorkout,
-  onOpenEvidence,
   onCustomWorkout,
 }) => {
   const [checkedSets, setCheckedSets] = useState<Record<number, boolean>>({});
@@ -58,7 +56,7 @@ export const NextWorkoutCard: React.FC<NextWorkoutCardProps> = ({
       />
 
       <div className="mt-5">
-        {/* 判定一句（原因由决策结果生成）；详细理由与阈值入「缘由」弹窗 */}
+        {/* 判定一句：原因由决策结果生成,阈值与理由见 README「术语与口径」 */}
         <p className="text-[13px] text-ink3">{describeWorkoutDecision(decision)}</p>
 
         {todaySession && (
@@ -102,17 +100,13 @@ export const NextWorkoutCard: React.FC<NextWorkoutCardProps> = ({
           <p className="text-sm text-ink2 mt-4">今日无练事。</p>
         )}
 
-        {/* 动作脚注行：左恢复指引,右动作组（缘由 / 另择动作 / 毕此一练） */}
+        {/* 动作脚注行：左恢复指引,右动作组（另择动作 / 毕此一练） */}
         <div className="section-actions">
           <div className="text-xs text-ink3 leading-relaxed sm:max-w-[46ch]">
             {nextWorkout.recoveryGuidance || '组间歇 45–60 秒，呼吸当匀。'}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            <button onClick={onOpenEvidence} className="btn-ghost">
-              <HelpCircle className="w-3.5 h-3.5 shrink-0" />
-              <span>缘由</span>
-            </button>
             <button onClick={onCustomWorkout} className="btn-link px-2">
               另择动作
             </button>

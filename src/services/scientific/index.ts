@@ -7,7 +7,6 @@
 
 export {
   f_RMR,
-  f_energy_prior,
   f_energy_calibration,
   f_weight_forecast,
   f_protein,

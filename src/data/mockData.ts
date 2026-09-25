@@ -9,9 +9,7 @@
  */
 
 import {
-  DailyNote,
   DailyState,
-  LifeLog,
   MealRecord,
   TodoItem,
   UserProfile,
@@ -33,16 +31,11 @@ export function daysAgo(from: Date, n: number): string {
   return toDateString(date);
 }
 
-export const INITIAL_USER_PROFILE: UserProfile = {
-  name: 'Alex',
-  age: 28,
-  sex: 'male',
-  height: 175,
-  currentWeight: 68.4,
-  goal: 'fat loss',
-  dailyCalorieTarget: 1950,
-  dailyProteinTarget: 110, // ~1.6 g/kg
-};
+/**
+ * 演示档案留空：种子只提供「记录」（体重/餐食/训练），
+ * 你的身高性别年龄活动水平必须自己录 —— 应用不假设你是谁。
+ */
+export const INITIAL_USER_PROFILE: UserProfile = {};
 
 /** 30 readings, oldest → today: a slow, realistic downward drift with daily noise. */
 const SEED_WEIGHTS = [
@@ -58,8 +51,6 @@ export interface SeedData {
   meals: MealRecord[];
   workouts: WorkoutRecord[];
   todos: TodoItem[];
-  lifeLogs: LifeLog[];
-  notes: DailyNote[];
 }
 
 export function createSeedData(now: Date): SeedData {
@@ -186,52 +177,5 @@ export function createSeedData(now: Date): SeedData {
     },
   ];
 
-  const lifeLogs: LifeLog[] = [
-    {
-      id: 'life-1',
-      date: day(0),
-      title: '促成决策引擎与手记页面之解耦',
-      content: '将 evidence_derived、evidence_constrained 与 engineering_heuristic 之边界固化为类型，规则尽落于纯函数之中。',
-      category: 'Coding',
-      durationMinutes: 240,
-      project: 'Personal Health Coach',
-    },
-    {
-      id: 'life-2',
-      date: day(1),
-      title: '研读 Hall 2011 动态能量平衡模型',
-      content: '记录静态 3500 kcal = 1 lb 规则之失效条件，兼记体重下降后代谢自适应如何减慢减重之势。',
-      category: 'Learning',
-      durationMinutes: 180,
-      project: 'Metabolic Foundations',
-    },
-    {
-      id: 'life-3',
-      date: day(2),
-      title: '徒手自重渐进抗阻训练',
-      content: '俯卧撑与深蹲各 3 组，力竭前留 2 次（RIR 2），动作之控先于次数。',
-      category: 'Exercise',
-      durationMinutes: 45,
-    },
-    {
-      id: 'life-4',
-      date: day(3),
-      title: '读毕 Morton 2018 与 Schoenfeld 2018',
-      content: '区分群体层面蛋白质拐点之证据与单餐实用之建议，其统计性质与适用之界。',
-      category: 'Reading',
-      durationMinutes: 120,
-    },
-  ];
-
-  const notes: DailyNote[] = [
-    {
-      id: 'note-1',
-      date: today,
-      content: '每周以模型所测与真实体重相较一次；偏差既大，先查记录有无遗漏，再议调整目标。',
-      tags: ['#architecture', '#living-journal'],
-      timestamp: '14:20',
-    },
-  ];
-
-  return { profile: { ...INITIAL_USER_PROFILE }, weightHistory, dailyStates, meals, workouts, todos, lifeLogs, notes };
+  return { profile: { ...INITIAL_USER_PROFILE }, weightHistory, dailyStates, meals, workouts, todos };
 }

@@ -1,30 +1,26 @@
 // Serif chapter heading, sans tasks; strike = completed-task semantics. deslop-ignore-file 07 09
 import React, { useState } from 'react';
-import { Check, Plus, Trash2, Feather } from 'lucide-react';
-import { DailyNote, TodoItem } from '../types/health';
+import { Check, Plus, Trash2 } from 'lucide-react';
+import { TodoItem } from '../types/health';
 import type { TaskProgress } from '../domain/types';
 import { SectionHead } from './SectionHead';
 import { cnCount } from '../utils/cnCount';
 
 interface TodayTasksProps {
   todos: TodoItem[];
-  notes: DailyNote[];
   /** 完成率由 domain/calculateTaskProgress 算出，组件不自行统计。 */
   tasks: TaskProgress;
   onToggleTodo: (id: string) => void;
   onAddTodo: (title: string, estimatedMinutes?: number) => void;
   onDeleteTodo: (id: string) => void;
-  onOpenRecord: () => void;
 }
 
 export const TodayTasks: React.FC<TodayTasksProps> = ({
   todos,
-  notes,
   tasks,
   onToggleTodo,
   onAddTodo,
   onDeleteTodo,
-  onOpenRecord,
 }) => {
   const [newTitle, setNewTitle] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -45,12 +41,9 @@ export const TodayTasks: React.FC<TodayTasksProps> = ({
         title="今日之事"
         verdict={tasks.total === 0 ? '今日无事' : `已成其${cnCount(tasks.completed)}`}
         note={
-          <button onClick={onOpenRecord} className="btn-link">
-            <span className="text-ink3 tabular-nums">
-              {tasks.completed}/{tasks.total}
-            </span>
-            <span> · 即刻札记</span>
-          </button>
+          <span className="text-ink3 tabular-nums text-[12px]">
+            {tasks.completed}/{tasks.total}
+          </span>
         }
       />
 
@@ -146,23 +139,6 @@ export const TodayTasks: React.FC<TodayTasksProps> = ({
         )}
       </div>
 
-      {/* 当日随笔 */}
-      {notes && notes.length > 0 && (
-        <div className="mt-5 pt-4 border-t border-line">
-          {notes.slice(-1).map((note) => (
-            <div key={note.id}>
-              <div className="flex items-center justify-between text-[12px] text-ink3 tracking-[0.14em]">
-                <span className="flex items-center gap-1.5">
-                  <Feather className="w-3 h-3" />
-                  <span>案头小记</span>
-                </span>
-                <span className="tabular-nums tracking-normal">{note.timestamp}</span>
-              </div>
-              <p className="font-serif text-[19px] leading-[1.85] text-ink mt-2">「{note.content}」</p>
-            </div>
-          ))}
-        </div>
-      )}
     </section>
   );
 };

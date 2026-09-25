@@ -7,7 +7,7 @@
  * 固定 clock：2026-09-25（周五）21:30 —— 本周一 = 2026-09-21。
  *
  * 1. f_meal_slot boundaries (meal slot rule shared with the UI caption)
- * 2. TodayData contract: tasks / weight / nutrition / sleep / activity / journal / training / forecast
+ * 2. TodayData contract: tasks / weight / nutrition / sleep / training / forecast
  * 3. storage fallback: corrupt localStorage key falls back to seed data
  */
 
@@ -31,6 +31,32 @@ assert(f_meal_slot(23) === 'dinner', 'hour 23 is dinner');
 // --- 2. TodayData contract (fixed clock → deterministic seed windows) --------
 const CLOCK = (): Date => new Date(2026, 8, 25, 21, 30);
 const repository = new MockHealthRepository({ clock: CLOCK });
+
+// --- 2a. 未建档：只出「未建档」，不拿演示数据冒充你 -------------------------
+const fresh = await repository.getToday();
+assert(fresh.profileStatus === 'incomplete', 'fresh demo profile is incomplete (未建档)');
+assert(
+  ['sex', 'birthYear', 'heightCm', 'activityLevel', 'goal'].every((f) =>
+    fresh.missingProfileFields.includes(f)
+  ),
+  'missing profile fields are listed'
+);
+assert(fresh.targets === null, 'no targets before 建档');
+assert(fresh.body.bmi === null && fresh.body.rmrKcal === null && fresh.body.tdeeKcal === null, 'no body numbers before 建档');
+assert(fresh.nextMeal.unavailable === true, 'no meal suggestion before 建档（不编造菜名）');
+assert(fresh.nutrition.calories.target === 0, 'no fake calorie target before 建档');
+
+// --- 2b. 建档（改档）：派生 BMI / RMR / TDEE / 目标 ------------------------
+const stored = await repository.updateProfile({
+  sex: 'male',
+  birthYear: 1998,
+  heightCm: 175,
+  activityLevel: 'light',
+  waistCm: 84,
+  goal: 'fat loss',
+  goalSource: 'user',
+});
+assert(stored.heightCm === 175, 'profile write lands');
 const today = await repository.getToday();
 
 assert(today.date === '2026-09-25', `date is the injected day (got ${today.date})`);
@@ -55,12 +81,33 @@ for (let i = 1; i < today.weightSeries.length; i++) {
   assert(today.weightSeries[i - 1].date < today.weightSeries[i].date, 'weightSeries dates ascend');
 }
 
-// 营养：实测入账 vs 目标，余量与超额同源
-assert(today.nutrition.calories.consumed === 1020 && today.nutrition.calories.target === 1950, 'seed intake 1020/1950 kcal');
-assert(today.nutrition.protein.consumed === 63 && today.nutrition.protein.target === 110, 'seed intake 63/110 g protein');
-assert(approx(today.nutrition.calories.remaining, 930), 'remaining calories = target - consumed');
+// 体征档：身高/性别/出生年/活动水平/腰围齐备，派生 BMI/RMR/TDEE
+assert(today.profileStatus === 'complete' && today.missingProfileFields.length === 0, 'seed profile is complete');
+assert(today.body.bmi === 22.3 && today.body.bmiCategory === 'normal', `BMI 22.3 normal (got ${today.body.bmi}/${today.body.bmiCategory})`);
+assert(today.body.waist !== null && today.body.waist.elevated === false, 'waist 84cm under the 90cm limit');
+// Mifflin-St Jeor: 10×68.4 + 6.25×175 − 5×28 + 5 = 1643 kcal
+assert(today.body.rmrKcal === 1643, `RMR 1643 kcal (got ${today.body.rmrKcal})`);
+assert(today.body.pal === 1.375 && today.body.tdeeKcal === Math.round(1643 * 1.375), 'TDEE = RMR × PAL(light)');
+
+// 目标由 TDEE 与目标方向派生（不再是档案里的常量）
+assert(today.targets !== null, 'targets are derived for a complete profile');
+const t = today.targets!;
+assert(t.caloriesKcal === Math.round(today.body.tdeeKcal! * 0.8), 'lose target = TDEE × 0.8');
+assert(t.proteinG === Math.round((t.proteinRange.min + t.proteinRange.max) / 2), 'protein target = midpoint of 1.4–2.0 g/kg');
+assert(t.proteinRange.min === Math.round(68.4 * 1.4) && t.proteinRange.max === Math.round(68.4 * 2.0), 'protein range from body weight');
+
+// 建议与用户目标相悖时如实标出（BMI 正常却选了减脂）
+assert(today.goalAdvice.direction === 'maintain', 'BMI 22.3 + 腰围未越线 → 建议维持');
+assert(today.goalAdvice.conflicting === false, '建议维持与「减脂」并不相反 → 不报警,仅并列显示');
+assert(today.trainingTarget.resistanceDaysPerWeek >= 2, '抗阻周目标不低于 WHO 基线 2 日');
+
+// 营养：实测入账 vs 派生目标，余量与超额同源
+assert(today.nutrition.calories.consumed === 1020, 'seed intake 1020 kcal');
+assert(today.nutrition.calories.target === t.caloriesKcal, 'nutrition target reads the derived target');
+assert(today.nutrition.protein.target === t.proteinG, 'protein target reads the derived target');
+assert(approx(today.nutrition.calories.remaining, t.caloriesKcal - 1020), 'remaining calories = target - consumed');
 assert(today.nutrition.calories.status === 'under' && today.nutrition.protein.status === 'under', 'under target');
-assert(approx(today.nutrition.calories.ratio, 1020 / 1950), 'ratio === consumed/target (single source)');
+assert(approx(today.nutrition.calories.ratio, 1020 / t.caloriesKcal), 'ratio === consumed/target (single source)');
 assert(today.nutrition.mealCount === 2, 'meal count = confirmed logs today');
 assert(today.nutrition.quality.flag === 'normal', 'seed intake is plausible');
 
@@ -71,17 +118,9 @@ assert(today.sleep.nights === 1 && today.sleep.windowDays === 7, 'only 1 night r
 assert(today.sleep.avgMinutes === 440, 'average is over recorded nights only');
 assert(today.sleep.meetsReference === true, '440 min meets the 7h reference');
 
-// 生活纪事：本周（周一起）
-const weekMinutes = today.activity.byCategory.reduce((sum, row) => sum + row.minutes, 0);
-assert(today.activity.totalMinutes === weekMinutes, 'total minutes = sum of category minutes');
-assert(today.activity.totalMinutes > 0, 'seed has activity in the current week');
-assert(today.activity.byCategory.every((row) => row.sessions >= 1), 'each category reports its session count');
-assert(today.journal.count === today.journal.entries.length, 'journal count = journal entries');
-assert(today.journal.entries.every((entry) => (entry.content ?? '').trim().length > 0), 'journal entries all carry text');
-
 // 训练：决策来自纯函数；抗阻只数本周抗阻
 assert(today.training.decision.mode === 'normal', 'seed (energy 4 / soreness 2 / 7h20m) → normal session');
-assert(today.training.resistance.target === 2, 'weekly resistance target comes from policy');
+assert(today.training.resistance.target === today.trainingTarget.resistanceDaysPerWeek, '抗阻目标来自体征档处方');
 assert(today.training.resistance.completed <= today.training.resistance.totalWorkoutsThisWeek, 'resistance ⊆ all workouts');
 assert(today.training.todaySession === null, 'no workout recorded today in seed');
 

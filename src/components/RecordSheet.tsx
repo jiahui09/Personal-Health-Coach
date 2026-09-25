@@ -1,13 +1,13 @@
-// Serif for the sheet title; the sheet clips its own scrolled content. deslop-ignore-file 07 22
+// Serif for the sheet title; the sheet clips its own scrolled content.
+// 三列 = 进食/习练/体征这三个录入页签,数量由产品语义决定。
+// deslop-ignore-file 07 22 28
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { X, Check, Utensils, Dumbbell, Activity, Feather, AlertTriangle } from 'lucide-react';
+import { X, Check, Utensils, Dumbbell, Activity, AlertTriangle } from 'lucide-react';
 import {
   CreateDailyStateInput,
-  CreateLifeLogInput,
   CreateMealInput,
   CreateWorkoutInput,
-  LifeCategory,
   MealCategory,
   SleepEntry,
   WorkoutCategory,
@@ -15,7 +15,7 @@ import {
 import { intervalMinutes } from '../domain/sleep';
 import { formatNightDuration } from '../domain/format';
 
-export type RecordTab = 'meal' | 'workout' | 'body' | 'note';
+export type RecordTab = 'meal' | 'workout' | 'body';
 
 export interface RecordDefaults {
   weight?: number;
@@ -34,8 +34,6 @@ interface RecordSheetProps {
   onSaveMeal: (input: CreateMealInput) => Promise<boolean>;
   onSaveWorkout: (input: CreateWorkoutInput) => Promise<boolean>;
   onSaveDailyState: (input: CreateDailyStateInput) => Promise<boolean>;
-  onSaveNote?: (content: string, tags: string[]) => Promise<boolean>;
-  onSaveLifeLog?: (input: CreateLifeLogInput) => Promise<boolean>;
   /** 今日已入账之食；未传则不显示累计。 */
   todayIntake?: { mealCount: number; caloriesKcal: number; proteinG: number };
   /** 今日既有记录（缺省即「未录」，绝不预填假数）。 */
@@ -59,8 +57,6 @@ export const RecordSheet: React.FC<RecordSheetProps> = ({
   onSaveMeal,
   onSaveWorkout,
   onSaveDailyState,
-  onSaveNote,
-  onSaveLifeLog,
   todayIntake,
   defaults,
   weightWarningFor,
@@ -96,12 +92,6 @@ export const RecordSheet: React.FC<RecordSheetProps> = ({
   const [soreness, setSoreness] = useState<number | null>(null);
   const [stateNotes, setStateNotes] = useState('');
 
-  // Note & Life Log Form States
-  const [noteContent, setNoteContent] = useState('');
-  const [lifeCategory, setLifeCategory] = useState<LifeCategory>('Coding');
-  const [lifeDuration, setLifeDuration] = useState<number | ''>(0);
-  const [lifeProject, setLifeProject] = useState('');
-
   // Re-sync to the requested tab (and today's actual values) each time the sheet opens.
   useEffect(() => {
     if (isOpen) {
@@ -127,9 +117,6 @@ export const RecordSheet: React.FC<RecordSheetProps> = ({
   if (!isOpen) return null;
 
   const weightWarning = typeof weight === 'number' && weightWarningFor ? weightWarningFor(weight) : null;
-  const noteHasContent = noteContent.trim().length > 0;
-  const noteHasDuration = typeof lifeDuration === 'number' && lifeDuration > 0;
-  const noteSubmittable = noteHasContent || noteHasDuration;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,22 +177,6 @@ export const RecordSheet: React.FC<RecordSheetProps> = ({
           soreness: soreness ?? undefined,
           notes: stateNotes,
         });
-      } else if (tab === 'note') {
-        if (noteSubmittable) {
-          if (onSaveNote && noteHasContent) {
-            saved = await onSaveNote(noteContent.trim(), ['#living-journal']);
-          }
-          if (onSaveLifeLog && noteHasDuration) {
-            const lifeSaved = await onSaveLifeLog({
-              title: noteHasContent ? noteContent.slice(0, 24) : `${lifeCategory} · 记时`,
-              content: noteContent.trim(),
-              category: lifeCategory,
-              durationMinutes: Number(lifeDuration),
-              project: lifeProject.trim() || undefined,
-            });
-            saved = saved && lifeSaved;
-          }
-        }
       }
 
       // 失败：面板保持打开，提示已由 App 弹出；只有真存上了才亮勾并关闭
@@ -246,9 +217,7 @@ export const RecordSheet: React.FC<RecordSheetProps> = ({
           <div className="flex items-center gap-2">
             {/* deslop-ignore-next-line 19 — literal 6px status dot */}
             <span className="w-2 h-2 rounded-full bg-accent" />
-            <h3 className="font-serif text-lg font-medium text-ink">
-              私人手记 · 录一笔
-            </h3>
+            <h3 className="font-serif text-lg font-medium text-ink">录一笔</h3>
           </div>
           <button
             onClick={onClose}
@@ -260,12 +229,11 @@ export const RecordSheet: React.FC<RecordSheetProps> = ({
         </div>
 
         {/* Tab Selection */}
-        <div className="grid grid-cols-4 p-1.5 mx-4 sm:mx-5 mt-4 bg-surface rounded-lg text-[13px] font-sans">
+        <div className="grid grid-cols-3 p-1.5 mx-4 sm:mx-5 mt-4 bg-surface rounded-lg text-[13px] font-sans">
           {([
             ['meal', '进食', Utensils],
             ['workout', '习练', Dumbbell],
             ['body', '体征', Activity],
-            ['note', '手记', Feather],
           ] as const).map(([key, label, Icon]) => (
             <button
               key={key}
@@ -597,70 +565,11 @@ export const RecordSheet: React.FC<RecordSheetProps> = ({
             </div>
           )}
 
-          {tab === 'note' && (
-            <div className="space-y-3.5">
-              <div>
-                <label className="block text-ink3 mb-1">所记之事（可只计时长）</label>
-                <textarea
-                  rows={3}
-                  value={noteContent}
-                  onChange={(e) => setNoteContent(e.target.value)}
-                  className="w-full bg-surface border border-control rounded-lg p-3 text-sm text-ink focus:border-accent"
-                  placeholder="如：今日终得此项目核心之模型；记事实、录计算、出下一步……"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-ink3 mb-1">所属之域</label>
-                  <select
-                    value={lifeCategory}
-                    onChange={(e) => setLifeCategory(e.target.value as LifeCategory)}
-                    className="w-full bg-surface border border-control rounded-lg px-3 py-2 text-[13px] text-ink focus:border-accent"
-                  >
-                    <option value="Coding">Coding（编码架构）</option>
-                    <option value="Learning">Learning（研读探赜）</option>
-                    <option value="Exercise">Exercise（强身习练）</option>
-                    <option value="Reading">Reading（披阅文献）</option>
-                    <option value="Life">Life（日常起居）</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-ink3 mb-1">投入之时（分钟）</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="600"
-                    value={lifeDuration}
-                    onChange={(e) => setLifeDuration(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-surface border border-control rounded-lg px-3 py-2 text-[13px] tabular-nums text-ink focus:border-accent"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-ink3 mb-1">所属项目 · 议题（可无）</label>
-                <input
-                  type="text"
-                  value={lifeProject}
-                  onChange={(e) => setLifeProject(e.target.value)}
-                  className="w-full bg-surface border border-control rounded-lg px-3 py-1.5 text-[13px] text-ink focus:border-accent"
-                  placeholder="如：Personal Health Coach, Metabolic Research..."
-                />
-              </div>
-
-              <p className="text-[12px] text-ink3">
-                记文字则为手记（计入近来手记条数）；填时长则为活动（计入本周之功）；二者可兼。
-              </p>
-            </div>
-          )}
-
-          {/* Action Button — 手记页：文字与时长皆无时不给「已录于册」的假成功 */}
+          {/* Action Button */}
           <div className="pt-2">
             <button
               type="submit"
-              disabled={isSubmitting || (tab === 'note' && !noteSubmittable)}
+              disabled={isSubmitting}
               className="btn-primary w-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSavedFeedback ? (

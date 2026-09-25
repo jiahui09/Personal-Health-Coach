@@ -12,14 +12,10 @@
 
 import {
   CreateDailyStateInput,
-  CreateLifeLogInput,
   CreateMealInput,
-  CreateNoteInput,
   CreateTodoInput,
   CreateWorkoutInput,
-  DailyNote,
   DailyState,
-  LifeLog,
   MealRecord,
   TodayData,
   TodoItem,
@@ -106,14 +102,6 @@ export interface HealthRepository {
   addTodo(input: CreateTodoInput): Promise<TodoItem>;
   toggleTodo(id: string): Promise<TodoItem>;
   deleteTodo(id: string): Promise<void>;
-
-  // ---- Life Logs (LIFE domain) ----
-  getLifeLogs(since?: string): Promise<LifeLog[]>;
-  addLifeLog(input: CreateLifeLogInput): Promise<LifeLog>;
-
-  // ---- Daily Notes ----
-  getNotes(since?: string): Promise<DailyNote[]>;
-  addNote(input: CreateNoteInput): Promise<DailyNote>;
 
   // ---- Demo data ----
   /**

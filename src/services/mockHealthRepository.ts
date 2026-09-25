@@ -13,15 +13,11 @@
 import { createSeedData } from '../data/mockData';
 import {
   CreateDailyStateInput,
-  CreateLifeLogInput,
   CreateMealInput,
-  CreateNoteInput,
   CreateTodoInput,
   CreateWorkoutInput,
-  DailyNote,
   DailyState,
   HealthContext,
-  LifeLog,
   MealRecord,
   TodayData,
   TodoItem,
@@ -36,12 +32,13 @@ import {
   calculateTaskProgress,
   dailyRepresentatives,
   decideWorkoutMode,
-  journalSummary,
-  activitySummary,
+  adviseWeightGoal,
+  bodySummary,
+  decideTrainingTarget,
+  deriveNutritionTargets,
   makeDayContext,
-  migrateLifeLogs,
+  profileCheck,
   migrateMeals,
-  migrateNotes,
   migrateProfile,
   migrateState,
   migrateTodos,
@@ -117,21 +114,18 @@ export class MockHealthRepository implements HealthRepository {
   private meals: MealRecord[];
   private workouts: WorkoutRecord[];
   private todos: TodoItem[];
-  private lifeLogs: LifeLog[];
-  private notes: DailyNote[];
 
   constructor(options: MockHealthRepositoryOptions = {}) {
     this.clock = options.clock ?? (() => new Date());
     const seed = createSeedData(this.clock());
 
-    this.profile = migrateProfile(getStorage<unknown>(STORAGE_KEYS.PROFILE, null), seed.profile);
+    const storedProfile = getStorage<unknown>(STORAGE_KEYS.PROFILE, null);
+    this.profile = storedProfile === null ? seed.profile : migrateProfile(storedProfile);
     this.weightHistory = readCollection(STORAGE_KEYS.WEIGHTS, migrateWeights, seed.weightHistory);
     this.dailyStates = readCollection(STORAGE_KEYS.DAILY_STATE, migrateState, seed.dailyStates);
     this.meals = readCollection(STORAGE_KEYS.MEALS, migrateMeals, seed.meals);
     this.workouts = readCollection(STORAGE_KEYS.WORKOUTS, migrateWorkouts, seed.workouts);
     this.todos = readCollection(STORAGE_KEYS.TODOS, migrateTodos, seed.todos);
-    this.lifeLogs = readCollection(STORAGE_KEYS.LIFE_LOGS, migrateLifeLogs, seed.lifeLogs);
-    this.notes = readCollection(STORAGE_KEYS.NOTES, migrateNotes, seed.notes);
   }
 
   // ================= Identity (demo auth) =================
@@ -197,21 +191,47 @@ export class MockHealthRepository implements HealthRepository {
     // --- 原始记录的今日切片 ---
     const todayMeals = this.meals.filter((meal) => meal.date === today && meal.confirmed !== false);
     const todayTodos = tasksForDay(this.todos, today);
-    const todayNotes = this.notes.filter((note) => note.date === today);
     const todayWorkout = this.workouts.find((w) => w.date === today && w.completed);
     const todayState = this.dailyStates.find((state) => state.date === today);
 
     // --- 派生指标（domain 纯函数，全站唯一计算处） ---
     const weight = weightSummary(this.weightHistory, ctx);
+    const body = bodySummary(this.profile, weight.latest, now);
+    const check = profileCheck(this.profile, now);
+
+    // 建议（据 BMI/腰围）→ 用户确认后的目标方向 → 每日目标 → 每周抗阻处方
+    const goalAdvice = adviseWeightGoal({
+      bmiCategory: body.bmiCategory,
+      waistElevated: body.waist ? body.waist.elevated : null,
+      goal: this.profile.goal,
+    });
+    const direction =
+      this.profile.goal === undefined
+        ? goalAdvice.direction
+        : this.profile.goal === 'fat loss'
+        ? 'lose'
+        : this.profile.goal === 'muscle gain'
+        ? 'gain'
+        : 'maintain';
+    const targets = deriveNutritionTargets({
+      tdeeKcal: body.tdeeKcal,
+      weightKg: weight.latest,
+      direction,
+      sex: this.profile.sex,
+    });
+    const trainingTarget = decideTrainingTarget({
+      direction,
+      goal: this.profile.goal,
+      activityLevel: this.profile.activityLevel,
+    });
+
     const nutrition = buildNutritionSummary(
       todayMeals,
-      this.profile.dailyCalorieTarget,
-      this.profile.dailyProteinTarget
+      targets ? targets.caloriesKcal : 0,
+      targets ? targets.proteinG : 0
     );
     const sleep = sleepSummary(this.dailyStates, ctx);
     const tasks = calculateTaskProgress(todayTodos);
-    const activity = activitySummary(this.lifeLogs, ctx);
-    const journal = journalSummary(this.lifeLogs, ctx);
 
     // --- 决策：训练模式由纯函数判定；体重不在入参内，异常体重无法污染它 ---
     const decision = decideWorkoutMode({
@@ -220,13 +240,18 @@ export class MockHealthRepository implements HealthRepository {
       soreness: todayState?.soreness ?? null,
       completedToday: !!todayWorkout,
     });
-    const training = buildTrainingSummary(this.workouts, ctx, decision);
+    const training = buildTrainingSummary(
+      this.workouts,
+      ctx,
+      decision,
+      trainingTarget.resistanceDaysPerWeek
+    );
 
     // --- 决策：引擎推荐（餐食/训练课表），复用同一决策结果 ---
     const context: HealthContext = {
       now,
       profile: this.profile,
-      currentWeight: weight.latest ?? this.profile.currentWeight,
+      currentWeight: weight.latest ?? 0,
       todayState: todayState ?? { date: today },
       todayMeals,
       recentMeals: this.meals,
@@ -234,6 +259,7 @@ export class MockHealthRepository implements HealthRepository {
       weightHistory: this.weightHistory,
       todayWorkout,
       trainingDecision: decision,
+      targets,
     };
 
     const nextMeal = scientificDecisionEngine.recommendNextMeal(context);
@@ -260,15 +286,12 @@ export class MockHealthRepository implements HealthRepository {
       mealSlot: f_meal_slot(ctx.hour),
 
       todos: todayTodos,
-      notes: todayNotes,
       todayMeals,
 
       tasks,
       weight,
       nutrition,
       sleep,
-      activity,
-      journal,
       state: todayState ?? { date: today },
       weightSeries: weightPoints,
 
@@ -281,6 +304,13 @@ export class MockHealthRepository implements HealthRepository {
       nextMeal,
       nextWorkout,
       dietQuality,
+
+      profileStatus: check.complete ? 'complete' : 'incomplete',
+      missingProfileFields: check.missing,
+      body,
+      targets,
+      goalAdvice,
+      trainingTarget,
     };
   }
 
@@ -420,11 +450,8 @@ export class MockHealthRepository implements HealthRepository {
       record = { id: `w-${newId()}`, date: target, weight, time, source: options.source ?? 'manual' };
       this.weightHistory = [...this.weightHistory, record];
     }
-    // profile.currentWeight 只是「最近一次测量」的缓存（供引擎入参），
-    // 页面显示一律走 WeightSummary.latest，读的不是这里。
-    this.profile = { ...this.profile, currentWeight: weight };
+    // 体重只存在 WeightRecord 一处；档案里不再有第二份「当前体重」
     setStorage(STORAGE_KEYS.WEIGHTS, this.weightHistory);
-    setStorage(STORAGE_KEYS.PROFILE, this.profile);
     return record;
   }
 
@@ -462,44 +489,7 @@ export class MockHealthRepository implements HealthRepository {
   }
 
   // ================= Life Logs (LIFE) =================
-  async getLifeLogs(since?: string): Promise<LifeLog[]> {
-    return since ? this.lifeLogs.filter((l) => l.date >= since) : this.lifeLogs;
-  }
-
-  async addLifeLog(input: CreateLifeLogInput): Promise<LifeLog> {
-    const newLog: LifeLog = {
-      id: `life-${newId()}`,
-      date: makeDayContext(this.clock()).todayKey,
-      title: input.title,
-      content: input.content,
-      category: input.category,
-      durationMinutes: input.durationMinutes,
-      project: input.project,
-    };
-    this.lifeLogs = [newLog, ...this.lifeLogs];
-    setStorage(STORAGE_KEYS.LIFE_LOGS, this.lifeLogs);
-    return newLog;
-  }
-
   // ================= Daily Notes =================
-  async getNotes(since?: string): Promise<DailyNote[]> {
-    return since ? this.notes.filter((n) => n.date >= since) : this.notes;
-  }
-
-  async addNote(input: CreateNoteInput): Promise<DailyNote> {
-    const now = this.clock();
-    const newNote: DailyNote = {
-      id: `note-${newId()}`,
-      date: makeDayContext(now).todayKey,
-      content: input.content,
-      tags: input.tags || ['#living-journal'],
-      timestamp: clockTimeOf(now),
-    };
-    this.notes = [newNote, ...this.notes];
-    setStorage(STORAGE_KEYS.NOTES, this.notes);
-    return newNote;
-  }
-
   // ================= Reset =================
   async resetToDefault(): Promise<void> {
     const seed = createSeedData(this.clock());
@@ -509,8 +499,6 @@ export class MockHealthRepository implements HealthRepository {
     this.meals = seed.meals;
     this.workouts = seed.workouts;
     this.todos = seed.todos;
-    this.lifeLogs = seed.lifeLogs;
-    this.notes = seed.notes;
 
     setStorage(STORAGE_KEYS.PROFILE, this.profile);
     setStorage(STORAGE_KEYS.WEIGHTS, this.weightHistory);
@@ -518,8 +506,6 @@ export class MockHealthRepository implements HealthRepository {
     setStorage(STORAGE_KEYS.MEALS, this.meals);
     setStorage(STORAGE_KEYS.WORKOUTS, this.workouts);
     setStorage(STORAGE_KEYS.TODOS, this.todos);
-    setStorage(STORAGE_KEYS.LIFE_LOGS, this.lifeLogs);
-    setStorage(STORAGE_KEYS.NOTES, this.notes);
   }
 }
 

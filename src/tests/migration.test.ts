@@ -6,9 +6,7 @@
  */
 
 import {
-  migrateLifeLogs,
   migrateMeals,
-  migrateNotes,
   migrateProfile,
   migrateSleep,
   migrateState,
@@ -117,18 +115,11 @@ const ctx = makeDayContext(new Date(2026, 8, 25, 21, 30));
 const summary = weightSummary(weights, ctx);
 assert(summary.latest === 68.4 && summary.daysWithRecords === 2, '迁移后可直接派生统计');
 
-// ---------------- 手记：content 可空 ----------------
-const logs = migrateLifeLogs([
-  { id: 'l1', date: '2026-09-25', title: '只计时长', category: 'Coding', durationMinutes: 60 },
-  { id: 'l2', date: '2026-09-25', title: '有文字', content: '记一段', category: 'Reading', durationMinutes: 30 },
-]);
-assert(logs[0].content === '', '缺 content 视为空（不伪造文字）');
-assert(logs[1].content === '记一段', '原文字保留');
-assert(logs[0].durationMinutes === 60, '时长数值不变');
-
-// ---------------- 笔记与档案 ----------------
-assert(migrateNotes([{ id: 'n1', date: '2026-09-25', content: 'x', tags: ['#a'], timestamp: '14:20' }]).length === 1, '笔记迁移');
-const profile = migrateProfile({ name: 'Alex', dailyCalorieTarget: 1950 }, INITIAL_USER_PROFILE);
-assert(profile.dailyCalorieTarget === 1950 && profile.height === INITIAL_USER_PROFILE.height, '档案缺项回落默认，已有项保留');
+// ---------------- 档案缺项回落 ----------------
+const profile = migrateProfile({ name: '新档', waistCm: 84, heightCm: 175, sex: 'male' });
+assert(profile.name === '新档' && profile.waistCm === 84 && profile.heightCm === 175, '认识的字段照录');
+assert(profile.activityLevel === undefined, '未提供的字段留空（不注入默认人体数据）');
+assert(Object.keys(migrateProfile({})).length === 0, '空对象 → 空档案（未建档,不是「默认人」）');
+assert(INITIAL_USER_PROFILE.heightCm === undefined, '演示档案本身即未建档');
 
 console.log('ALL MIGRATION TESTS PASSED.');

@@ -2,11 +2,11 @@
 
 ## Source of truth
 - Status: **Active**
-- Last refreshed: 2026-09-25（数据语义重建）
+- Last refreshed: 2026-09-25（三域改造：锻炼 + 体征 + 饮食，删除手记域）
 - Primary product surfaces:
-  - 单页主应用 `src/App.tsx`（刊头 → 双栏正文 → 通栏近来手记 → 页脚，版框内单页流）
+  - 单页主应用 `src/App.tsx`（刊头 → 双栏正文 → 通栏情景外推/今日体感 → 页脚，版框内单页流）
+  - 体征档弹层 `src/components/ProfileSheet.tsx`（建档 / 改档：性别·出生年·身高·活动水平·腰围·目标）
   - 录事弹层 `src/components/RecordSheet.tsx`（四签：进食 / 习练 / 体征 / 手记）
-  - 决策稽核弹窗 `src/components/EvidenceModal.tsx`（缘由）
   - 比选稿 `docs/palette-options.html`（五版色组，当前选中其五）
   - 成稿截图 `.shots/za-desktop2.png`（1440）、`.shots/za-mobile.png`（390）、`.shots/za-mobile-*.png`（局部）
 - Evidence reviewed:
@@ -21,27 +21,27 @@
 
 ## Brand
 - Personality: **御批奏折**——臣工以墨书事（正文、数据、事实一律墨色），皇帝以朱批裁（裁决、状态、旁注、回执一律朱色）。安静、克制、有权威感；一册可读的手记，不是一块仪表盘。
-- Trust signals: 「不假模型 · 规则可稽」页脚、数值入句、证据分级（`evidence_derived` / `evidence_constrained` / `engineering_heuristic`）、「缘由」把输入快照与局限摊开、`journalContract`/`contrast`/`layoutContract` 三重回归。
+- Trust signals: 数值入句、每个数字可追到唯一函数（`docs/data-semantics.md`）、证据分级（`evidence_derived` / `evidence_constrained` / `engineering_heuristic`）、「缘由」把输入快照与局限摊开、`journalContract`/`contrast`/`layoutContract` 三重回归。
 - Avoid: KPI 卡、瓦片墙、环形进度、渐变、投影堆砌、backdrop-blur、多强调色并存、现代白话 UI 文案、AI 默认配色（靛紫渐变、语义色块）。
 
 ## Product goals
 - Goals: 让人一眼看清「现在该吃、该动、身体如何」，且每条建议都可追溯到规则与证据；改版后额外目标是**版面本身可信**——横线对齐、动作不浮空、比例有余光线索。
-- Non-goals: 多页面路由、社交/排行榜、生成式内容（LLM = OFF）、后端排版本轮不动、录事弹层与稽核弹窗内部排版不在本轮范围。
+- Non-goals: 多页面路由、社交/排行榜、生成式内容（LLM = OFF）、后端排版本轮不动；页面上不设决策稽核入口（痕迹留在数据层与 README）。
 - Success signals: 三对章节横线跨栏 y 差 ≤2px（实测 0px）；移动端标题左缘一致（实测 38px 全页一致）；四套测试 + tsc + build + e2e 全绿；截图复核无浮空/挤行。
 
 ## Personas and jobs
 - Primary personas: 唯一用户——记录自己健康账目的中文使用者，桌面查、手机记。
-- User jobs: ① 今日要做什么（其一）② 下一餐/下一次练什么及为什么（其二/其三 + 缘由）③ 身体与本周是否在正轨（近况、身体近况、生活纪事）④ 随手记一笔（录一笔 / FAB）。
+- User jobs: ① 今日要做什么（其一）② 下一餐/下一次练什么（其二/其三）③ 身体与本周是否在正轨（近况、身体近况、今日体感、生活纪事）④ 随手记一笔（右下 FAB）。
 - Key contexts of use: 桌面 1440 浏览全页；手机 390 单手速记；两者都要求扫读时先看到「裁决」再看到细节。
 
 ## Information architecture
-- Primary navigation: 无路由；单页纵向流 + 弹层（录事、稽核）。
+- Primary navigation: 无路由；单页纵向流 + 录事弹层。
 - Core routes/screens: 刊头（印章 + 时段问候 + 干支日期 + 录一笔）→ 正文双栏 → 近来手记（通栏）→ 页脚（复其初）。
 - Content hierarchy:
   - **行动类**（左栏章目）：其一 今日之事、其二 下一膳、其三 今日之练——目录式清单 + 章末动作脚注行。
   - **计量类**（比例）：蛋白质 / 热量 / 本周抗阻 / 睡均 / 生活纪事时长占比——墨线计量条 + 颜色分级。
-  - **状态类**（可感知）：身体近况（含唯一图表）、今日体感（1–5 点阵两行）。
-  - **记述类**（叙述）：近况三条实测句、案头小记、近来手记、体重区间推演。
+  - **体征类**：体征档（Raw 输入 + BMI/腰围/RMR/TDEE + 每日目标 + 抗阻处方）、身体近况（含唯一图表）、今日体感（睡眠与 1–5 点阵）。
+  - **推演类**：情景外推（四周/八周/十二周，标注模型版本与依据日数，存疑即暂阙）。
   - 桌面行配对（右栏次序为等高配对重排，**与移动端次序不同**）：
     | 行 | 左（章目） | 右（附目） | 实测高度差 |
     | --- | --- | --- | --- |
@@ -88,7 +88,7 @@
 - Imagery/iconography: `lucide-react` 单色图标 13–16px；全页唯一图表为 30 日体重折线（手绘 SVG，朱线 + 朱 10% 填充）；纸面为两层内联 SVG 噪点（纤维 6% + 斑驳 7%）。
 
 ## Components
-- Existing components to reuse: `SectionHead`、`RuleMeter`、`.btn-primary` / `.btn-ghost` / `.btn-link`、`.section-actions`、`.leader`、`WeightTrendChart`、`EvidenceModal`、`RecordSheet`。
+- Existing components to reuse: `SectionHead`、`RuleMeter`、`.btn-primary` / `.btn-link`、`.section-actions`、`.leader`、`WeightTrendChart`、`RecordSheet`、`BodyProfile`、`ForecastBand`、`ProfileSheet`。
 - New/changed components:
   - `src/components/SectionHead.tsx`（新）：眉行（章序 + 右注）→ 题行 → 2px 墨线 + 竖排朱批旁注；全页 6 处章节头唯一出口。
   - `src/components/RuleMeter.tsx`（新）：`label | 3px 条 | 分子/分母/百分比`；`tone: ink | accent | danger`；`max<=0` 时渲染 `—`。
@@ -145,6 +145,8 @@
 - Test/screenshot expectations: 改动前后必跑 `npm test`（四套）、`npm run lint`、`npm run build`、`.shots/e2e.mjs`；版式用 `.shots/layout-probe.mjs <url> <width>` 断言横线同 y、标题左缘、`overflow=0`；截图 `.shots/shot.mjs <url> <width> <out.png>` 并人工复核。
 
 ## Open questions
+- [ ] **云端数据路径未实作**：`SupabaseHealthRepository` 是 fail-fast 壳；需补 `@supabase/supabase-js` + 24 个方法 + magic link 登录界面（表结构与 RLS 已就绪，见 `supabase/schema.sql`）。Owner: 实现 / 影响: 跨设备同步。
+- [ ] BMI 分不清肌肉与脂肪：已用腰围作第二证据，是否再加体脂率（需设备测量）待定。Owner: 用户 / 影响: 判定精度。
 - [ ] `共列网格` 的名列定宽 84px 意味着标签限 5 字以内；若未来出现更长指标名，需要新的网格变体或允许折行。
 - [ ] 名录式条目的点线引导在中列伸缩（标题越长点线越短）；是否改为「点线定长 + 标题截断」待定。
 - [ ] 右栏桌面次序（近况 / 生活纪事 / 身体近况）是**等高配对的产物**，语义上「身体近况」落到了末行；若用户希望恢复「身体近况」居首，则需接受行二留白 ≈300px 或给其二增内容。Owner: 用户 / 影响: IA 与截图。
