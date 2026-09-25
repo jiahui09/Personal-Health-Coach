@@ -19,12 +19,18 @@
 | 3 | **固定 Node 版本** | `vite@8` 要求 `^20.19.0 || >=22.12.0`。已加 `.nvmrc = 22.12.0`，Cloudflare 会读它（或在面板设 `NODE_VERSION=22.12.0`） |
 
 ```bash
-# 在你本机执行（我未替你提交,提交与推送由你掌握）
-git add package-lock.json .nvmrc wrangler.jsonc
-git add -u                      # 记录 bun.lock 的删除与 package.json 的改动
-git commit -m "chore(deploy): npm 锁文件 + Node 版本固定 + Worker assets 配置;移除过期 bun.lock"
+# 关键：这四项必须落在同一个提交里,否则云端要么选错包管理器、要么 lock 与 package.json 对不上
+git add package.json package-lock.json .nvmrc docs/deploy.md
+git rm --cached bun.lock   # 从版本库移除（该文件其实是改名的 npm 锁,不是 Bun 锁）
+git rm --cached wrangler.jsonc   # Pages 路径不需要；若走 Worker 路径见下方路径 B 再放回
+git commit -m "fix(deploy): 移除 bun.lock 与 Worker 专用配置,提交与锁一致的 package.json"
 git push origin main
 ```
+
+> **为什么必须一起提交**：Cloudflare 按锁文件选包管理器 —— 只要 `bun.lock` 存在，它就跑
+> `bun install --frozen-lockfile` 并**拒绝改写**该文件；而本仓库那份 `bun.lock` 的
+> `lockfileVersion` 是 2（npm 格式），Bun 解析直接失败。同理，`package-lock.json` 与
+> `package.json` 的依赖表必须完全一致，否则 `npm ci` 也会拒绝安装。
 
 > 顺带提醒：你的 `package.json` 里有 `@opennextjs/cloudflare`（**只用于 Next.js**，本项目是纯 Vite 单页）。
 > 它不会让构建失败，但可能让 Cloudflare 的框架探测误判成 Next.js —— 面板里**务必手动把 preset 选成 None 或 Vite**。
@@ -63,13 +69,25 @@ npm run build          # 产物在 dist/
 
 **路径 B：面板给的是 Worker（新版 UI 有时如此）**
 
+先用 Pages 跑通（本仓库默认不含 wrangler 配置），确实要走 Worker 时再加回 `wrangler.jsonc`：
+
+```jsonc
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "personal-health-coach",        // 必须与面板项目名一致
+  "compatibility_date": "2026-09-25",
+  "assets": { "directory": "./dist", "not_found_handling": "single-page-application" }
+}
+```
+
 | 配置项 | 值 |
 |---|---|
 | Build command | `npm run build` |
-| Deploy command | `npx wrangler deploy`（仓库已含 `wrangler.jsonc`，`assets.directory = ./dist`） |
+| Deploy command | `npx wrangler deploy` |
 | 环境变量 | `NODE_VERSION` = `22.12.0` |
 
-此时请确认 `wrangler.jsonc` 里的 `name` 与面板创建的项目名一致，否则会部署成另一个 Worker。
+> 注意：Pages 项目**不要**放这个文件 —— 它会让 Pages 去读 Beta 版 wrangler 配置并打出
+> 「does not appear to be valid」的警告（见下方排错）。Pages 的输出目录在面板里设即可。
 
 > 两条路径都不需要 SPA 回退规则以外的任何服务端代码：产物是纯静态 `dist/`。
 
@@ -93,6 +111,17 @@ npm run build          # 产物在 dist/
 - 自定义域：`Custom domains` 里添加；本应用无服务端,无需调整任何回源设置。
 
 ---
+
+## 一·补、构建失败排错（按日志报错对号入座）
+
+| 日志 | 根因 | 处置 |
+|---|---|---|
+| `Installing project dependencies: bun install --frozen-lockfile` 然后 `Unknown lockfile version` | 仓库里还有 `bun.lock`（且它是 npm 格式的锁文件），Cloudflare 按锁文件优先选 Bun | 从版本库删除 `bun.lock`，只保留 `package-lock.json` |
+| `npm ci ... can only install packages when your package.json and package-lock.json are in sync` | `package.json` 与锁不在同一个提交里 | 两者一起提交（依赖表必须一致） |
+| `Found wrangler.json file ... does not appear to be valid` | Pages 项目里放了 Worker 用的 `wrangler.jsonc` | 删掉它（Pages 的输出目录在面板设置） |
+| `You are using Node.js 18.x. Vite requires Node.js version 20.19+ or 22.12+` | 面板没读 `.nvmrc` | 环境变量加 `NODE_VERSION=22.12.0` |
+| 页面显示「云库（Supabase）既配而后端之法未通」 | 误填了 `VITE_SUPABASE_*` | 静态版把这两个变量清空后重新部署 |
+| 部署成功但白屏 | 输出目录填错（未指向 `dist`） | Build output directory 设为 `dist` |
 
 ## 二、云端同步版（Supabase 免费档）
 
