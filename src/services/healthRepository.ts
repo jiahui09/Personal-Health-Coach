@@ -35,6 +35,7 @@ export interface AuthUser {
 export type RepositoryErrorCode =
   | 'network' // transport failure: offline, DNS, CORS, 5xx
   | 'auth' // signed out / token expired / bad credentials
+  | 'rate_limited' // provider throttling (e.g. Supabase built-in mailer hourly quota)
   | 'conflict' // concurrent write, unique constraint violated
   | 'not_found' // row missing or owned by someone else
   | 'not_implemented' // backend stub not wired yet
@@ -70,6 +71,18 @@ export interface HealthRepository {
   // ---- Profile ----
   getProfile(): Promise<UserProfile>;
   updateProfile(patch: Partial<UserProfile>): Promise<UserProfile>;
+
+  /** 第三方登录（云端实现才有意义；本地实现直接拒绝）。 */
+  signInWithProvider(provider: string): Promise<void>;
+
+  /** 匿名登录：一键进入,不需要邮箱（本地实现直接拒绝）。 */
+  signInAnonymously(): Promise<AuthUser>;
+
+  /**
+   * 本机是否已有云端身份。
+   * 真 → 会话只是过期,应刷新或提示登录；假 → 从未登录,可静默建立匿名身份。
+   */
+  hasSession(): boolean;
 
   // ---- Aggregated view ----
   getToday(): Promise<TodayData>;

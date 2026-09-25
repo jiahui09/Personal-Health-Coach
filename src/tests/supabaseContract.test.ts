@@ -292,6 +292,75 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
   ok('错误映射：401/403→auth、404→not_found、409→conflict、5xx→unknown、断网→network');
 }
 
+// 匿名登录（一键进入）：无邮箱、无密码
+{
+  const storage = memoryStorage();
+  const { fetchImpl, calls } = makeFetch([
+    { method: 'POST', match: (u) => u.includes('/auth/v1/signup'), body: sessionBody },
+  ]);
+  const rest = new SupabaseRest(cfg, { fetchImpl, storage });
+  const session = await rest.signInAnonymously();
+  assert(session.userId === UID && session.accessToken === 'at-1', '匿名登录返回并保存会话');
+  assert(calls[0].url.endsWith('/auth/v1/signup'), '调用的是 signup 端点');
+  assert(!JSON.stringify(calls[0].body).includes('@'), '匿名登录载荷里没有邮箱');
+  assert(storage.dump()['phc_supabase_session_v1'] !== undefined, '匿名会话同样持久化');
+
+  // 服务端未开启匿名登录 → 明确告知怎么开
+  const disabled = makeFetch([
+    { method: 'POST', match: (u) => u.includes('/auth/v1/signup'), status: 422, body: { msg: 'Anonymous sign-ins are disabled' } },
+  ]);
+  try {
+    await new SupabaseRest(cfg, { fetchImpl: disabled.fetchImpl, storage: memoryStorage() }).signInAnonymously();
+    assert(false, '未开启匿名登录时应当抛出');
+  } catch (err) {
+    assert(
+      err instanceof SupabaseError && err.kind === 'not_implemented' && /anonymous/i.test(err.message),
+      '未开启匿名登录 → not_implemented 且提示开关位置'
+    );
+  }
+  ok('匿名登录：一键建立会话；未开启时提示去 Supabase 打开发开关');
+}
+
+// hasSession：区分「从未登录」与「有身份但失效」
+{
+  const fresh = new SupabaseRest(cfg, { fetchImpl: makeFetch([]).fetchImpl, storage: memoryStorage() });
+  assert(fresh.hasSession() === false, '从未登录 → hasSession=false（可静默建立匿名身份）');
+
+  const stored = new SupabaseRest(cfg, {
+    fetchImpl: makeFetch([]).fetchImpl,
+    storage: authedStorage(Date.now() - 10_000), // 已过期,但仍算「有身份」
+  });
+  assert(stored.hasSession() === true, '有过身份（哪怕已过期）→ hasSession=true（不得静默换新身份）');
+
+  const repo = new SupabaseHealthRepository(cfg, { fetchImpl: makeFetch([]).fetchImpl, storage: memoryStorage() });
+  assert(repo.hasSession() === false, '仓库透传 hasSession');
+  ok('身份状态：有无身份可区分（静默进入 vs 提示登录）');
+}
+
+// 第三方登录授权地址
+{
+  const rest = new SupabaseRest(cfg, { fetchImpl: makeFetch([]).fetchImpl, storage: memoryStorage() });
+  const url = rest.authorizeUrl('google', 'https://app.example.com');
+  assert(url.startsWith('https://demo.supabase.co/auth/v1/authorize?'), 'OAuth 授权地址指向 GoTrue');
+  assert(url.includes('provider=google') && url.includes('redirect_to=https'), '授权地址带 provider 与回跳');
+  ok('第三方登录：授权地址构造正确（回跳令牌仍由 hash 解析接住）');
+}
+
+// 限流（429）必须映射为 rate_limited,而不是笼统的 unknown
+{
+  const { fetchImpl } = makeFetch([
+    { method: 'POST', match: (u) => u.includes('/auth/v1/otp'), status: 429, body: { error_code: 'over_email_send_rate_limit' } },
+  ]);
+  const rest = new SupabaseRest(cfg, { fetchImpl, storage: memoryStorage() });
+  try {
+    await rest.sendMagicLink('me@example.com', 'https://app.example.com');
+    assert(false, '429 应当抛出');
+  } catch (err) {
+    assert(err instanceof SupabaseError && err.kind === 'rate_limited', '429 → rate_limited');
+  }
+  ok('限流：429 映射为 rate_limited（页面据此给出可执行建议）');
+}
+
 // 查询串构造
 {
   const session: SupabaseSession = { accessToken: 'at', refreshToken: 'rt', expiresAt: Date.now() + 3_600_000, userId: UID, email: null };

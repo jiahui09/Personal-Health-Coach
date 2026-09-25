@@ -62,6 +62,10 @@ function toRepositoryError(err: unknown): RepositoryError {
         ? 'auth'
         : err.kind === 'network'
         ? 'network'
+        : err.kind === 'rate_limited'
+        ? 'rate_limited'
+        : err.kind === 'not_implemented'
+        ? 'not_implemented'
         : err.kind === 'conflict'
         ? 'conflict'
         : err.kind === 'not_found'
@@ -139,6 +143,29 @@ export class SupabaseHealthRepository implements HealthRepository {
 
   async signUp(email: string, password: string): Promise<AuthUser> {
     return this.signIn(email, password);
+  }
+
+  hasSession(): boolean {
+    return this.rest.hasSession();
+  }
+
+  /** 一键进入：匿名登录建立会话（自用场景不折腾邮箱）。 */
+  async signInAnonymously(): Promise<AuthUser> {
+    const session = await guard(() => this.rest.signInAnonymously());
+    this.cachedProfile = null;
+    this.emitAuth(session);
+    return { id: session.userId, email: session.email, isDemo: false };
+  }
+
+  /**
+   * 第三方登录：跳转到 provider 授权页；回跳后由构造函数里的 hash 解析接住。
+   * 用于绕开内置邮件的小时限额（前提：该 provider 已在 Supabase 里启用）。
+   */
+  async signInWithProvider(provider: string): Promise<void> {
+    if (typeof window === 'undefined') {
+      throw new RepositoryError('not_implemented', '第三方登录只能在浏览器里发起');
+    }
+    window.location.assign(this.rest.authorizeUrl(provider, window.location.origin));
   }
 
   async signOut(): Promise<void> {

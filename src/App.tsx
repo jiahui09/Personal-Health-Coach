@@ -26,7 +26,7 @@ import { ProfileSheet } from './components/ProfileSheet';
 import { formatAbs } from './domain/format';
 import { validateWeightMeasurement } from './domain/weight';
 import { healthRepository, repositoryKind } from './services/repository';
-import { SignIn } from './components/SignIn';
+import { AuthGate } from './components/AuthGate';
 import { toRepositoryError } from './services/healthRepository';
 import {
   CreateDailyStateInput,
@@ -53,8 +53,16 @@ export default function App() {
   const [todayData, setTodayData] = useState<TodayData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  /** 云端模式且未登录 → 显示登录页（静态本地版永不进入此态）。 */
-  const [needsSignIn, setNeedsSignIn] = useState(false);
+  /**
+   * 云端身份状态：
+   *   ready   —— 已可读写（本机模式也直接是 ready）
+   *   entering—— 首次进入,正在静默建立本机身份（用户只看到一句话）
+   *   setup   —— 静默建立失败（通常是 Supabase 没开匿名登录）→ 才显示提示
+   * 正常自用路径不会出现任何登录界面。
+   */
+  const [authStage, setAuthStage] = useState<'ready' | 'entering' | 'setup'>('ready');
+  /** 静默进入失败的原因码：决定提示怎么修。 */
+  const [authReason, setAuthReason] = useState<string | null>(null);
 
   // Modals
   const [recordSheetOpen, setRecordSheetOpen] = useState(false);
@@ -92,12 +100,14 @@ export default function App() {
       setLoadError(null);
       const today = await healthRepository.getToday();
       setTodayData(today);
-      setNeedsSignIn(false);
+      setAuthStage('ready');
     } catch (err) {
       const error = toRepositoryError(err);
       console.error('Failed to load health diary:', error);
       if (error.code === 'auth' && repositoryKind === 'supabase') {
-        setNeedsSignIn(true);
+        // 有身份但取数失败（令牌失效等）→ 提示；**不静默新建身份**，否则新身份看不到旧数据
+        setAuthReason('auth');
+        setAuthStage('setup');
         return;
       }
       setLoadError(
@@ -110,8 +120,38 @@ export default function App() {
     }
   }, []);
 
+  /**
+   * 启动流程：本机模式下直接取数；云端模式下若本机从未有过身份,静默建立一个匿名身份
+   * （用户不需要看到任何登录界面）。已有身份但失效时不新建,交给 loadData 走提示分支。
+   */
   useEffect(() => {
-    loadData();
+    if (repositoryKind !== 'supabase') {
+      void loadData();
+      return;
+    }
+    if (healthRepository.hasSession()) {
+      void loadData();
+      return;
+    }
+    let cancelled = false;
+    setAuthStage('entering');
+    void (async () => {
+      try {
+        await healthRepository.signInAnonymously();
+        if (!cancelled) await loadData();
+      } catch (err) {
+        const error = toRepositoryError(err);
+        console.error('[App] 静默建立云端身份未成:', error);
+        if (!cancelled) {
+          setAuthReason(error.code);
+          setAuthStage('setup');
+          setIsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [loadData]);
 
   // 云端登录态变化（magic link 回跳建立会话 / 退出）→ 立即重新取数，避免停在登录页
@@ -119,22 +159,58 @@ export default function App() {
     const unsubscribe = healthRepository.onAuthChange((user) => {
       if (user) {
         setIsLoading(true);
-        setNeedsSignIn(false);
         void loadData();
       } else if (repositoryKind === 'supabase') {
         setTodayData(null);
-        setNeedsSignIn(true);
+        setAuthStage('setup');
       }
     });
     return unsubscribe;
   }, [loadData]);
 
-  /** 云端登录：发送 magic link（点击邮件后回跳并建立会话）。 */
-  const handleSendLoginLink = (email: string) =>
-    runMutation(async () => {
+  /** 一键进入（匿名登录）：自用场景不折腾邮箱；数据仍按你的身份隔离在云端。 */
+  const handleAnonymousSignIn = async (): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      await healthRepository.signInAnonymously();
+      setAuthReason(null);
+      setAuthStage('ready');
+      return true;
+    } catch (err) {
+      const error = toRepositoryError(err);
+      console.error('[App] 一键进入未成:', error);
+      setIsLoading(false);
+      showToast(
+        error.code === 'not_implemented'
+          ? '请先在 Supabase 打开 Authentication → Allow anonymous sign-ins'
+          : `一键进入未成（${error.code}）`,
+        false
+      );
+      return false;
+    }
+  };
+
+  /**
+   * 云端登录：发送 magic link（点击邮件后回跳并建立会话）。
+   * 限流（429）单独给出可执行建议 —— Supabase 内置邮件按小时计额。
+   */
+  const handleSendLoginLink = async (email: string): Promise<boolean> => {
+    try {
       await healthRepository.signIn(email, '');
       showToast('登录链接已发出 · 请查收邮件');
-    }, '登录链接未发出');
+      return true;
+    } catch (err) {
+      const error = toRepositoryError(err);
+      console.error('[App] 登录链接未发出:', error);
+      showToast(
+        error.code === 'rate_limited'
+          ? '发信已达小时限额 · 等约一小时,或改用一键进入'
+          : `登录链接未发出（${error.code}）`,
+        false
+      );
+      return false;
+    }
+  };
 
   // Open Quick Record
   const handleOpenRecord = (tab: RecordTab = 'meal') => {
@@ -244,7 +320,19 @@ export default function App() {
     }, '复其初未成');
   };
 
-  if (needsSignIn) {
+  if (authStage === 'entering') {
+    return (
+      <div className="min-h-screen bg-paper flex items-center justify-center text-ink3 font-sans text-xs">
+        <div className="flex items-center gap-2">
+          {/* deslop-ignore-next-line 19 — literal 6px status dot */}
+          <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+          <span>正在建立本机凭据…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (authStage === 'setup') {
     return (
       <div className="min-h-screen text-ink selection:bg-accentsoft selection:text-ink">
         <AnimatePresence>
@@ -260,7 +348,11 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
-        <SignIn onSendLink={handleSendLoginLink} />
+        <AuthGate
+          reason={authReason}
+          onRetry={handleAnonymousSignIn}
+          onSendLink={handleSendLoginLink}
+        />
       </div>
     );
   }

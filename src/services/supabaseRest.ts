@@ -31,7 +31,15 @@ export interface StorageLike {
   removeItem(key: string): void;
 }
 
-export type SupabaseErrorKind = 'auth' | 'network' | 'conflict' | 'not_found' | 'unknown';
+export type SupabaseErrorKind =
+  | 'auth'
+  | 'network'
+  | 'conflict'
+  | 'not_found'
+  | 'rate_limited'
+  /** 服务端能力未开启（如匿名登录被关掉） */
+  | 'not_implemented'
+  | 'unknown';
 
 export class SupabaseError extends Error {
   readonly kind: SupabaseErrorKind;
@@ -54,6 +62,10 @@ export type Query = string;
 function mapStatus(status: number, body: string): SupabaseError {
   if (status === 401 || status === 403) return new SupabaseError('auth', `未登录或会话过期（${status}）`, status);
   if (status === 404) return new SupabaseError('not_found', `记录不存在（404）`, status);
+  if (status === 429 || /rate limit|too many requests/i.test(body)) {
+    // Supabase 内置邮件发送器有小时级限额；这不是应用故障,要让用户看到可执行的建议
+    return new SupabaseError('rate_limited', '发信过于频繁：Supabase 内置邮件已达小时限额', status);
+  }
   if (status === 409 || /duplicate key|unique constraint/i.test(body)) {
     return new SupabaseError('conflict', `冲突：记录已存在（${status}）`, status);
   }
@@ -114,6 +126,12 @@ export class SupabaseRest {
     return this.session;
   }
 
+  /** 本机是否存有会话（可能是过期但可刷新的）。
+   *  用于区分「从未登录 → 可静默建立身份」与「曾有身份但失效 → 不得静默换新身份」。 */
+  hasSession(): boolean {
+    return this.session !== null;
+  }
+
   onAuthChange(listener: (session: SupabaseSession | null) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -163,6 +181,58 @@ export class SupabaseRest {
       body: { email, create_user: true, gotrue_meta_security: {}, options: { email_redirect_to: redirectTo } },
     });
     if (!response.ok) throw mapStatus(response.status, await response.text());
+  }
+
+  /**
+   * 第三方登录（Google / GitHub …）的授权地址。
+   * 不带 code_challenge → GoTrue 走隐式流,回跳时令牌同样落在 hash 里,
+   * 因此可直接复用 completeMagicLink 的解析逻辑,无需额外依赖。
+   */
+  authorizeUrl(provider: string, redirectTo: string): string {
+    const params = new URLSearchParams({ provider, redirect_to: redirectTo });
+    return `${this.config.url}/auth/v1/authorize?${params.toString()}`;
+  }
+
+  /**
+   * 匿名登录：POST /auth/v1/signup（不带邮箱与密码）→ GoTrue 建一个匿名用户并直接返回会话。
+   * 自用场景下比邮箱 magic link 少一步、且不受邮件限额影响。
+   * 前提：Supabase → Authentication 里打开 Allow anonymous sign-ins。
+   */
+  async signInAnonymously(): Promise<SupabaseSession> {
+    const response = await this.request('/auth/v1/signup', {
+      method: 'POST',
+      auth: false,
+      body: { data: {}, gotrue_meta_security: {} },
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      if (/anonymous.*(disabled|not allowed)/i.test(text)) {
+        throw new SupabaseError(
+          'not_implemented',
+          '该 Supabase 项目未开启匿名登录（Authentication → Allow anonymous sign-ins）',
+          response.status
+        );
+      }
+      throw mapStatus(response.status, text);
+    }
+    const data = (text ? JSON.parse(text) : null) as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      user?: { id: string; email?: string | null };
+    } | null;
+    if (!data?.access_token || !data.refresh_token || !data.user?.id) {
+      throw new SupabaseError('unknown', '匿名登录未返回会话');
+    }
+    const session: SupabaseSession = {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresAt: this.now() + (data.expires_in ?? 3600) * 1000,
+      userId: data.user.id,
+      email: data.user.email ?? null,
+    };
+    this.writeSession(session);
+    return session;
   }
 
   /** 解析 magic link 回跳地址中的 hash（隐式流）并保存会话。 */

@@ -158,6 +158,20 @@ export class MockHealthRepository implements HealthRepository {
     return this.signIn(email, password);
   }
 
+  /** 本地模式没有账号体系：不静默成功,直接说明。 */
+  async signInWithProvider(_provider: string): Promise<void> {
+    throw new RepositoryError('not_implemented', '本地模式无需登录（第三方登录仅云端可用）');
+  }
+
+  async signInAnonymously(): Promise<AuthUser> {
+    throw new RepositoryError('not_implemented', '本地模式无需登录（数据直接存在本机）');
+  }
+
+  /** 本地模式没有云端身份。 */
+  hasSession(): boolean {
+    return false;
+  }
+
   async signOut(): Promise<void> {
     try {
       localStorage.removeItem(STORAGE_KEYS.AUTH);
