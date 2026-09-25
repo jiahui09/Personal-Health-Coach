@@ -1,0 +1,14 @@
+{
+  // 仅用于「以 Worker + 静态资源」方式部署时（Cloudflare 新版面板有时给的是 Worker 而非 Pages）。
+  // 以 Pages 方式部署时本文件会被忽略 —— 两边的构建命令都是 npm run build，产物目录都是 dist。
+  //
+  // name 必须与你在 Cloudflare 面板里创建的项目名一致（不一致会部署成另一个 Worker）。
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "personal-health-coach",
+  "compatibility_date": "2026-09-25",
+  "assets": {
+    "directory": "./dist",
+    // 单页应用：未知路径回落 index.html（本应用无子路由,仅作兜底）
+    "not_found_handling": "single-page-application"
+  }
+}

@@ -8,6 +8,30 @@
 
 ---
 
+## 零、用 Cloudflare「Connect Git」部署：先做三件事（否则构建会失败）
+
+我已在仓库里替你处理好其中两件，你需要做的就是**提交并推送**：
+
+| # | 事项 | 现状 |
+|---|---|---|
+| 1 | **提交 `package-lock.json`** | 之前只存在于你本机（未跟踪）。没有它，云端 `npm ci` 直接报错 | 
+| 2 | **删除过期的 `bun.lock`** | 它的包名还是旧的 `react-example`；Cloudflare 会按锁文件**优先选 Bun**，等于把你放到一条没验证过的安装路径上。已删 |
+| 3 | **固定 Node 版本** | `vite@8` 要求 `^20.19.0 || >=22.12.0`。已加 `.nvmrc = 22.12.0`，Cloudflare 会读它（或在面板设 `NODE_VERSION=22.12.0`） |
+
+```bash
+# 在你本机执行（我未替你提交,提交与推送由你掌握）
+git add package-lock.json .nvmrc wrangler.jsonc
+git add -u                      # 记录 bun.lock 的删除与 package.json 的改动
+git commit -m "chore(deploy): npm 锁文件 + Node 版本固定 + Worker assets 配置;移除过期 bun.lock"
+git push origin main
+```
+
+> 顺带提醒：你的 `package.json` 里有 `@opennextjs/cloudflare`（**只用于 Next.js**，本项目是纯 Vite 单页）。
+> 它不会让构建失败，但可能让 Cloudflare 的框架探测误判成 Next.js —— 面板里**务必手动把 preset 选成 None 或 Vite**。
+> 想彻底清掉：`npm uninstall @opennextjs/cloudflare && git add -u && git commit -m "chore: drop next-only dep"`。
+
+---
+
 ## 一、静态版部署（今天就能上，推荐先跑这一步）
 
 ### 1. 本地验证（部署前必做）
@@ -21,28 +45,52 @@ npm run build          # 产物在 dist/
 
 预期：8 行 `ALL ... PASSED`、`tsc` 无输出、`dist/` 生成为静态文件（≈470 KB / gzip ≈150 KB）。
 
-### 2. Cloudflare Pages
+### 2. Cloudflare 面板设置（Connect Git）
+
+**路径 A：Workers & Pages → Create → Pages → Connect to Git（推荐）**
 
 | 配置项 | 值 |
 |---|---|
-| 连接方式 | 连接 Git 仓库（推荐）或 `wrangler pages deploy dist` 直传 |
-| Framework preset | **None**（或 Vite，二者皆可） |
+| Repository / Branch | `jiahui09/Personal-Health-Coach` / `main` |
+| Framework preset | **None**（若下拉里没有 None，选 **Vite**；**不要**选 Next.js） |
 | Build command | `npm run build` |
 | Build output directory | `dist` |
-| Node 版本 | 18 或 20（环境变量 `NODE_VERSION=20`） |
-| 环境变量 | **留空即可**（静态版不需要任何变量） |
+| Root directory | 留空（仓库根就是项目根） |
+| 环境变量 | `NODE_VERSION` = `22.12.0`；`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` **留空** |
+
+> ⚠️ **两个环境变量现在千万不要填**：一旦填了，应用会切到尚未实作的云库壳，页面会显示
+> 「云库（Supabase）既配而后端之法未通」。静态版必须留空。
+
+**路径 B：面板给的是 Worker（新版 UI 有时如此）**
+
+| 配置项 | 值 |
+|---|---|
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy`（仓库已含 `wrangler.jsonc`，`assets.directory = ./dist`） |
+| 环境变量 | `NODE_VERSION` = `22.12.0` |
+
+此时请确认 `wrangler.jsonc` 里的 `name` 与面板创建的项目名一致，否则会部署成另一个 Worker。
+
+> 两条路径都不需要 SPA 回退规则以外的任何服务端代码：产物是纯静态 `dist/`。
 
 > 没有后端、没有路由、没有服务端函数：产物是纯静态 `index.html + assets/`，单页应用无子路由，
 > 因此**不需要** SPA 回退规则，也不需要 Workers/Pages Functions。
 
-### 3. 部署后自查
+### 3. 部署后自查（首次务必逐条过）
 
 1. 打开域名，刊头出现「个人健康手记」与今日干支日期。
 2. 首次进入应为 **体征档 · 未建档**（演示数据只有记录，不含任何人的身高/性别/年龄）。
 3. 点「立档」填 性别 / 出生年 / 身高 / 活动水平 /（可选）腰围 / 目标 → 保存后出现
    体重指数、静息代谢、总消耗、每日热量与蛋白、每周抗阻——即「该减该守该增、吃多少、练几次」。
 4. 记一笔（进食 / 习练 / 体征）各录一次，刷新后数据仍在（localStorage）。
-5. 说明：静态版数据**只在这台设备的这个浏览器里**，清缓存即丢；要跨设备请走第二节。
+5. 浏览器控制台无报错；`Network` 里没有指向 `supabase.co` 的请求（静态版不该有）。
+6. 说明：静态版数据**只在这台设备的这个浏览器里**，清缓存即丢；要跨设备请走第二节。
+
+### 4. 之后每次部署
+
+- 推送到 `main` → 自动生产部署；推送到其他分支 / PR → 自动预览部署（预览域名可单独验证再合并）。
+- 回滚：Cloudflare 面板 → Deployments → 选中上一个成功的部署 → **Rollback**（秒级，无需重新构建）。
+- 自定义域：`Custom domains` 里添加；本应用无服务端,无需调整任何回源设置。
 
 ---
 
