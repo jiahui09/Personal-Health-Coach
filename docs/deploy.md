@@ -123,6 +123,92 @@ npm run build          # 产物在 dist/
 | 页面显示「云库（Supabase）既配而后端之法未通」 | 误填了 `VITE_SUPABASE_*` | 静态版把这两个变量清空后重新部署 |
 | 部署成功但白屏 | 输出目录填错（未指向 `dist`） | Build output directory 设为 `dist` |
 
+## 一·补二、接自定义域（改名称服务器 + Pages 绑定）
+
+> 顺序建议：**先用 `xxx.pages.dev` 验收通过，再接自定义域**。这一步不改变应用代码，
+> 只影响「你用什么网址访问」。
+
+### 0. 需要准备什么（清单）
+
+| # | 需要的东西 | 说明 |
+|---|---|---|
+| 1 | **一个已注册的域名** | 只有这一项要花钱（约 60–100 元/年）；Cloudflare 的 DNS、CDN、证书、Pages 全部免费且不限流量 |
+| 2 | **该域名的注册商登录权限** | 改名称服务器、或加 CNAME，都在**注册商**处操作，不能只在 Cloudflare 面板点 |
+| 3 | **一个已部署成功的 Pages 项目** | 也就是先拿到能打开的 `xxx.pages.dev`（自定义域是叠在它之上的门牌） |
+| 4 | （若域名在 Cloudflare 托管）项目与域名在**同一个 Cloudflare 账号**下 | 跨账号无法绑定；否则只需把域名 Add a site 到同一账号 |
+
+> 如果域名是从 HugeDomains 之类的停放站买的：确认**已过户完成**即可。
+> 注册商的 60 天 Transfer Lock 只限制「转注册商」，**不影响**改名称服务器或加解析记录。
+
+> **备案**：本应用托管在 Cloudflare 的境外节点，**不需要 ICP 备案**；只有把域名指向中国大陆境内服务器时才需要。
+
+### 1. 两条路径，先选一条
+
+| | 路径 A：不动名称服务器（推荐、风险最小） | 路径 B：把 DNS 托管给 Cloudflare |
+|---|---|---|
+| 适合 | 只用一个**子域**（如 `health.example.com`） | 想用**根域**（`example.com`）或要 CF 的 CDN/防护 |
+| 做什么 | 在原 DNS 商加一条 `CNAME → <项目>.pages.dev`，再在 Pages 面板添加该子域 | 先在 CF「Add a site」→ 拿到两台 NS → 去注册商整组替换 → 等激活 → 再在 Pages 添加域名 |
+| 注意 | 根域**不能**用 CNAME（除非 DNS 商支持 ALIAS/ANAME 扁平化） | 激活前必须核对 `MX`/`TXT`，并删除 hugedomains 的停放 `A` 记录（见第 2 节） |
+| 证书 | Cloudflare 自动签发 | 同左，自动签发并续期 |
+| 停机风险 | 几乎为零（原解析不变，只多一条记录） | 极低，但漏了 MX 会立刻断邮箱 |
+
+### 1b. 改名称服务器（在**注册商**处改，不是在 Cloudflare 改）
+
+1. 找到域名注册商：Cloudflare 面板的 `ICANN Lookup` 链接，或直接登录你**购买域名**的那家
+   （若域名来自 HugeDomains / 经销商，就登录它的账户 → `DNS` / `Nameservers`）。
+2. 把名称服务器**整组替换**为 Cloudflare 分配的两台，例如：
+
+   ```
+   添加：mcgrory.ns.cloudflare.com
+   添加：violet.ns.cloudflare.com
+   删除：domain-for-sale.hugedomainsdns.com
+   删除：forsale.hugedomainsdns.com
+   ```
+
+   ⚠️ 每家分配的两台不同，以你自己的面板显示为准；**必须两台都填、旧的都删**。
+3. 保存。生效通常 5 分钟–24 小时（极端 48 小时）；Cloudflare 会发「域名已激活」邮件。
+   在此之前的 NS 变更不会导致停机，但两次查询可能拿到不同的解析结果。
+
+### 2. 改 NS 之前/之后，务必核对 Cloudflare 里的 DNS 记录
+
+Cloudflare 在添加域名时会**自动扫描并导入**原有记录，但有两类必须人工确认：
+
+| 记录 | 为什么重要 | 怎么做 |
+|---|---|---|
+| `MX` / `TXT`（SPF、DKIM、DMARC、验证记录） | 一旦丢失，**该域名的邮箱立刻收不到信** | 核对是否与注册商/DNS 商处的原记录一致；缺了就手工补 |
+| `A` / `AAAA` 指向 hugedomains 停放页的 | 会让人访问到「域名出售」页而不是你的手记 | 删掉这些停放记录，交给下一步的 Pages 自定义域自动接管 |
+
+### 3. 在 Pages 项目里绑定
+
+`Workers & Pages → 你的项目 → Custom domains → Set up a custom domain`
+
+| 你要的网址 | 填什么 | Cloudflare 会做什么 |
+|---|---|---|
+| 子域 `health.example.com` | 填子域 | 自动在 DNS 建 CNAME 指向 `<项目>.pages.dev`，并签发证书 |
+| 根域 `example.com` | 填根域 | 用 CNAME 扁平化到 `<项目>.pages.dev`（托管在 Cloudflare 才支持） |
+
+证书签发通常几分钟内完成；完成后访问 `https://你的域名` 应直接出现手记首页。
+
+### 4. 验收清单
+
+```bash
+dig +short NS 你的域名            # 应只剩 Cloudflare 的两台
+dig +short 你的域名               # 不应再出现 hugedomains 的停放 IP
+curl -sI https://你的域名 | head -3   # 200/304,且带 server: cloudflare
+curl -sI http://你的域名  | head -3   # 301 跳 https
+```
+
+打开页面确认：刊头「个人健康手记」+ 干支日期，首次进入显示「体征档 · 未建档」。
+
+### 5. 已知取舍（如实说明）
+
+- **回滚**：把 NS 改回原注册商的服务器即可（但若域名本身就是从 HugeDomains 买的停放域名，回滚等于回到停放页）。
+- **速度**：Cloudflare 免费版在中国大陆没有节点，境内访问通常绕到香港/日本/新加坡，
+  延迟高于境内 CDN；个人自用可接受，要更快就得换境内托管。
+- **不改 NS 的替代方案**：若你只用子域（如 `health.example.com`），可以**不动名称服务器**，
+  直接在原 DNS 商处加一条 CNAME 指向 `<项目>.pages.dev`（Pages 面板同样添加该自定义域，
+  证书走 Cloudflare 的 DCV 校验）。这样风险最小。
+
 ## 二、云端同步版（Supabase 免费档）
 
 ### 1. 建库
