@@ -16,6 +16,7 @@ export type DataQualityReason =
   | 'weight_deviates_from_rolling_mean'
   | 'insufficient_weight_days'
   | 'nutrition_over_plausible_range'
+  | 'nutrition_too_low'
   | 'insufficient_sleep_nights';
 
 export interface DataQuality {
@@ -40,7 +41,7 @@ export interface BodySummary {
   waistCm: number | null;
   weightKg: number | null;
   bmi: number | null;
-  bmiCategory: 'underweight' | 'normal' | 'overweight' | 'obese_1' | 'obese_2' | null;
+  bmiCategory: 'underweight' | 'normal' | 'overweight' | 'obese_1' | 'obese_2' | 'obese_3' | null;
   waist: { limitCm: number; elevated: boolean } | null;
   rmrKcal: number | null;
   tdeeKcal: number | null;
@@ -52,6 +53,11 @@ export interface NutritionTargets {
   caloriesKcal: number;
   proteinG: number;
   proteinRange: { min: number; max: number };
+  /** 脂肪（g/日）：随体重按 g/kg 区间取中点（区间如实并列）。 */
+  fatG: number;
+  fatRange: { min: number; max: number };
+  /** 碳水（g/日）= 千卡余量（总热量 − 蛋白×4 − 脂×4）÷4，非独立测定值。 */
+  carbG: number;
   kcalFromTdee: number;
   ratio: number;
   /** 是否被安全下限托住（低于下限时如实告知）。 */
@@ -131,12 +137,17 @@ export interface NutritionProgress {
   remaining: number;
   /** 超出目标的量（未超则为 0）。 */
   over: number;
-  status: 'under' | 'met' | 'over';
+  /** no_target = 未立目标（体征档未立）：如实留白，不判达标、不判超额。 */
+  status: 'under' | 'met' | 'over' | 'no_target';
 }
 
 export interface NutritionSummary {
   calories: NutritionProgress;
   protein: NutritionProgress;
+  /** 脂肪：旧记录无值时 consumed 为 0；无目标时 status=no_target 如实留白。 */
+  fat: NutritionProgress;
+  /** 碳水（隐含口径）：consumed 由千卡−蛋白×4−脂×4 反推，非逐项测定。 */
+  carbs: NutritionProgress;
   /** 今日已确认入账的膳数。 */
   mealCount: number;
   quality: DataQuality;

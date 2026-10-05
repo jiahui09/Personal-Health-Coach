@@ -114,6 +114,8 @@ export interface HealthRepository {
   getTodos(since?: string): Promise<TodoItem[]>;
   addTodo(input: CreateTodoInput): Promise<TodoItem>;
   toggleTodo(id: string): Promise<TodoItem>;
+  /** 改预计时长：数字即改，null 即「取消时长」（页面回显「—」）。 */
+  updateTodo(id: string, patch: { estimatedMinutes?: number | null }): Promise<TodoItem>;
   deleteTodo(id: string): Promise<void>;
 
   // ---- Demo data ----

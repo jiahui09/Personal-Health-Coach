@@ -43,15 +43,14 @@ assert(
   `every <h2 lives in SectionHead.tsx (found in: ${headingFiles.join(', ') || 'none'})`
 );
 
+// 自治章节（自带章节头 + 旁批槽）：其一其二同行 + 三通栏;
+// NextMealCard 嵌在营养摄入节内为组块,由组题 .group-head 承担,不占章节头。
 const SECTIONED = [
   'TodayTasks.tsx',
-  'NextMealCard.tsx',
   'NextWorkoutCard.tsx',
-  'BodyOverview.tsx',
-  'RecentSection.tsx',
-  'HowAmIDoing.tsx',
-  'BodyProfile.tsx',
-  'ForecastBand.tsx',
+  'BodySection.tsx',
+  'NutritionSection.tsx',
+  'StatsSection.tsx',
 ];
 for (const f of SECTIONED) {
   const src = comp(f);
@@ -73,8 +72,10 @@ for (const f of componentFiles) {
 }
 
 // --- 3. row pairing in App (cross-column rules must share y) --------------------
+// 新 IA（经批准的重构）：只有其一其二一处配对行(折缝 + 两格 = 3 处落位),
+// 体征/营养/统计为通栏纵列,不再参与行配对;配对等高改由 probe 的行顶/行差断言把守。
 const rowStarts = app.match(/lg:row-start-\d/g) ?? [];
-assert(rowStarts.length >= 6, `App places six cells into paired rows (found ${rowStarts.length} placements)`);
+assert(rowStarts.length >= 3, `App places the paired row explicitly (found ${rowStarts.length} placements)`);
 assert(app.includes('lg:col-start-1'), 'left column is explicitly placed');
 assert(/lg:col-start-\d/.test(app.replace(/lg:col-start-1/g, '')), 'right column is explicitly placed');
 
@@ -102,14 +103,14 @@ assert(
 for (const cls of ['bg-ink', 'bg-accent', 'bg-danger']) {
   assert(meter.includes(cls), `RuleMeter fill tone ${cls} comes from tokens`);
 }
-assert(comp('RecentSection.tsx').includes('RuleMeter'), '近况 carries the intake/goal meters');
+assert(comp('NutritionSection.tsx').includes('RuleMeter'), '营养摄入 carries the two intake meters');
 
 // --- 6. 御批 copy layer ----------------------------------------------------------
 assert(app.includes('知道了 · '), 'success toasts are acknowledged with 知道了 ·');
 assert(comp('NextMealCard.tsx').includes('照准'), 'meal confirmation is 照准');
 assert(comp('RecordSheet.tsx').includes('照准'), 'sheet confirmation is 照准');
 assert(comp('TodayTasks.tsx').includes('掷还'), 'destructive action is 掷还');
-assert(comp('RecentSection.tsx').includes('合议'), 'goal verdicts read 合议 / 未合议');
+assert(comp('StatsSection.tsx').includes('合议'), '履行合议 reads 合议 / 未合议（统计节）');
 
 // --- 7. tokens still exist for the 朱墨 palette ----------------------------------
 for (const name of ['accent', 'accentsoft', 'accentline', 'accentbright', 'seal', 'danger', 'tier2', 'control']) {
@@ -124,12 +125,12 @@ assert(/\.inklist-row\s*\{[^}]*grid-template-columns/.test(css), '名录式条�
 assert(/\.group-head\s*\{/.test(css), '组标题 .group-head 存在');
 
 // 计量条不得由组件自写 3px 轨道（除 RuleMeter 与生活纪事行内条）
-for (const f of ['TodayTasks.tsx', 'BodyOverview.tsx', 'RecentSection.tsx', 'NextWorkoutCard.tsx']) {
+for (const f of ['TodayTasks.tsx', 'BodySection.tsx', 'NutritionSection.tsx', 'StatsSection.tsx', 'NextWorkoutCard.tsx']) {
   assert(!comp(f).includes('h-[3px]'), `${f} 不得自写 3px 轨道`);
 }
 
 // 三级横线：版式骨架不再用 linesoft（表单控件底仍可）
-const skeleton = ['TodayTasks.tsx', 'BodyOverview.tsx', 'HowAmIDoing.tsx', 'RecentSection.tsx', 'NextWorkoutCard.tsx', 'NextMealCard.tsx', 'WeightTrendChart.tsx'];
+const skeleton = ['TodayTasks.tsx', 'BodySection.tsx', 'NutritionSection.tsx', 'StatsSection.tsx', 'NextWorkoutCard.tsx', 'NextMealCard.tsx', 'WeightTrendChart.tsx'];
 for (const f of skeleton) {
   assert(!comp(f).includes('border-linesoft'), `${f} 只用 L2 实线 / L3 点线,不用 linesoft`);
 }

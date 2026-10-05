@@ -25,10 +25,10 @@ import {
   buildNutritionSummary,
   buildTrainingSummary,
   calculateTaskProgress,
-  dailyRepresentatives,
   decideTrainingTarget,
   decideWorkoutMode,
   deriveNutritionTargets,
+  deriveTrainingDayTargets,
   makeDayContext,
   profileCheck,
   sleepSummary,
@@ -91,11 +91,6 @@ export function assembleToday(snapshot: RawSnapshot, now: Date): TodayData {
     activityLevel: profile.activityLevel,
   });
 
-  const nutrition = buildNutritionSummary(
-    todayMeals,
-    targets ? targets.caloriesKcal : 0,
-    targets ? targets.proteinG : 0
-  );
   const sleep = sleepSummary(dailyStates, ctx);
   const tasks = calculateTaskProgress(todayTodos);
 
@@ -123,9 +118,25 @@ export function assembleToday(snapshot: RawSnapshot, now: Date): TodayData {
     targets,
   };
 
-  const nextMeal = scientificDecisionEngine.recommendNextMeal(context);
   const nextWorkout = scientificDecisionEngine.recommendNextWorkout(context);
+
+  // 训练日之标：今日排定有练（或已练毕）才在基准上调——目标与实际之练同源，
+  // 恢复课/休整不占上调（能量成本近无，不虚增今日可食之数）。
+  const trainedToday = !!(todayWorkout && todayWorkout.completed);
+  const sessionPlanned =
+    nextWorkout.sessionType === 'Normal session' || nextWorkout.sessionType === 'Light session';
+  const isTrainingDay = trainedToday || sessionPlanned;
+  const todayTargets = isTrainingDay ? deriveTrainingDayTargets(targets) : targets;
+  context.targets = todayTargets; // 膳食建议与「今日之标」读同一份数
+
+  const nextMeal = scientificDecisionEngine.recommendNextMeal(context);
   const dietQuality = scientificDecisionEngine.assessDietQuality(context);
+  const nutrition = buildNutritionSummary(
+    todayMeals,
+    todayTargets ? todayTargets.caloriesKcal : 0,
+    todayTargets ? todayTargets.proteinG : 0,
+    todayTargets ? { fatG: todayTargets.fatG, carbG: todayTargets.carbG } : undefined
+  );
   const forecast = scientificDecisionEngine.computeWeightForecast({
     latestWeight: weight.latest,
     trendKgPerWeek: weight.trendKgPerWeek,
@@ -135,9 +146,9 @@ export function assembleToday(snapshot: RawSnapshot, now: Date): TodayData {
   });
 
   const flags = [weight.quality, nutrition.quality, sleep.quality];
-  const weightPoints = dailyRepresentatives(weights)
-    .slice(-ctx.last30Keys.length)
-    .map((point) => ({ date: point.dayKey, weight: point.weight }));
+  // 图表序列直接取 weight.summary 已窗口化的近三十日代表值（docs §5）：
+  // 对全史现算再截尾会让稀疏记录带出三十日之外的点，且与云端路径不一致。
+  const weightPoints = weight.series.map((point) => ({ date: point.dayKey, weight: point.weight }));
 
   return {
     date: today,
@@ -170,6 +181,7 @@ export function assembleToday(snapshot: RawSnapshot, now: Date): TodayData {
     missingProfileFields: check.missing,
     body,
     targets,
+    trainingDayTargets: isTrainingDay ? todayTargets : null,
     goalAdvice,
     trainingTarget,
   };

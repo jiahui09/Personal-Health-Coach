@@ -13,4 +13,5 @@ export * from './nutrition';
 export * from './sleep';
 export * from './weight';
 export * from './training';
+export * from './trainingPlan';
 export * from './migrate';

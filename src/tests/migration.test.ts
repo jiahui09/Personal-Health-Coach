@@ -122,4 +122,17 @@ assert(profile.activityLevel === undefined, '未提供的字段留空（不注�
 assert(Object.keys(migrateProfile({})).length === 0, '空对象 → 空档案（未建档,不是「默认人」）');
 assert(INITIAL_USER_PROFILE.heightCm === undefined, '演示档案本身即未建档');
 
+// ---------------- 缺 id 兜底不互相顶掉（同名/同日碰撞回归） ----------------
+const twinTodos = migrateTodos([
+  { title: '同一事', date: '2026-09-25' },
+  { title: '同一事', date: '2026-09-25' },
+]);
+assert(twinTodos[0].id !== twinTodos[1].id, '同名且缺 id 的两条待办 → 兜底 id 不碰撞');
+const twinWeights = migrateWeights([
+  { date: '2026-09-25', weight: 70 },
+  { date: '2026-09-25', weight: 71 },
+]);
+assert(twinWeights[0].id !== twinWeights[1].id, '同日且缺 id 的两条体重 → 兜底 id 不碰撞');
+assert(migrateTodos([{ id: 't1', title: '有 id', date: '2026-09-25' }])[0].id === 't1', '已有 id 原样保留');
+
 console.log('ALL MIGRATION TESTS PASSED.');

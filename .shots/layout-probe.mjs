@@ -146,10 +146,11 @@ for (const [sec, items] of bySec) {
   }
 }
 
-// 行数上限：版面「简洁」的可执行定义
+// 行数上限：版面「简洁」的可执行定义（新 IA:一配对行 + 三通栏;cap = 实测行数 + 余量,
+// 每次改版重测后在此登记,超出即视为通栏塞回了旧的分散小节）
 const LINE_CAPS = {
-  今日之事: 16, 下一膳: 13, 今日之练: 15,
-  身体近况: 8, 今日体感: 6, 体征档: 11, 情景外推: 5, 近况: 9,
+  今日之事: 16, 今日之练: 15,
+  体征: 14, 营养摄入: 26, 统计: 22,
 };
 for (const { sec, n } of d.lines) {
   const cap = LINE_CAPS[sec];
@@ -167,21 +168,22 @@ if (width >= 1024) {
     if (c) { c.tops.push(h.box.t); c.lefts.push(h.box.l); } else clusters.push({ tops: [h.box.t], lefts: [h.box.l] });
   }
   const pairedRows = clusters.filter((c) => c.lefts.length >= 2 && new Set(c.lefts).size >= 2);
-  ok(pairedRows.length >= 3, '三对章节头跨栏成对', `只配出 ${pairedRows.length} 对`);
+  // 新 IA（经批准）:唯一配对行 = 其一今日之事 ↔ 其二今日之练,其余为通栏纵列
+  ok(pairedRows.length >= 1, '配对行章节头跨栏成对', `只配出 ${pairedRows.length} 对`);
   pairedRows.forEach((c, i) => {
     const delta = Math.max(...c.tops) - Math.min(...c.tops);
     ok(delta <= 2, `行${i + 1} 章节头 y 差 ≤2px`, `${Math.min(...c.tops)} vs ${Math.max(...c.tops)} → ${delta}px`);
   });
-  const secTops = d.sections.slice(0, 6).map((s) => s.box.t);
+  const secTops = d.sections.map((s) => s.box.t);
   const sRows = [...new Set(secTops)].sort((a, b) => a - b);
-  ok(sRows.filter((t) => secTops.filter((x) => near(x, t, 6)).length >= 2).length >= 3, '三对 section 顶对齐', JSON.stringify(sRows));
+  ok(sRows.filter((t) => secTops.filter((x) => near(x, t, 6)).length >= 2).length >= 1, '配对行 section 顶对齐', JSON.stringify(sRows));
   const leftL = [...new Set(d.heads.map((h) => h.box.l))].sort((a, b) => a - b);
   ok(leftL.length <= 2, '最多两列标题左缘', JSON.stringify(leftL));
 } else {
   ok(new Set(headTops.map((t) => 0)).size === 1, '移动端结构', '');
   const lefts = [...new Set(d.heads.map((h) => h.box.l))];
-  ok(lefts.length === 1, '移动端 7 个章节头左缘一致', JSON.stringify(lefts));
-  ok(d.heads.length >= 6, '章节头数量 ≥6', String(d.heads.length));
+  ok(lefts.length === 1, '移动端诸章节头左缘一致', JSON.stringify(lefts));
+  ok(d.heads.length >= 5, '章节头数量 ≥5（其一其二 + 三通栏）', String(d.heads.length));
 }
 
 console.log(fails.length ? `\n${fails.length} CHECK(S) FAILED @${width}px` : `\nALL LAYOUT CHECKS PASSED @${width}px`);

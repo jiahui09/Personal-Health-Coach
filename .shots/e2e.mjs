@@ -1,10 +1,12 @@
 /**
+// 注意：运行输出勿重定向入工作区（Vite watch 会对工作区文件写入 full-reload，杀掉运行中页面的弹层）——用管道或写 /tmp。
  * 端到端流程验证（headless chromium + CDP，独立 profile）
  *
  * 主线：未建档 → 页面不显示任何人体数字 → 立档 → 派生 BMI/代谢/目标 → 记录流程照常。
  *   1. 清空档案 → 「体征档 · 未建档」与「下一膳」不出建议
  *   2. 立档（男/1990/175/轻/腰围 84）→ BMI、RMR、TDEE、每日目标、抗阻处方出现
  *   3. 进食：填分子分母 → 入账 → 回执
+ *   3b. 进食：搜库选物 → 按克折算 → items+脂肪随账入册
  *   4. 体征：就寝/起身 → 时长由时刻推得；异常体重二次确认后原样保存
  */
 import { spawn } from 'node:child_process';
@@ -154,6 +156,35 @@ console.log(
   )
 );
 
+// --- 3b. 进食：库选折算入账（搜 → 选 → 合计回填 → 随账入册） -------------
+await ev(clickText('记一笔'));
+await waitFor(`!!document.querySelector('form')`);
+await ev(setInput(`[...document.querySelectorAll('form input[type=text]')][0]`, '鸡胸'));
+await sleep(250);
+console.log('库选建议浮现:', await ev(`document.body.innerText.includes('每 100g')`));
+console.log('点选建议:', await ev(clickText('鸡胸肉 (熟)')));
+await sleep(200);
+console.log(
+  '合计回填约计:',
+  await ev(`[...document.querySelectorAll('form input[type=number]')][0].value`) !== '' &&
+    (await ev(`document.querySelector('form').innerText.includes('已回填约计')`))
+);
+await ev(`document.querySelector('form button[type=submit]').click()`);
+await waitFor(`!document.querySelector('form')`, 5000);
+await sleep(600);
+console.log(
+  '库选之账带明细与脂肪:',
+  await ev(`(() => {
+    const rows = JSON.parse(localStorage.getItem('phc_meals_v3') || '[]');
+    const hit = rows.filter(r => (r.items || []).some(i => i.foodId === 'f-chicken-breast')).pop();
+    if (!hit) return 'no-items-row';
+    const it = hit.items[0];
+    return (it.grams === 120 && it.kcal === 198 && hit.estimatedFatG === 4.3)
+      ? 'ok ' + hit.estimatedCalories + 'kcal fat ' + hit.estimatedFatG
+      : 'mismatch ' + JSON.stringify(it) + ' fat=' + hit.estimatedFatG;
+  })()`)
+);
+
 // --- 4. 体征：时刻推时长 + 异常体重二次确认 ------------------------------
 await ev(clickText('记一笔'));
 await waitFor(`!!document.querySelector('form')`);
@@ -195,7 +226,9 @@ console.log(
     const rows = [...document.querySelectorAll('main .inkrow')];
     const axes = new Map();
     for (const r of rows) {
-      const label = Math.round(r.children[0].getBoundingClientRect().left);
+      // 轴按「章节 + 名列左缘」分组：通栏与半栏行的名列同为 x=202 时并不共轴
+      const sec = r.closest('section')?.querySelector('h2')?.textContent.trim() || '?';
+      const label = sec + '@' + Math.round(r.children[0].getBoundingClientRect().left);
       const mid = Math.round(r.children[1].getBoundingClientRect().left);
       const val = Math.round(r.children[2].getBoundingClientRect().left);
       if (!axes.has(label)) axes.set(label, { mid: new Set(), val: new Set() });

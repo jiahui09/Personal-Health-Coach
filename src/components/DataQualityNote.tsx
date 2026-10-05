@@ -14,14 +14,14 @@ const REASON_CN: Record<
   (detail: Record<string, number>, comparison?: 'above' | 'below') => string
 > = {
   weight_deviates_from_rolling_mean: (d, comparison) =>
-    `今日体重${comparison === 'above' ? '高于' : '低于'}近七日均重 ${formatAbs(
+    `今日体重${comparison === 'above' ? '高于' : '低于'}近七日其余各日之均重 ${formatAbs(
       d.deltaKg
     )} 公斤（越 ${d.thresholdKg} 公斤之限）`,
   insufficient_weight_days: (d) => `体重记录仅 ${d.days ?? 0} 日，暂不足出趋势`,
   nutrition_over_plausible_range: (d) =>
-    d.ratio !== undefined
-      ? `今日所录热量已及目标之 ${toPercent(d.ratio)}%`
-      : `今日所录热量偏低（${d.consumedKcal ?? 0} 千卡）`,
+    `今日所录热量已及目标之 ${toPercent(d.ratio ?? 0)}%`,
+  nutrition_too_low: (d) =>
+    `今日所录热量偏低（${d.consumedKcal ?? 0} 千卡，不足 ${d.minPlausibleKcal ?? 0} 千卡之常度下限）`,
   insufficient_sleep_nights: () => '近七日尚无睡眠记录',
 };
 

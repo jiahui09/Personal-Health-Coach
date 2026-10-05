@@ -97,6 +97,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
+    min-height: 24px; /* WCAG 2.2 触控目标下限,文字链亦然 */
     font-size: 13px;
     line-height: 1.4;
     color: var(--color-ink2);

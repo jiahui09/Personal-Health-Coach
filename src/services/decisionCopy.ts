@@ -30,7 +30,8 @@ export const WORKOUT_REASON_CN: Record<WorkoutReason, string> = {
   short_sleep: '眠时不足',
   moderate_energy: '精力平平',
   moderate_soreness: '酸痛未消',
-  ready: '精力与睡眠俱足',
+  // ready 只意味「已录项皆未越阈」——精力或眠可能未录，不得称「俱足」
+  ready: '已录之体感未见其碍',
 };
 
 export const trainingStateOf = (mode: WorkoutMode): TrainingState => {
@@ -46,10 +47,10 @@ export const trainingStateOf = (mode: WorkoutMode): TrainingState => {
   }
 };
 
-/** 「酸痛 ≥4 或 精力 ≤2（眠不足 6 时亦然）则降为恢复」——阈值直接取自 policy。 */
+/** 阈值取自 policy；分级与 decideWorkoutMode 一致：越阈→恢复，居中/短眠→轻量。 */
 export function describeTrainingPolicy(decision: WorkoutDecision): string {
   const { highSorenessMin, lowEnergyMax, shortSleepHours } = decision.thresholds;
-  return `酸痛 ≥${highSorenessMin} 或 精力 ≤${lowEnergyMax}（眠不足 ${shortSleepHours} 时亦然）则降为恢复`;
+  return `酸痛 ≥${highSorenessMin} 或 精力 ≤${lowEnergyMax} 则降为恢复；眠不足 ${shortSleepHours} 或精力、酸痛居中则降为轻量`;
 }
 
 /** 由原因码拼出「为何如此」的句子；原因码是机器可判的，句子只是它的表述。 */
@@ -74,14 +75,14 @@ export const ACTIVITY_CN: Record<
   { label: string; hint: string }
 > = {
   sedentary: { label: '久坐', hint: '几乎不运动 · PAL 1.2' },
-  light: { label: '轻', hint: '每周 1–2 练 · PAL 1.375' },
-  moderate: { label: '中', hint: '每周 3–4 练 · PAL 1.55' },
-  active: { label: '高', hint: '每周 5–6 练 · PAL 1.725' },
+  light: { label: '轻', hint: '每周 1–3 练 · PAL 1.375' },
+  moderate: { label: '中', hint: '每周 3–5 练 · PAL 1.55' },
+  active: { label: '高', hint: '每周 6–7 练 · PAL 1.725' },
   very_active: { label: '极高', hint: '每日训练或体力工作 · PAL 1.9' },
 };
 
 export const BMI_CATEGORY_CN: Record<
-  'underweight' | 'normal' | 'overweight' | 'obese_1' | 'obese_2',
+  'underweight' | 'normal' | 'overweight' | 'obese_1' | 'obese_2' | 'obese_3',
   string
 > = {
   underweight: '偏瘦',
@@ -89,6 +90,7 @@ export const BMI_CATEGORY_CN: Record<
   overweight: '超重',
   obese_1: '肥胖一度',
   obese_2: '肥胖二度',
+  obese_3: '肥胖三度',
 };
 
 export const DIRECTION_CN: Record<'lose' | 'maintain' | 'gain', string> = {

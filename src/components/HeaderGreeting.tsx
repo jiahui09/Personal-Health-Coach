@@ -1,20 +1,15 @@
 // Masthead (seal + wordmark) and the display greeting. deslop-ignore-file 07 08 33
 import React from 'react';
-import { cnCount } from '../utils/cnCount';
-import type { TaskProgress } from '../domain/types';
 
 interface HeaderGreetingProps {
   displayDate: string;
   timeGreeting: string;
-  /** 与「其一 今日之事」同源：domain/calculateTaskProgress 的结果。 */
-  tasks: TaskProgress;
 }
 
 
 export const HeaderGreeting: React.FC<HeaderGreetingProps> = ({
   displayDate,
   timeGreeting,
-  tasks,
 }) => {
   return (
     <header>
@@ -35,14 +30,6 @@ export const HeaderGreeting: React.FC<HeaderGreetingProps> = ({
           {timeGreeting}
         </h1>
         <div className="mt-4 font-serif text-[16px] text-ink2 tracking-[0.28em]">{displayDate}</div>
-        <div className="mt-2 text-[13.5px] text-ink3">
-          {tasks.total === 0
-            ? '今日未列事。'
-            : `凡${cnCount(tasks.total)}事，已成其${cnCount(tasks.completed)}。`}
-          {tasks.skipped > 0 && (
-            <span className="text-ink4"> （另略过 {tasks.skipped} 事）</span>
-          )}
-        </div>
       </div>
     </header>
   );

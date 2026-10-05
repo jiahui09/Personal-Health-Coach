@@ -28,15 +28,17 @@ const presentationFiles: [string, string][] = [
   ['App.tsx', src('src/App.tsx')],
   ['TodayTasks.tsx', comp('TodayTasks.tsx')],
   ['HeaderGreeting.tsx', comp('HeaderGreeting.tsx')],
-  ['BodyOverview.tsx', comp('BodyOverview.tsx')],
-  ['HowAmIDoing.tsx', comp('HowAmIDoing.tsx')],
-  ['RecentSection.tsx', comp('RecentSection.tsx')],
+  ['BodySection.tsx', comp('BodySection.tsx')],
+  ['NutritionSection.tsx', comp('NutritionSection.tsx')],
+  ['StatsSection.tsx', comp('StatsSection.tsx')],
   ['DataQualityNote.tsx', comp('DataQualityNote.tsx')],
-  ['BodyProfile.tsx', comp('BodyProfile.tsx')],
-  ['ForecastBand.tsx', comp('ForecastBand.tsx')],
   ['ProfileSheet.tsx', comp('ProfileSheet.tsx')],
   ['NextMealCard.tsx', comp('NextMealCard.tsx')],
   ['NextWorkoutCard.tsx', comp('NextWorkoutCard.tsx')],
+  ['RecordSheet.tsx', comp('RecordSheet.tsx')],
+  ['SyncSheet.tsx', comp('SyncSheet.tsx')],
+  ['AuthGate.tsx', comp('AuthGate.tsx')],
+  ['DotScale.tsx', comp('DotScale.tsx')],
 ];
 
 for (const [name, text] of presentationFiles) {
@@ -87,13 +89,13 @@ for (const [file, symbol] of requiredFormulas) {
 }
 
 // 承载统计的组件必须从 domain 取数（计划卡展示的是引擎推荐，不在此列）
+// 刊头只留问候与日期,不承载统计,故不在列。
 const statisticsComponents = [
   'App.tsx',
   'TodayTasks.tsx',
-  'HeaderGreeting.tsx',
-  'BodyOverview.tsx',
-  'HowAmIDoing.tsx',
-  'RecentSection.tsx',
+  'BodySection.tsx',
+  'NutritionSection.tsx',
+  'StatsSection.tsx',
   'DataQualityNote.tsx',
 ];
 for (const name of statisticsComponents) {
@@ -107,28 +109,29 @@ for (const name of statisticsComponents) {
 // --- 4. 单源：任务完成率与体重不得被组件二次统计 -------------------------
 const app = src('src/App.tsx');
 assert(!app.includes('todos.filter((t) => t.completed)'), 'App 不得自行统计任务完成数');
-assert(app.includes('tasks={todayData.tasks}'), '刊头与其一共用同一份 TaskProgress');
-assert(comp('HeaderGreeting.tsx').includes('tasks.completed'), '刊头完成数来自 TaskProgress');
-assert(!comp('BodyOverview.tsx').includes('readingCount={'), '条数不得由页面长度冒充');
+assert(app.includes('tasks={todayData.tasks}'), '今日之事消费同一份 TaskProgress');
+// 刊头状态句按批准删除（今日状况只在今日之事一处）——锁死不回流。
+assert(!comp('HeaderGreeting.tsx').includes('tasks.completed'), '刊头只留问候与日期,不重复今日状况');
+assert(!comp('StatsSection.tsx').includes('readingCount={'), '条数不得由页面长度冒充');
 assert(app.includes('weight={todayData.weight}'), '身体近况消费 WeightSummary');
 
 // --- 5. 计划 / 预测 / 实测分离 ------------------------------------------
 assert(comp('NextMealCard.tsx').includes('未入账'), '下一膳必须声明其为计划、未入账');
 assert(comp('NextWorkoutCard.tsx').includes('估算'), '建议时长必须标注为估算');
 assert(comp('NextWorkoutCard.tsx').includes('describeWorkoutDecision'), '训练判定原因由决策结果生成');
-assert(comp('ForecastBand.tsx').includes('情景外推'), '预测必须标为情景外推');
-assert(comp('ForecastBand.tsx').includes('forecast.withheld'), '数据存疑时预测须可暂阙');
-assert(comp('ForecastBand.tsx').includes('modelVersion'), '预测必须展示模型出处');
+assert(comp('StatsSection.tsx').includes('情景外推'), '预测必须标为情景外推');
+assert(comp('StatsSection.tsx').includes('forecast.withheld'), '数据存疑时预测须可暂阙');
+assert(comp('StatsSection.tsx').includes('modelVersion'), '预测必须展示模型出处');
 
 // --- 6. 御批词表与关键措辞 ----------------------------------------------
 assert(app.includes('知道了 · '), '成功回执冠「知道了 ·」');
 assert(comp('RecordSheet.tsx').includes('照准'), '主确认作「照准」');
 assert(comp('TodayTasks.tsx').includes('掷还'), '删条作「掷还」');
-assert(comp('RecentSection.tsx').includes('掷还'), '误录之膳可掷还');
-assert(comp('RecentSection.tsx').includes('已超'), '超额必须显示「已超」而非「尚余 0」');
-assert(comp('RecentSection.tsx').includes('尚余'), '未达目标显示「尚余」');
-assert(comp('RecentSection.tsx').includes('未合议'), '未达标写作「未合议」');
-assert(comp('BodyOverview.tsx').includes('数据不足'), '样本不足时显示「数据不足」');
+assert(comp('NutritionSection.tsx').includes('掷还'), '误录之膳可掷还');
+assert(comp('NutritionSection.tsx').includes('已超'), '超额必须显示「已超」而非「尚余 0」');
+assert(comp('NutritionSection.tsx').includes('尚余'), '未达目标显示「尚余」');
+assert(comp('StatsSection.tsx').includes('未合议'), '未达标写作「未合议」');
+assert(comp('StatsSection.tsx').includes('数据不足'), '样本不足时显示「数据不足」');
 assert(comp('TodayTasks.tsx').includes('拟 '), '任务用时标为「拟」（计划，非实际）');
 assert(comp('RecordSheet.tsx').includes('实际计时'), '训练时长来源必须可选实际/估算');
 

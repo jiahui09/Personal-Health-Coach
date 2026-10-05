@@ -86,6 +86,8 @@ export class SupabaseRest {
   private readonly now: () => number;
   private session: SupabaseSession | null = null;
   private listeners = new Set<(session: SupabaseSession | null) => void>();
+  /** 进行中的刷新：并发的 getToday 等请求共用同一次,不重复打刷新端点。 */
+  private refreshInflight: Promise<SupabaseSession | null> | null = null;
 
   constructor(config: SupabaseConfig, options: SupabaseRestOptions = {}) {
     this.config = config;
@@ -310,17 +312,38 @@ export class SupabaseRest {
     return user.id ? { id: user.id, email: user.email ?? null } : null;
   }
 
-  /** 刷新令牌；失败即视为未登录。 */
+  /**
+   * 刷新令牌（并发去重：同时到期的多个请求只打一次端点）。
+   * 只有明确的令牌失效（400/401）才注销会话；网关 5xx、限流 429、空响应体等
+   * 瞬时故障保留会话——旧实现对任何非 2xx 都清会话，一次网络抖动就把用户
+   * 静默登出，再读目标时只拿到空页（假「无数据」）。
+   */
   async refresh(): Promise<SupabaseSession | null> {
     if (!this.session) return null;
+    if (this.refreshInflight) return this.refreshInflight;
+    const inflight = this.performRefresh().finally(() => {
+      if (this.refreshInflight === inflight) this.refreshInflight = null;
+    });
+    this.refreshInflight = inflight;
+    return inflight;
+  }
+
+  private async performRefresh(): Promise<SupabaseSession | null> {
+    const current = this.session;
+    if (!current) return null;
     const response = await this.request('/auth/v1/token?grant_type=refresh_token', {
       method: 'POST',
       auth: false,
-      body: { refresh_token: this.session.refreshToken },
+      body: { refresh_token: current.refreshToken },
     });
     if (!response.ok) {
-      this.writeSession(null);
-      return null;
+      if (response.status === 400 || response.status === 401) {
+        // 明确的 invalid_grant：刷新令牌确已失效，止住重试
+        this.writeSession(null);
+        return null;
+      }
+      // 5xx / 429 / 断网等瞬时故障：保留会话（下游若令牌真过期会如实报 auth）
+      return this.session;
     }
     const data = (await response.json().catch(() => null)) as {
       access_token?: string;
@@ -329,17 +352,16 @@ export class SupabaseRest {
       user?: { id: string; email?: string | null };
     } | null;
     if (!data?.access_token || !data.refresh_token) {
-      // 空体/半截响应（代理或网关异常）→ 视为会话失效,而不是把整页打崩
-      this.writeSession(null);
-      return null;
+      // 空体/半截响应（代理或网关异常）→ 不清会话,也不把整页打崩
+      return this.session;
     }
     const session: SupabaseSession = {
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
       // Supabase 总会返回 expires_in；缺失时按 1 小时处理（保守,到期会再刷新）
       expiresAt: this.now() + (data.expires_in ?? 3600) * 1000,
-      userId: data.user?.id ?? this.session.userId,
-      email: data.user?.email ?? this.session.email,
+      userId: data.user?.id ?? current.userId,
+      email: data.user?.email ?? current.email,
     };
     this.writeSession(session);
     return session;

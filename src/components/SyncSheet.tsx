@@ -1,8 +1,9 @@
 // Serif for the sheet title only; bottom sheet rounds only its top edge on mobile.
 // deslop-ignore-file 07 22
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Check, AlertTriangle } from 'lucide-react';
+import { useSheetBehavior } from '../hooks/useSheetBehavior';
 
 interface SyncSheetProps {
   isOpen: boolean;
@@ -27,24 +28,41 @@ export const SyncSheet: React.FC<SyncSheetProps> = ({
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // Esc 阖之、点遮罩阖之、开时锁背景滚动、阖时焦点归位（三弹层共用）
+  const { panelRef, backdropProps } = useSheetBehavior(isOpen, onClose);
+
+  // 每回开启都是干净表单：不带走上一回输了没登上的账号
+  useEffect(() => {
+    if (!isOpen) return;
+    setEmail('');
+    setPassword('');
+    setBusy(false);
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) && password.length >= 6;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40"
+      {...backdropProps}
+    >
       <motion.div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sync-sheet-title"
+        tabIndex={-1}
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 30 }}
-        className="w-full sm:max-w-md bg-paper rounded-t-lg sm:rounded-lg border border-line shadow-md overflow-hidden"
+        /* 版框：与主页同源的外粗内细墨线,不用阴影 */
+        className="w-full sm:max-w-md bg-paper rounded-t-lg sm:rounded-lg border-2 border-ink p-[3px] overflow-hidden flex flex-col max-h-[90vh]"
       >
-        <div className="p-4 sm:p-5 border-b border-line flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {/* deslop-ignore-next-line 19 — literal 6px status dot */}
-            <span className="w-2 h-2 rounded-full bg-accent" />
-            <h3 className="font-serif text-lg font-medium text-ink">同步到我的账号</h3>
-          </div>
+        <div className="flex flex-col min-h-0 flex-1 border border-ink/55 rounded-[5px] overflow-hidden">
+        <div className="px-4 sm:px-5 py-3.5 border-b-2 border-ink flex items-center justify-between">
+          <h3 id="sync-sheet-title" className="font-serif text-lg font-medium text-ink">同步到我的账号</h3>
           <button
             onClick={onClose}
             aria-label="阖之"
@@ -63,7 +81,7 @@ export const SyncSheet: React.FC<SyncSheetProps> = ({
             setBusy(false);
             if (ok) onClose();
           }}
-          className="p-4 sm:p-5 space-y-3.5 text-[13px] font-sans"
+          className="p-4 sm:p-5 overflow-y-auto space-y-3.5 text-[13px] font-sans"
         >
           <p className="text-[12px] text-ink3 leading-relaxed">
             在每台设备上登一次这个账号，各设备就共享同一份记录；登录状态自动续期，日常不用反复登。
@@ -73,7 +91,7 @@ export const SyncSheet: React.FC<SyncSheetProps> = ({
             <p className="flex items-start gap-1.5 text-[12px] text-danger leading-relaxed">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               <span>
-                这台设备目前是本机身份：登录后它将改用账号身份，**本机身份名下已录的内容不会自动合并**
+                这台设备目前是本机身份：登录后改用账号身份，本机身份名下已录的内容不会自动合并
                 （新账号是空的属正常）。建议先登录，再开始记录。
               </span>
             </p>
@@ -90,7 +108,7 @@ export const SyncSheet: React.FC<SyncSheetProps> = ({
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-surface border border-control rounded-lg px-3 py-2 text-sm text-ink focus:border-accent"
+              className="w-full bg-surface border border-control rounded-lg px-3 py-2 text-[16px] text-ink focus:border-accent"
             />
           </div>
 
@@ -105,14 +123,14 @@ export const SyncSheet: React.FC<SyncSheetProps> = ({
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-surface border border-control rounded-lg px-3 py-2 text-sm text-ink focus:border-accent"
+              className="w-full bg-surface border border-control rounded-lg px-3 py-2 text-[16px] text-ink focus:border-accent"
             />
           </div>
 
           <button
             type="submit"
             disabled={!valid || busy}
-            className="btn-primary w-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {busy ? (
               <span>登录中…</span>
@@ -128,6 +146,7 @@ export const SyncSheet: React.FC<SyncSheetProps> = ({
             账号在 Supabase 后台建一次即可：Authentication → Users → Add user（勾选 Auto Confirm）。
           </p>
         </form>
+        </div>
       </motion.div>
     </div>
   );

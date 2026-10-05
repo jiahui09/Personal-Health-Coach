@@ -24,6 +24,8 @@ interface RuleMeterProps {
   /** 判定后缀（如「合议 / 未合议」），与数值同一行。 */
   suffix?: string;
   suffixTone?: 'accent' | 'muted';
+  /** 无实测值（如未录睡眠）：显破折号而不显 0/7,后缀仍留。 */
+  nodata?: boolean;
   className?: string;
 }
 
@@ -38,15 +40,30 @@ export const RuleMeter: React.FC<RuleMeterProps> = ({
   tone = 'ink',
   suffix,
   suffixTone = 'muted',
+  nodata = false,
   className = '',
 }) => {
-  // 无基准则不画条:只留名与破折号,不留空盒子
-  if (!(max > 0)) {
+  // 无基准或无实测值时不画条:只留名与破折号,不留空盒子
+  if (nodata || !(max > 0)) {
     return (
       <div className={`inkrow ${className}`}>
         <span className="text-[12px] text-ink3 tracking-[0.1em] truncate">{label}</span>
         <span aria-hidden="true" />
-        <span className="inkrow-value text-[12px] text-ink3 tabular-nums">—</span>
+        <span className="inkrow-value text-[12px] text-ink3 tabular-nums">
+          —
+          {suffix && (
+            <>
+              {' · '}
+              <span
+                className={
+                  suffixTone === 'accent' ? 'text-accent font-medium' : 'text-ink3 font-normal'
+                }
+              >
+                {suffix}
+              </span>
+            </>
+          )}
+        </span>
       </div>
     );
   }

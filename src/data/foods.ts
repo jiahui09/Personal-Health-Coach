@@ -1,74 +1,133 @@
 /**
- * Food Database & Meal Templates (V3 Curated)
- * 
- * Strict boundary:
- * - Approximately 60 common whole foods.
- * - Accurate macronutrients, dietary fiber, and sodium per typical edible serving.
- * - Meal templates combining whole protein + whole grains/starches + vegetables.
+ * 食物档案库（每 100g 基准）与膳单模板
+ *
+ * 口径：一切换算以每 100g 为基准（每克 = per100 / 100），克数由录入者决定；
+ * 数值为约值，整理自《中国食物成分表（第 6 版）》与 USDA FoodData Central 的公开口径，
+ * 生熟状态写在 name 里。库只在「记一笔」录入时作为可选添加项出现，主页不陈列。
+ *
+ * 严格边界：库内条目只供给录入与膳食质量评估（食物组/纤维），绝不反向生成「已录」事实；
+ * ml 口径按 1:1 折克（乳与饮近似），已在 serving 注明。
  */
 
 import { FoodItem } from '../types/health';
 
 export const COMMON_FOOD_DATABASE: FoodItem[] = [
-  // Protein sources
-  { id: 'f-chicken-breast', name: '鸡胸肉 (熟)', foodGroup: 'protein', serving: '120g', calories: 198, protein: 37, carbs: 0, fat: 4.3, fiber: 0, sodium: 88 },
-  { id: 'f-chicken-thigh', name: '去皮鸡腿肉 (熟)', foodGroup: 'protein', serving: '130g', calories: 232, protein: 32, carbs: 0, fat: 10.8, fiber: 0, sodium: 110 },
-  { id: 'f-salmon', name: '三文鱼柳 (煎)', foodGroup: 'protein', serving: '130g', calories: 268, protein: 30, carbs: 0, fat: 15.5, fiber: 0, sodium: 75 },
-  { id: 'f-tilapia-cod', name: '鳕鱼 / 龙利鱼柳 (蒸)', foodGroup: 'protein', serving: '140g', calories: 125, protein: 26, carbs: 0, fat: 1.6, fiber: 0, sodium: 120 },
-  { id: 'f-beef-lean', name: '瘦牛肉 (牛里脊)', foodGroup: 'protein', serving: '120g', calories: 205, protein: 32, carbs: 0, fat: 7.8, fiber: 0, sodium: 70 },
-  { id: 'f-shrimp', name: '鲜虾仁 (白灼)', foodGroup: 'protein', serving: '130g', calories: 130, protein: 28, carbs: 1.2, fat: 1.5, fiber: 0, sodium: 190 },
-  { id: 'f-egg-whole', name: '全鸡蛋 (煮)', foodGroup: 'protein', serving: '2个 (100g)', calories: 143, protein: 12.6, carbs: 0.8, fat: 9.5, fiber: 0, sodium: 140 },
-  { id: 'f-egg-white', name: '蛋白液 / 鸡蛋白', foodGroup: 'protein', serving: '100g', calories: 52, protein: 11, carbs: 0.7, fat: 0.2, fiber: 0, sodium: 166 },
-  { id: 'f-tofu-firm', name: '老豆腐 / 北豆腐', foodGroup: 'legume', serving: '150g', calories: 147, protein: 15.2, carbs: 3.8, fat: 8.5, fiber: 2.1, sodium: 15 },
-  { id: 'f-edamame', name: '毛豆仁', foodGroup: 'legume', serving: '100g', calories: 122, protein: 11.9, carbs: 9.9, fat: 5.2, fiber: 5.2, sodium: 6 },
-  { id: 'f-tempeh', name: '天贝 (大豆发酵)', foodGroup: 'legume', serving: '100g', calories: 192, protein: 20.3, carbs: 7.6, fat: 10.8, fiber: 4.8, sodium: 9 },
-  { id: 'f-tuna-canned', name: '水浸金枪鱼罐头', foodGroup: 'protein', serving: '120g', calories: 132, protein: 29, carbs: 0, fat: 1.2, fiber: 0, sodium: 320 },
-  
-  // Whole grains & healthy starches
-  { id: 'f-brown-rice', name: '熟糙米饭', foodGroup: 'grain', serving: '150g', calories: 168, protein: 3.8, carbs: 35.5, fat: 1.4, fiber: 2.4, sodium: 2 },
-  { id: 'f-white-rice', name: '熟白米饭', foodGroup: 'grain', serving: '150g', calories: 195, protein: 4.1, carbs: 42.5, fat: 0.4, fiber: 0.6, sodium: 2 },
-  { id: 'f-quinoa', name: '熟藜麦', foodGroup: 'grain', serving: '150g', calories: 180, protein: 6.6, carbs: 32.0, fat: 2.9, fiber: 4.2, sodium: 10 },
-  { id: 'f-rolled-oats', name: '传统生燕麦片', foodGroup: 'grain', serving: '50g', calories: 190, protein: 6.8, carbs: 34.0, fat: 3.2, fiber: 5.1, sodium: 3 },
-  { id: 'f-sweet-potato', name: '蒸红薯 / 紫薯', foodGroup: 'grain', serving: '180g', calories: 155, protein: 2.8, carbs: 36.0, fat: 0.2, fiber: 5.4, sodium: 70 },
-  { id: 'f-potato-boiled', name: '煮土豆 (带皮)', foodGroup: 'grain', serving: '180g', calories: 156, protein: 3.6, carbs: 35.5, fat: 0.2, fiber: 3.8, sodium: 12 },
-  { id: 'f-corn', name: '甜玉米段', foodGroup: 'grain', serving: '150g', calories: 140, protein: 4.8, carbs: 29.0, fat: 2.0, fiber: 3.6, sodium: 22 },
-  { id: 'f-whole-wheat-bread', name: '全麦面包', foodGroup: 'grain', serving: '2片 (70g)', calories: 175, protein: 7.2, carbs: 31.0, fat: 2.2, fiber: 4.2, sodium: 240 },
-  { id: 'f-buckwheat-noodle', name: '纯荞麦面 (熟)', foodGroup: 'grain', serving: '160g', calories: 160, protein: 5.4, carbs: 34.2, fat: 0.8, fiber: 3.5, sodium: 15 },
-  { id: 'f-lentils', name: '煮小扁豆', foodGroup: 'legume', serving: '150g', calories: 174, protein: 13.5, carbs: 29.8, fat: 0.6, fiber: 11.8, sodium: 4 },
-  { id: 'f-chickpeas', name: '煮鹰嘴豆', foodGroup: 'legume', serving: '140g', calories: 230, protein: 12.4, carbs: 38.0, fat: 3.6, fiber: 10.4, sodium: 14 },
-
-  // Vegetables (high volume, micronutrients, potassium, fiber)
-  { id: 'f-broccoli', name: '清炒/蒸西兰花', foodGroup: 'vegetable', serving: '150g', calories: 52, protein: 4.2, carbs: 10.0, fat: 0.6, fiber: 3.9, sodium: 50 },
-  { id: 'f-spinach', name: '焯水菠菜', foodGroup: 'vegetable', serving: '150g', calories: 35, protein: 4.4, carbs: 5.4, fat: 0.6, fiber: 3.3, sodium: 120 },
-  { id: 'f-pak-choi', name: '清炒小白菜 / 油菜', foodGroup: 'vegetable', serving: '160g', calories: 30, protein: 2.4, carbs: 4.0, fat: 0.8, fiber: 2.2, sodium: 80 },
-  { id: 'f-asparagus', name: '烤芦笋', foodGroup: 'vegetable', serving: '120g', calories: 28, protein: 2.8, carbs: 4.8, fat: 0.3, fiber: 2.5, sodium: 15 },
-  { id: 'f-green-beans', name: '四季豆 / 扁豆', foodGroup: 'vegetable', serving: '120g', calories: 42, protein: 2.2, carbs: 8.4, fat: 0.4, fiber: 3.8, sodium: 8 },
-  { id: 'f-carrot', name: '炖胡萝卜片', foodGroup: 'vegetable', serving: '100g', calories: 41, protein: 0.9, carbs: 9.6, fat: 0.2, fiber: 2.8, sodium: 69 },
-  { id: 'f-bell-pepper', name: '彩椒条', foodGroup: 'vegetable', serving: '120g', calories: 31, protein: 1.2, carbs: 7.2, fat: 0.4, fiber: 2.5, sodium: 5 },
-  { id: 'f-tomato', name: '生西红柿 / 番茄', foodGroup: 'vegetable', serving: '150g', calories: 27, protein: 1.3, carbs: 5.8, fat: 0.3, fiber: 1.8, sodium: 8 },
-  { id: 'f-cucumber', name: '鲜黄瓜', foodGroup: 'vegetable', serving: '150g', calories: 22, protein: 1.0, carbs: 4.8, fat: 0.2, fiber: 1.0, sodium: 3 },
-  { id: 'f-mushroom', name: '口蘑 / 香菇 (炒)', foodGroup: 'vegetable', serving: '120g', calories: 45, protein: 3.6, carbs: 6.8, fat: 1.2, fiber: 3.0, sodium: 40 },
-  { id: 'f-cabbage', name: '手撕圆白菜 / 卷心菜', foodGroup: 'vegetable', serving: '150g', calories: 38, protein: 1.9, carbs: 8.7, fat: 0.2, fiber: 3.8, sodium: 27 },
-
-  // Fruits
-  { id: 'f-banana', name: '中等香蕉', foodGroup: 'fruit', serving: '1根 (115g)', calories: 105, protein: 1.3, carbs: 27.0, fat: 0.3, fiber: 3.1, sodium: 1 },
-  { id: 'f-apple', name: '苹果 (带皮)', foodGroup: 'fruit', serving: '1个 (180g)', calories: 95, protein: 0.5, carbs: 25.0, fat: 0.3, fiber: 4.4, sodium: 2 },
-  { id: 'f-blueberries', name: '新鲜蓝莓', foodGroup: 'fruit', serving: '100g', calories: 57, protein: 0.7, carbs: 14.5, fat: 0.3, fiber: 2.4, sodium: 1 },
-  { id: 'f-orange', name: '橙子', foodGroup: 'fruit', serving: '1个 (140g)', calories: 66, protein: 1.3, carbs: 16.0, fat: 0.2, fiber: 3.4, sodium: 1 },
-  { id: 'f-kiwi', name: '猕猴桃 / 奇异果', foodGroup: 'fruit', serving: '1个 (75g)', calories: 46, protein: 0.8, carbs: 11.0, fat: 0.4, fiber: 2.3, sodium: 2 },
-
-  // Dairy & Unsweetened plant milk
-  { id: 'f-milk-skim', name: '低脂牛奶', foodGroup: 'dairy', serving: '250ml', calories: 115, protein: 8.5, carbs: 12.5, fat: 2.5, fiber: 0, sodium: 115 },
-  { id: 'f-greek-yogurt', name: '无糖希腊酸奶', foodGroup: 'dairy', serving: '150g', calories: 105, protein: 16.0, carbs: 5.5, fat: 1.5, fiber: 0, sodium: 55 },
-  { id: 'f-soy-milk', name: '纯无糖豆浆', foodGroup: 'dairy', serving: '250ml', calories: 85, protein: 7.5, carbs: 4.5, fat: 3.8, fiber: 1.2, sodium: 45 },
-  { id: 'f-cottage-cheese', name: '低脂卡特基奶酪', foodGroup: 'dairy', serving: '120g', calories: 98, protein: 14.0, carbs: 3.8, fat: 2.2, fiber: 0, sodium: 380 },
-
-  // Quality fats & Seeds
-  { id: 'f-olive-oil', name: '特级初榨橄榄油', foodGroup: 'fat', serving: '10g (1汤匙)', calories: 88, protein: 0, carbs: 0, fat: 10.0, fiber: 0, sodium: 0 },
-  { id: 'f-almonds', name: '原味巴旦木 / 杏仁', foodGroup: 'fat', serving: '20g', calories: 116, protein: 4.2, carbs: 4.3, fat: 10.0, fiber: 2.5, sodium: 1 },
-  { id: 'f-walnuts', name: '核桃仁', foodGroup: 'fat', serving: '20g', calories: 131, protein: 3.0, carbs: 2.7, fat: 13.0, fiber: 1.4, sodium: 0 },
-  { id: 'f-chia-seeds', name: '奇亚籽', foodGroup: 'fat', serving: '15g', calories: 73, protein: 2.5, carbs: 6.3, fat: 4.6, fiber: 5.1, sodium: 2 },
-  { id: 'f-avocado', name: '牛油果', foodGroup: 'fat', serving: '60g (约半个)', calories: 96, protein: 1.2, carbs: 5.1, fat: 9.0, fiber: 4.0, sodium: 4 },
+  { id: 'f-chicken-breast', name: '鸡胸肉 (熟)', foodGroup: 'protein', serving: '120g', defaultGrams: 120, per100: { kcal: 165, proteinG: 30.8, fatG: 3.6, carbG: 0.0, fiberG: 0.0, sodiumMg: 73.3 } },
+  { id: 'f-chicken-thigh', name: '去皮鸡腿肉 (熟)', foodGroup: 'protein', serving: '130g', defaultGrams: 130, per100: { kcal: 178, proteinG: 24.6, fatG: 8.3, carbG: 0.0, fiberG: 0.0, sodiumMg: 84.6 } },
+  { id: 'f-salmon', name: '三文鱼柳 (煎)', foodGroup: 'protein', serving: '130g', defaultGrams: 130, per100: { kcal: 206, proteinG: 23.1, fatG: 11.9, carbG: 0.0, fiberG: 0.0, sodiumMg: 57.7 } },
+  { id: 'f-tilapia-cod', name: '鳕鱼 / 龙利鱼柳 (蒸)', foodGroup: 'protein', serving: '140g', defaultGrams: 140, per100: { kcal: 89, proteinG: 18.6, fatG: 1.1, carbG: 0.0, fiberG: 0.0, sodiumMg: 85.7 } },
+  { id: 'f-beef-lean', name: '瘦牛肉 (牛里脊)', foodGroup: 'protein', serving: '120g', defaultGrams: 120, per100: { kcal: 171, proteinG: 26.7, fatG: 6.5, carbG: 0.0, fiberG: 0.0, sodiumMg: 58.3 } },
+  { id: 'f-shrimp', name: '鲜虾仁 (白灼)', foodGroup: 'protein', serving: '130g', defaultGrams: 130, per100: { kcal: 100, proteinG: 21.5, fatG: 1.2, carbG: 0.9, fiberG: 0.0, sodiumMg: 146.2 } },
+  { id: 'f-egg-whole', name: '全鸡蛋 (煮)', foodGroup: 'protein', serving: '2个 (100g)', defaultGrams: 100, per100: { kcal: 143, proteinG: 12.6, fatG: 9.5, carbG: 0.8, fiberG: 0.0, sodiumMg: 140.0 } },
+  { id: 'f-egg-white', name: '蛋白液 / 鸡蛋白', foodGroup: 'protein', serving: '100g', defaultGrams: 100, per100: { kcal: 52, proteinG: 11.0, fatG: 0.2, carbG: 0.7, fiberG: 0.0, sodiumMg: 166.0 } },
+  { id: 'f-tofu-firm', name: '老豆腐 / 北豆腐', foodGroup: 'legume', serving: '150g', defaultGrams: 150, per100: { kcal: 98, proteinG: 10.1, fatG: 5.7, carbG: 2.5, fiberG: 1.4, sodiumMg: 10.0 } },
+  { id: 'f-edamame', name: '毛豆仁', foodGroup: 'legume', serving: '100g', defaultGrams: 100, per100: { kcal: 122, proteinG: 11.9, fatG: 5.2, carbG: 9.9, fiberG: 5.2, sodiumMg: 6.0 } },
+  { id: 'f-tempeh', name: '天贝 (大豆发酵)', foodGroup: 'legume', serving: '100g', defaultGrams: 100, per100: { kcal: 192, proteinG: 20.3, fatG: 10.8, carbG: 7.6, fiberG: 4.8, sodiumMg: 9.0 } },
+  { id: 'f-tuna-canned', name: '水浸金枪鱼罐头', foodGroup: 'protein', serving: '120g', defaultGrams: 120, per100: { kcal: 110, proteinG: 24.2, fatG: 1.0, carbG: 0.0, fiberG: 0.0, sodiumMg: 266.7 } },
+  { id: 'f-brown-rice', name: '熟糙米饭', foodGroup: 'grain', serving: '150g', defaultGrams: 150, per100: { kcal: 112, proteinG: 2.5, fatG: 0.9, carbG: 23.7, fiberG: 1.6, sodiumMg: 1.3 } },
+  { id: 'f-white-rice', name: '熟白米饭', foodGroup: 'grain', serving: '150g', defaultGrams: 150, per100: { kcal: 130, proteinG: 2.7, fatG: 0.3, carbG: 28.3, fiberG: 0.4, sodiumMg: 1.3 } },
+  { id: 'f-quinoa', name: '熟藜麦', foodGroup: 'grain', serving: '150g', defaultGrams: 150, per100: { kcal: 120, proteinG: 4.4, fatG: 1.9, carbG: 21.3, fiberG: 2.8, sodiumMg: 6.7 } },
+  { id: 'f-rolled-oats', name: '传统生燕麦片', foodGroup: 'grain', serving: '50g', defaultGrams: 50, per100: { kcal: 380, proteinG: 13.6, fatG: 6.4, carbG: 68.0, fiberG: 10.2, sodiumMg: 6.0 } },
+  { id: 'f-sweet-potato', name: '蒸红薯 / 紫薯', foodGroup: 'grain', serving: '180g', defaultGrams: 180, per100: { kcal: 86, proteinG: 1.6, fatG: 0.1, carbG: 20.0, fiberG: 3.0, sodiumMg: 38.9 } },
+  { id: 'f-potato-boiled', name: '煮土豆 (带皮)', foodGroup: 'grain', serving: '180g', defaultGrams: 180, per100: { kcal: 87, proteinG: 2.0, fatG: 0.1, carbG: 19.7, fiberG: 2.1, sodiumMg: 6.7 } },
+  { id: 'f-corn', name: '甜玉米段', foodGroup: 'grain', serving: '150g', defaultGrams: 150, per100: { kcal: 93, proteinG: 3.2, fatG: 1.3, carbG: 19.3, fiberG: 2.4, sodiumMg: 14.7 } },
+  { id: 'f-whole-wheat-bread', name: '全麦面包', foodGroup: 'grain', serving: '2片 (70g)', defaultGrams: 70, per100: { kcal: 250, proteinG: 10.3, fatG: 3.1, carbG: 44.3, fiberG: 6.0, sodiumMg: 342.9 } },
+  { id: 'f-buckwheat-noodle', name: '纯荞麦面 (熟)', foodGroup: 'grain', serving: '160g', defaultGrams: 160, per100: { kcal: 100, proteinG: 3.4, fatG: 0.5, carbG: 21.4, fiberG: 2.2, sodiumMg: 9.4 } },
+  { id: 'f-lentils', name: '煮小扁豆', foodGroup: 'legume', serving: '150g', defaultGrams: 150, per100: { kcal: 116, proteinG: 9.0, fatG: 0.4, carbG: 19.9, fiberG: 7.9, sodiumMg: 2.7 } },
+  { id: 'f-chickpeas', name: '煮鹰嘴豆', foodGroup: 'legume', serving: '140g', defaultGrams: 140, per100: { kcal: 164, proteinG: 8.9, fatG: 2.6, carbG: 27.1, fiberG: 7.4, sodiumMg: 10.0 } },
+  { id: 'f-broccoli', name: '清炒/蒸西兰花', foodGroup: 'vegetable', serving: '150g', defaultGrams: 150, per100: { kcal: 35, proteinG: 2.8, fatG: 0.4, carbG: 6.7, fiberG: 2.6, sodiumMg: 33.3 } },
+  { id: 'f-spinach', name: '焯水菠菜', foodGroup: 'vegetable', serving: '150g', defaultGrams: 150, per100: { kcal: 23, proteinG: 2.9, fatG: 0.4, carbG: 3.6, fiberG: 2.2, sodiumMg: 80.0 } },
+  { id: 'f-pak-choi', name: '清炒小白菜 / 油菜', foodGroup: 'vegetable', serving: '160g', defaultGrams: 160, per100: { kcal: 19, proteinG: 1.5, fatG: 0.5, carbG: 2.5, fiberG: 1.4, sodiumMg: 50.0 } },
+  { id: 'f-asparagus', name: '烤芦笋', foodGroup: 'vegetable', serving: '120g', defaultGrams: 120, per100: { kcal: 23, proteinG: 2.3, fatG: 0.2, carbG: 4.0, fiberG: 2.1, sodiumMg: 12.5 } },
+  { id: 'f-green-beans', name: '四季豆 / 扁豆', foodGroup: 'vegetable', serving: '120g', defaultGrams: 120, per100: { kcal: 35, proteinG: 1.8, fatG: 0.3, carbG: 7.0, fiberG: 3.2, sodiumMg: 6.7 } },
+  { id: 'f-carrot', name: '炖胡萝卜片', foodGroup: 'vegetable', serving: '100g', defaultGrams: 100, per100: { kcal: 41, proteinG: 0.9, fatG: 0.2, carbG: 9.6, fiberG: 2.8, sodiumMg: 69.0 } },
+  { id: 'f-bell-pepper', name: '彩椒条', foodGroup: 'vegetable', serving: '120g', defaultGrams: 120, per100: { kcal: 26, proteinG: 1.0, fatG: 0.3, carbG: 6.0, fiberG: 2.1, sodiumMg: 4.2 } },
+  { id: 'f-tomato', name: '生西红柿 / 番茄', foodGroup: 'vegetable', serving: '150g', defaultGrams: 150, per100: { kcal: 18, proteinG: 0.9, fatG: 0.2, carbG: 3.9, fiberG: 1.2, sodiumMg: 5.3 } },
+  { id: 'f-cucumber', name: '鲜黄瓜', foodGroup: 'vegetable', serving: '150g', defaultGrams: 150, per100: { kcal: 15, proteinG: 0.7, fatG: 0.1, carbG: 3.2, fiberG: 0.7, sodiumMg: 2.0 } },
+  { id: 'f-mushroom', name: '口蘑 / 香菇 (炒)', foodGroup: 'vegetable', serving: '120g', defaultGrams: 120, per100: { kcal: 38, proteinG: 3.0, fatG: 1.0, carbG: 5.7, fiberG: 2.5, sodiumMg: 33.3 } },
+  { id: 'f-cabbage', name: '手撕圆白菜 / 卷心菜', foodGroup: 'vegetable', serving: '150g', defaultGrams: 150, per100: { kcal: 25, proteinG: 1.3, fatG: 0.1, carbG: 5.8, fiberG: 2.5, sodiumMg: 18.0 } },
+  { id: 'f-banana', name: '中等香蕉', foodGroup: 'fruit', serving: '1根 (115g)', defaultGrams: 115, per100: { kcal: 91, proteinG: 1.1, fatG: 0.3, carbG: 23.5, fiberG: 2.7, sodiumMg: 0.9 } },
+  { id: 'f-apple', name: '苹果 (带皮)', foodGroup: 'fruit', serving: '1个 (180g)', defaultGrams: 180, per100: { kcal: 53, proteinG: 0.3, fatG: 0.2, carbG: 13.9, fiberG: 2.4, sodiumMg: 1.1 } },
+  { id: 'f-blueberries', name: '新鲜蓝莓', foodGroup: 'fruit', serving: '100g', defaultGrams: 100, per100: { kcal: 57, proteinG: 0.7, fatG: 0.3, carbG: 14.5, fiberG: 2.4, sodiumMg: 1.0 } },
+  { id: 'f-orange', name: '橙子', foodGroup: 'fruit', serving: '1个 (140g)', defaultGrams: 140, per100: { kcal: 47, proteinG: 0.9, fatG: 0.1, carbG: 11.4, fiberG: 2.4, sodiumMg: 0.7 } },
+  { id: 'f-kiwi', name: '猕猴桃 / 奇异果', foodGroup: 'fruit', serving: '1个 (75g)', defaultGrams: 75, per100: { kcal: 61, proteinG: 1.1, fatG: 0.5, carbG: 14.7, fiberG: 3.1, sodiumMg: 2.7 } },
+  { id: 'f-milk-skim', name: '低脂牛奶', foodGroup: 'dairy', serving: '250ml', defaultGrams: 250, per100: { kcal: 46, proteinG: 3.4, fatG: 1.0, carbG: 5.0, fiberG: 0.0, sodiumMg: 46.0 } },
+  { id: 'f-greek-yogurt', name: '无糖希腊酸奶', foodGroup: 'dairy', serving: '150g', defaultGrams: 150, per100: { kcal: 70, proteinG: 10.7, fatG: 1.0, carbG: 3.7, fiberG: 0.0, sodiumMg: 36.7 } },
+  { id: 'f-soy-milk', name: '纯无糖豆浆', foodGroup: 'dairy', serving: '250ml', defaultGrams: 250, per100: { kcal: 34, proteinG: 3.0, fatG: 1.5, carbG: 1.8, fiberG: 0.5, sodiumMg: 18.0 } },
+  { id: 'f-cottage-cheese', name: '低脂卡特基奶酪', foodGroup: 'dairy', serving: '120g', defaultGrams: 120, per100: { kcal: 82, proteinG: 11.7, fatG: 1.8, carbG: 3.2, fiberG: 0.0, sodiumMg: 316.7 } },
+  { id: 'f-olive-oil', name: '特级初榨橄榄油', foodGroup: 'fat', serving: '10g (1汤匙)', defaultGrams: 10, per100: { kcal: 880, proteinG: 0.0, fatG: 100.0, carbG: 0.0, fiberG: 0.0, sodiumMg: 0.0 } },
+  { id: 'f-almonds', name: '原味巴旦木 / 杏仁', foodGroup: 'fat', serving: '20g', defaultGrams: 20, per100: { kcal: 580, proteinG: 21.0, fatG: 50.0, carbG: 21.5, fiberG: 12.5, sodiumMg: 5.0 } },
+  { id: 'f-walnuts', name: '核桃仁', foodGroup: 'fat', serving: '20g', defaultGrams: 20, per100: { kcal: 655, proteinG: 15.0, fatG: 65.0, carbG: 13.5, fiberG: 7.0, sodiumMg: 0.0 } },
+  { id: 'f-chia-seeds', name: '奇亚籽', foodGroup: 'fat', serving: '15g', defaultGrams: 15, per100: { kcal: 487, proteinG: 16.7, fatG: 30.7, carbG: 42.0, fiberG: 34.0, sodiumMg: 13.3 } },
+  { id: 'f-avocado', name: '牛油果', foodGroup: 'fat', serving: '60g (约半个)', defaultGrams: 60, per100: { kcal: 160, proteinG: 2.0, fatG: 15.0, carbG: 8.5, fiberG: 6.7, sodiumMg: 6.7 } },
+  // —— 新增批次（每 100g 基准；与上表同 id 者已略去） ——
+  { id: 'f-white-bread', name: '白吐司 (方片)', foodGroup: 'grain', serving: '2片 (70g)', defaultGrams: 70, per100: { kcal: 266, proteinG: 9.4, fatG: 3.3, carbG: 49.0, fiberG: 2.4, sodiumMg: 490 } },
+  { id: 'f-noodles-boiled', name: '熟面条 (水煮小麦面)', foodGroup: 'grain', serving: '200g', defaultGrams: 200, per100: { kcal: 138, proteinG: 4.5, fatG: 0.6, carbG: 28.0, fiberG: 1.3, sodiumMg: 5 } },
+  { id: 'f-rice-noodles', name: '熟米粉 (河粉/米线)', foodGroup: 'grain', serving: '200g', defaultGrams: 200, per100: { kcal: 109, proteinG: 0.8, fatG: 0.3, carbG: 25.0, fiberG: 0.4, sodiumMg: 5 } },
+  { id: 'f-mantou', name: '馒头 (中等)', foodGroup: 'grain', serving: '1个 (100g)', defaultGrams: 100, per100: { kcal: 223, proteinG: 7.0, fatG: 1.1, carbG: 47.0, fiberG: 1.3, sodiumMg: 165 } },
+  { id: 'f-rice-congee', name: '白米粥', foodGroup: 'grain', serving: '1碗 (300g)', defaultGrams: 300, per100: { kcal: 46, proteinG: 1.1, fatG: 0.3, carbG: 9.9, fiberG: 0.1, sodiumMg: 2 } },
+  { id: 'f-millet-congee', name: '小米粥', foodGroup: 'grain', serving: '1碗 (300g)', defaultGrams: 300, per100: { kcal: 46, proteinG: 1.4, fatG: 0.7, carbG: 8.4, fiberG: 0.3, sodiumMg: 4 } },
+  { id: 'f-oats-porridge', name: '燕麦粥 (煮)', foodGroup: 'grain', serving: '1碗 (300g)', defaultGrams: 300, per100: { kcal: 63, proteinG: 2.5, fatG: 1.4, carbG: 11.0, fiberG: 0.8, sodiumMg: 4 } },
+  { id: 'f-multigrain-rice', name: '杂粮饭 (熟)', foodGroup: 'grain', serving: '150g', defaultGrams: 150, per100: { kcal: 124, proteinG: 2.7, fatG: 1.1, carbG: 26.0, fiberG: 1.6, sodiumMg: 3 } },
+  { id: 'f-jiaozi-pork', name: '猪肉水饺 (煮)', foodGroup: 'grain', serving: '10个 (200g)', defaultGrams: 200, per100: { kcal: 218, proteinG: 8.0, fatG: 10.0, carbG: 24.0, fiberG: 1.4, sodiumMg: 420 } },
+  { id: 'f-egg-fried-rice', name: '蛋炒饭', foodGroup: 'grain', serving: '1盘 (250g)', defaultGrams: 250, per100: { kcal: 165, proteinG: 5.0, fatG: 5.6, carbG: 23.0, fiberG: 0.7, sodiumMg: 380 } },
+  { id: 'f-bun-whole-wheat', name: '全麦馒头', foodGroup: 'grain', serving: '1个 (100g)', defaultGrams: 100, per100: { kcal: 220, proteinG: 7.5, fatG: 1.5, carbG: 44.0, fiberG: 3.2, sodiumMg: 170 } },
+  { id: 'f-pork-lean', name: '瘦猪肉 (里脊)', foodGroup: 'protein', serving: '100g', defaultGrams: 100, per100: { kcal: 155, proteinG: 20.3, fatG: 7.9, carbG: 0.7, fiberG: 0, sodiumMg: 55 } },
+  { id: 'f-pork-belly-braised', name: '红烧五花肉', foodGroup: 'protein', serving: '100g', defaultGrams: 100, per100: { kcal: 380, proteinG: 10.0, fatG: 36.0, carbG: 8.0, fiberG: 0, sodiumMg: 350 } },
+  { id: 'f-beef-brisket', name: '炖牛腩', foodGroup: 'protein', serving: '100g', defaultGrams: 100, per100: { kcal: 250, proteinG: 17.0, fatG: 19.0, carbG: 3.0, fiberG: 0, sodiumMg: 60 } },
+  { id: 'f-lamb-lean', name: '瘦羊肉', foodGroup: 'protein', serving: '100g', defaultGrams: 100, per100: { kcal: 118, proteinG: 20.5, fatG: 3.9, carbG: 0.2, fiberG: 0, sodiumMg: 60 } },
+  { id: 'f-chicken-wing', name: '鸡翅中 (烤)', foodGroup: 'protein', serving: '2个 (100g)', defaultGrams: 100, per100: { kcal: 190, proteinG: 17.4, fatG: 12.5, carbG: 0.5, fiberG: 0, sodiumMg: 90 } },
+  { id: 'f-duck-breast', name: '鸭胸肉 (去皮熟)', foodGroup: 'protein', serving: '100g', defaultGrams: 100, per100: { kcal: 135, proteinG: 23.5, fatG: 4.0, carbG: 0, fiberG: 0, sodiumMg: 75 } },
+  { id: 'f-sausage-ham', name: '火腿肠', foodGroup: 'protein', serving: '1根 (50g)', defaultGrams: 50, per100: { kcal: 212, proteinG: 14.0, fatG: 16.0, carbG: 0, fiberG: 0, sodiumMg: 800 } },
+  { id: 'f-ham-slice', name: '火腿片 (熟)', foodGroup: 'protein', serving: '2片 (50g)', defaultGrams: 50, per100: { kcal: 145, proteinG: 15.5, fatG: 8.5, carbG: 1.5, fiberG: 0, sodiumMg: 980 } },
+  { id: 'f-pork-liver', name: '猪肝 (卤)', foodGroup: 'protein', serving: '100g', defaultGrams: 100, per100: { kcal: 129, proteinG: 19.3, fatG: 4.6, carbG: 3.5, fiberG: 0, sodiumMg: 80 } },
+  { id: 'f-yellow-croaker', name: '小黄鱼 (煎)', foodGroup: 'protein', serving: '1条 (100g)', defaultGrams: 100, per100: { kcal: 130, proteinG: 18.0, fatG: 6.0, carbG: 0.5, fiberG: 0, sodiumMg: 65 } },
+  { id: 'f-pomfret', name: '鲅鱼 (煎)', foodGroup: 'protein', serving: '100g', defaultGrams: 100, per100: { kcal: 127, proteinG: 18.5, fatG: 5.6, carbG: 0, fiberG: 0, sodiumMg: 60 } },
+  { id: 'f-belt-fish', name: '带鱼 (煎)', foodGroup: 'protein', serving: '100g', defaultGrams: 100, per100: { kcal: 127, proteinG: 17.7, fatG: 5.7, carbG: 0.1, fiberG: 0, sodiumMg: 55 } },
+  { id: 'f-crab', name: '梭子蟹 (蒸)', foodGroup: 'protein', serving: '100g (可食部)', defaultGrams: 100, per100: { kcal: 95, proteinG: 16.5, fatG: 2.6, carbG: 0, fiberG: 0, sodiumMg: 150 } },
+  { id: 'f-clam', name: '花蛤 (煮)', foodGroup: 'protein', serving: '100g (可食部)', defaultGrams: 100, per100: { kcal: 46, proteinG: 7.7, fatG: 0.6, carbG: 1.5, fiberG: 0, sodiumMg: 140 } },
+  { id: 'f-squid', name: '鱿鱼 (炒)', foodGroup: 'protein', serving: '100g', defaultGrams: 100, per100: { kcal: 92, proteinG: 15.6, fatG: 1.6, carbG: 1.5, fiberG: 0, sodiumMg: 100 } },
+  { id: 'f-milk-whole', name: '全脂牛奶', foodGroup: 'dairy', serving: '1盒 (250g)', defaultGrams: 250, per100: { kcal: 61, proteinG: 3.2, fatG: 3.3, carbG: 4.8, fiberG: 0, sodiumMg: 40 } },
+  { id: 'f-yogurt-plain', name: '原味酸奶 (无糖)', foodGroup: 'dairy', serving: '1杯 (150g)', defaultGrams: 150, per100: { kcal: 72, proteinG: 3.5, fatG: 2.7, carbG: 9.3, fiberG: 0, sodiumMg: 46 } },
+  { id: 'f-soy-milk-unsweet', name: '无糖豆浆', foodGroup: 'legume', serving: '1杯 (250g)', defaultGrams: 250, per100: { kcal: 31, proteinG: 3.0, fatG: 1.6, carbG: 1.2, fiberG: 1.1, sodiumMg: 35 } },
+  { id: 'f-soy-milk-sweet', name: '甜豆浆', foodGroup: 'legume', serving: '1杯 (250g)', defaultGrams: 250, per100: { kcal: 55, proteinG: 2.1, fatG: 1.9, carbG: 7.5, fiberG: 1.0, sodiumMg: 40 } },
+  { id: 'f-tofu-dried', name: '豆腐干', foodGroup: 'legume', serving: '100g', defaultGrams: 100, per100: { kcal: 140, proteinG: 14.8, fatG: 7.4, carbG: 5.5, fiberG: 0.8, sodiumMg: 350 } },
+  { id: 'f-cheddar', name: '切达奶酪', foodGroup: 'dairy', serving: '2片 (40g)', defaultGrams: 40, per100: { kcal: 403, proteinG: 24.9, fatG: 33.1, carbG: 1.3, fiberG: 0, sodiumMg: 621 } },
+  { id: 'f-red-bean-cooked', name: '煮红豆', foodGroup: 'legume', serving: '100g', defaultGrams: 100, per100: { kcal: 127, proteinG: 7.5, fatG: 0.5, carbG: 27.6, fiberG: 7.7, sodiumMg: 8 } },
+  { id: 'f-lettuce', name: '生菜', foodGroup: 'vegetable', serving: '100g', defaultGrams: 100, per100: { kcal: 15, proteinG: 1.4, fatG: 0.2, carbG: 2.9, fiberG: 1.3, sodiumMg: 28 } },
+  { id: 'f-eggplant-steamed', name: '清蒸茄子', foodGroup: 'vegetable', serving: '150g', defaultGrams: 150, per100: { kcal: 25, proteinG: 1.1, fatG: 0.2, carbG: 5.4, fiberG: 1.4, sodiumMg: 5 } },
+  { id: 'f-cauliflower', name: '菜花 (焯)', foodGroup: 'vegetable', serving: '150g', defaultGrams: 150, per100: { kcal: 20, proteinG: 1.8, fatG: 0.2, carbG: 4.0, fiberG: 1.8, sodiumMg: 30 } },
+  { id: 'f-winter-melon', name: '冬瓜 (炒)', foodGroup: 'vegetable', serving: '150g', defaultGrams: 150, per100: { kcal: 12, proteinG: 0.4, fatG: 0.1, carbG: 2.6, fiberG: 0.7, sodiumMg: 40 } },
+  { id: 'f-celery', name: '西芹 (焯)', foodGroup: 'vegetable', serving: '150g', defaultGrams: 150, per100: { kcal: 14, proteinG: 0.9, fatG: 0.1, carbG: 3.0, fiberG: 1.6, sodiumMg: 80 } },
+  { id: 'f-mung-sprouts', name: '绿豆芽', foodGroup: 'vegetable', serving: '150g', defaultGrams: 150, per100: { kcal: 30, proteinG: 3.0, fatG: 0.1, carbG: 5.9, fiberG: 1.8, sodiumMg: 6 } },
+  { id: 'f-pumpkin', name: '蒸南瓜', foodGroup: 'vegetable', serving: '150g', defaultGrams: 150, per100: { kcal: 26, proteinG: 1.0, fatG: 0.1, carbG: 6.5, fiberG: 0.5, sodiumMg: 1 } },
+  { id: 'f-daikon', name: '白萝卜', foodGroup: 'vegetable', serving: '150g', defaultGrams: 150, per100: { kcal: 18, proteinG: 0.7, fatG: 0.1, carbG: 4.1, fiberG: 1.6, sodiumMg: 60 } },
+  { id: 'f-onion', name: '洋葱', foodGroup: 'vegetable', serving: '100g', defaultGrams: 100, per100: { kcal: 40, proteinG: 1.1, fatG: 0.1, carbG: 9.3, fiberG: 1.7, sodiumMg: 4 } },
+  { id: 'f-pepper-green', name: '青椒', foodGroup: 'vegetable', serving: '100g', defaultGrams: 100, per100: { kcal: 20, proteinG: 0.9, fatG: 0.2, carbG: 4.6, fiberG: 1.7, sodiumMg: 3 } },
+  { id: 'f-blueberry', name: '蓝莓', foodGroup: 'fruit', serving: '1盒 (100g)', defaultGrams: 100, per100: { kcal: 57, proteinG: 0.7, fatG: 0.3, carbG: 14.5, fiberG: 2.4, sodiumMg: 1 } },
+  { id: 'f-strawberry', name: '草莓', foodGroup: 'fruit', serving: '150g', defaultGrams: 150, per100: { kcal: 32, proteinG: 0.7, fatG: 0.3, carbG: 7.7, fiberG: 2.0, sodiumMg: 1 } },
+  { id: 'f-grape', name: '葡萄', foodGroup: 'fruit', serving: '1串 (150g)', defaultGrams: 150, per100: { kcal: 69, proteinG: 0.7, fatG: 0.2, carbG: 18.1, fiberG: 0.9, sodiumMg: 2 } },
+  { id: 'f-pear', name: '梨', foodGroup: 'fruit', serving: '1个 (170g)', defaultGrams: 170, per100: { kcal: 57, proteinG: 0.4, fatG: 0.1, carbG: 15.2, fiberG: 3.1, sodiumMg: 1 } },
+  { id: 'f-mango', name: '芒果', foodGroup: 'fruit', serving: '1个 (150g)', defaultGrams: 150, per100: { kcal: 60, proteinG: 0.8, fatG: 0.4, carbG: 15.0, fiberG: 1.6, sodiumMg: 1 } },
+  { id: 'f-peanut-oil', name: '花生油', foodGroup: 'fat', serving: '1汤匙 (10g)', defaultGrams: 10, per100: { kcal: 899, proteinG: 0, fatG: 100.0, carbG: 0, fiberG: 0, sodiumMg: 0 } },
+  { id: 'f-rapeseed-oil', name: '菜籽油', foodGroup: 'fat', serving: '1汤匙 (10g)', defaultGrams: 10, per100: { kcal: 899, proteinG: 0, fatG: 100.0, carbG: 0, fiberG: 0, sodiumMg: 0 } },
+  { id: 'f-sesame-oil', name: '香油', foodGroup: 'fat', serving: '1茶匙 (5g)', defaultGrams: 5, per100: { kcal: 898, proteinG: 0, fatG: 100.0, carbG: 0, fiberG: 0, sodiumMg: 0 } },
+  { id: 'f-peanut-roasted', name: '花生 (炒)', foodGroup: 'fat', serving: '1把 (25g)', defaultGrams: 25, per100: { kcal: 567, proteinG: 26.2, fatG: 44.3, carbG: 21.7, fiberG: 8.5, sodiumMg: 18 } },
+  { id: 'f-almond', name: '巴旦木', foodGroup: 'fat', serving: '1把 (25g)', defaultGrams: 25, per100: { kcal: 579, proteinG: 21.2, fatG: 49.9, carbG: 21.6, fiberG: 12.5, sodiumMg: 1 } },
+  { id: 'f-walnut', name: '核桃仁', foodGroup: 'fat', serving: '1把 (25g)', defaultGrams: 25, per100: { kcal: 654, proteinG: 15.2, fatG: 65.2, carbG: 13.7, fiberG: 6.7, sodiumMg: 2 } },
+  { id: 'f-cashew', name: '腰果', foodGroup: 'fat', serving: '1把 (25g)', defaultGrams: 25, per100: { kcal: 553, proteinG: 18.2, fatG: 43.9, carbG: 30.2, fiberG: 3.3, sodiumMg: 12 } },
+  { id: 'f-sesame-white', name: '白芝麻', foodGroup: 'fat', serving: '1汤匙 (10g)', defaultGrams: 10, per100: { kcal: 573, proteinG: 17.7, fatG: 49.7, carbG: 23.4, fiberG: 11.8, sodiumMg: 11 } },
+  { id: 'f-raisin', name: '葡萄干', foodGroup: 'fruit', serving: '1小把 (30g)', defaultGrams: 30, per100: { kcal: 303, proteinG: 3.1, fatG: 0.5, carbG: 79.2, fiberG: 3.7, sodiumMg: 11 } },
+  { id: 'f-butter', name: '黄油', foodGroup: 'fat', serving: '1小块 (10g)', defaultGrams: 10, per100: { kcal: 717, proteinG: 0.9, fatG: 81.1, carbG: 0.1, fiberG: 0, sodiumMg: 714 } },
+  { id: 'f-coffee-black', name: '黑咖啡 (无糖)', foodGroup: 'drink', serving: '1杯 (250g)', defaultGrams: 250, per100: { kcal: 2, proteinG: 0.1, fatG: 0, carbG: 0, fiberG: 0, sodiumMg: 2 } },
+  { id: 'f-latte', name: '拿铁 (全脂)', foodGroup: 'drink', serving: '1杯 (250g)', defaultGrams: 250, per100: { kcal: 47, proteinG: 2.6, fatG: 2.0, carbG: 4.4, fiberG: 0, sodiumMg: 30 } },
+  { id: 'f-honey', name: '蜂蜜', foodGroup: 'seasoning', serving: '1勺 (20g)', defaultGrams: 20, per100: { kcal: 304, proteinG: 0.3, fatG: 0, carbG: 82.4, fiberG: 0.2, sodiumMg: 4 } },
+  { id: 'f-sugar-white', name: '白砂糖', foodGroup: 'seasoning', serving: '1勺 (10g)', defaultGrams: 10, per100: { kcal: 400, proteinG: 0, fatG: 0, carbG: 100.0, fiberG: 0, sodiumMg: 0 } },
+  { id: 'f-cola', name: '可乐', foodGroup: 'drink', serving: '1瓶 (330g)', defaultGrams: 330, per100: { kcal: 43, proteinG: 0, fatG: 0, carbG: 10.6, fiberG: 0, sodiumMg: 4 } },
+  { id: 'f-soy-sauce', name: '生抽酱油', foodGroup: 'seasoning', serving: '1勺 (10g)', defaultGrams: 10, per100: { kcal: 53, proteinG: 5.6, fatG: 0.1, carbG: 5.3, fiberG: 0.4, sodiumMg: 5586 } },
+  { id: 'f-oyster-sauce', name: '蚝油', foodGroup: 'seasoning', serving: '1勺 (10g)', defaultGrams: 10, per100: { kcal: 114, proteinG: 2.0, fatG: 0.2, carbG: 27.0, fiberG: 0.3, sodiumMg: 3000 } },
+  { id: 'f-ketchup', name: '番茄酱', foodGroup: 'seasoning', serving: '1勺 (15g)', defaultGrams: 15, per100: { kcal: 101, proteinG: 1.0, fatG: 0.1, carbG: 25.8, fiberG: 0.4, sodiumMg: 907 } },
+  { id: 'f-mayo', name: '蛋黄酱', foodGroup: 'seasoning', serving: '1勺 (15g)', defaultGrams: 15, per100: { kcal: 680, proteinG: 1.0, fatG: 75.0, carbG: 3.5, fiberG: 0.4, sodiumMg: 600 } },
 ];
 
 export interface MealTemplate {
@@ -80,6 +139,11 @@ export interface MealTemplate {
   approxProtein: number;
   bestFitGoal: 'fat loss' | 'maintain' | 'muscle gain';
   suitabilityTime: 'lunch' | 'dinner' | 'breakfast' | 'any';
+}
+
+/** 按 id 取库项（记录页把所选食物折算成行时用）。 */
+export function foodById(id: string): FoodItem | undefined {
+  return COMMON_FOOD_DATABASE.find((f) => f.id === id);
 }
 
 export const MEAL_TEMPLATES: MealTemplate[] = [

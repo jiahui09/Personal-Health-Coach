@@ -84,8 +84,9 @@ export function migrateState(raw: unknown): DailyState[] {
 }
 
 export function migrateWeights(raw: unknown): WeightRecord[] {
-  return asArray(raw).map((item) => ({
-    id: str(item.id, `w-${str(item.date, 'x')}`),
+  return asArray(raw).map((item, index) => ({
+    // 缺 id 的旧数据按位次补 id：同日多条若都用日期做 id 会互相顶掉
+    id: str(item.id, `w-${str(item.date, 'x')}-${index}`),
     date: str(item.date, ''),
     weight: num(item.weight, 0),
     note: typeof item.note === 'string' ? item.note : undefined,
@@ -95,8 +96,9 @@ export function migrateWeights(raw: unknown): WeightRecord[] {
 }
 
 export function migrateTodos(raw: unknown): TodoItem[] {
-  return asArray(raw).map((item) => ({
-    id: str(item.id, `todo-${str(item.title, 'x')}`),
+  return asArray(raw).map((item, index) => ({
+    // 缺 id 的旧数据按位次补 id：同名两条若都用标题做 id 会互相顶掉
+    id: str(item.id, `todo-${index}-${str(item.title, 'x')}`),
     title: str(item.title, ''),
     date: str(item.date, ''),
     estimatedMinutes:

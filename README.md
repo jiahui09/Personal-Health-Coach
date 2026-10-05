@@ -13,20 +13,18 @@
 页面按一条自然的单页流组织：
 
 ```
-刊头 → 其一 今日之事 → 其二 下一膳 → 其三 今日之练 → 身体近况 → 近况 → 体征档 → 情景外推 → 今日体感
+刊头 → **其一 今日之事 ↔ 其二 今日之练（同一配对行）** → 体征（通栏）→ 营养摄入（通栏）→ 统计（通栏，情景外推收于其末）
 ```
 
 | 区块 | 功能 |
 | --- | --- |
-| **刊头与序** | 印章报头与存储标识；「朝安 / 昼安 / 夜安」时段问候 + 干支日期行，一键唤起录事 |
-| **其一 今日之事** | 今日待办（增 / 删 / 勾选），行内「添录一事」速记；完成率只由 `status` 决定 |
-| **身体近况** | 今之体重、**近三十日有记录日数 / 原始条数**、首末相差（端点变化）与回归斜率**分列**（后者注明「非首末差值」），附三十日趋势折线（**全页唯一图表**）；「今日体感」一句——眠时**由就寝/起身时刻推得**（手录眠时另标来源）、精力 (1–5)、酸痛 (1–5) 入句，分数可随手点按调校 |
-| **其二 下一膳** | 基于今日已摄入热量/蛋白质缺口，从餐食模板库中排序推荐，给出**热量区间与蛋白质区间**（而非假装精确的单一整数）；「照准」一键入账，决策痕迹留在数据层（`nextMeal.trace`） |
-| **其三 今日之练** | 根据睡眠、精力、酸痛、今日是否已练判定训练状态（REST / RECOVERY / LIGHT / NORMAL），给出**纯徒手**课表（深蹲、俯卧撑、臀桥、平板等）、时长与恢复指引，同样可查看稽核 |
-| **近况** | 七日均重（注明近七日几/7 日有记录）与回归斜率、**本周（周一起）**抗阻次数对照 WHO 每周 ≥2 天建议、近七日睡均对照 AASM 7 小时基准（只报达标与否，不报百分比）、今日所食两笔账（**未达「尚余」、超出「已超」**）、四周/八周/十二周**情景外推**（标注模型版本、依据日数，数据存疑即暂阙；点开「推演所据」见前提与局限）——**均写成行文，不做数值卡** |
-| **体征档** | 建档 / 改档（性别 / 出生年 / 身高 / 活动水平 / 腰围 / 目标）；由此算出 **体重指数（WHO 分类）、腰围判定（亚太线）、静息代谢（Mifflin-St Jeor）、总消耗（RMR×PAL）**，并据此定 **每日热量、每日蛋白（1.4–2.0 g/kg）、每周抗阻日数**。未建档时只显示缺什么，绝不拿演示数据冒充 |
-| **情景外推** | 四周 / 八周 / 十二周情景区间（`scenario_trend_projection`），标注模型版本与依据日数；数据存疑即暂阙 |
-| **录事弹层** | 底部弹层，三签：进食 / 习练 / 体征 |
+| **刊头与序** | 印章报头与存储标识；「朝安 / 昼安 / 夜安」时段问候 + 干支日期行——只留问候与日期，今日状况不在刊头重复；一键唤起录事 |
+| **其一 今日之事** | 今日待办（增 / 删 / 勾选），行内「添录一事」速记；每事「拟时长」可随手改、可直清（1–720 分整数，清后行内显示「拟时长 —」）；完成率只由 `status` 决定 |
+| **其二 今日之练** | 与「其一」同一配对行（桌面折缝分栏，移动端相随）：按睡眠、精力、酸痛、今日是否已练判定训练状态（REST / RECOVERY / LIGHT / NORMAL），课表由**肌群账本 + 既往历史 + 每日时间预算**智能搭配组合，时长与恢复指引同列；可就地改每行动作、组数与次数 |
+| **体征（通栏）** | 只收**原始事实**，不放示数：今之体重与「录新体重」、建档所录（身高 / 性别 / 岁 / 活动水平 / 腰围）、夜眠**由就寝/起身时刻推得**与近七夜（只按有记录夜数平均）、精力 (1–5)、酸痛 (1–5) 圆点（`DotScale`，点按即调）；数据待核朱批集中于此；未建档只显示缺什么，绝不拿演示数据冒充 |
+| **营养摄入（通栏）** | **依个人体征与饮食目标算出今日之标**：每日热量、每日蛋白（1.4–2.0 g/kg 区间）、每日脂肪与碳水，练日按「×1.1 且至多 +400」上浮（标「练日」）；两笔账（**未达「尚余」、超出「已超」**）、下一膳（基于已摄入缺口排序推荐，给出**热量与蛋白质区间**，「照准」一键入账）、今日所食逐条「掷还」 |
+| **统计（通栏）** | 一切**算出来的数**集中于此：体重指数（WHO 分类）、静息代谢（Mifflin-St Jeor）、总消耗（RMR×PAL）、每周抗阻处方；趋势与均值——近七日均重（留一基线）、三十日变化（端点）与回归斜率**分列**、记录（有效日/原始条数）、睡均与本周抗阻对照 AASM / WHO 合议；附三十日趋势折线（**全页唯一图表**）与情景外推（四周/八周/十二周，`scenario_trend_projection`，标注模型版本与依据日数，数据存疑即暂阙） |
+| **录事弹层** | 底部弹层，三签：进食 / 习练 / 体征；**进食页内嵌食物营养档案库**（115 品、每 100g 的热量/蛋白质/脂肪），搜名即现、点选自动回填克数与约计——档案库只在录入时出现，不占主页 |
 | **决策痕迹（数据层）** | 引擎每次推荐都产出 `trace`（输入快照 / 推导值 / 前提 / 局限）与 `evidenceTraces`（证据出处）；页面不再设稽核弹窗，口径与阈值见本文件「术语与口径」 |
 | **复其初** | 页脚一键恢复到初始的三十日模拟数据 |
 
@@ -47,11 +45,11 @@
 | 函数 | 作用 | 状态 |
 | --- | --- | --- |
 | `f_RMR` | Mifflin-St Jeor 静息代谢预测（±10% 个体差异声明） | evidence_derived |
-| `f_energy_prior` / `f_TDEE` | 活动系数估算的**能量区间**（拒绝伪精确整数） | engineering_heuristic |
+| `bodySummary`（`domain/body.ts`） | BMI/腰围 + Mifflin RMR × 活动水平 PAL → TDEE（缺档即「未录」，绝不拿演示人体数冒充） | evidence_derived |
 | `f_protein` / `f_per_meal_protein` | 全天与单餐蛋白质区间 | evidence_constrained |
-| `f_weight_trend` | 7 天滚动均值 + 最近 21 点线性回归趋势 | evidence_constrained |
-| `f_weight_forecast` | 4/8/12 周预测区间（带代谢递减阻尼系数，区间而非点估计） | dynamic model |
-| `f_diet_quality` | 按 WHO/DGA 约束评估蔬果、全谷物、膳食纤维、食物多样性 | evidence_constrained |
+| `weightSummary`（`domain/weight.ts`） | 近 30 日 OLS 趋势（kg/周）与端点变化；数据不足即「数据不足」 | evidence_constrained |
+| `f_weight_forecast` | 4/8/12 周情景区间（近 30 日斜率 × 周数 × 档期折减 0.95/0.88/0.80，区间而非点估计；无趋势或存疑即不出数） | engineering_heuristic |
+| `f_diet_quality` | 按所录份数核对蔬果、全谷物、膳食纤维与食物多样性（游离糖无据不判，如实 `null`） | engineering_heuristic |
 | `f_training_state` | 睡眠/精力/酸痛 → REST/RECOVERY/LIGHT/NORMAL（附「非临床级指标」免责声明） | engineering_heuristic |
 | `f_meal` | 候选餐食多维打分：`proteinFit + energyFit − repetitionPenalty` | engineering_heuristic |
 | `f_workout` | 按训练状态输出徒手课表（明确标注「无单杠 → 拉力受限」） | engineering_heuristic |
@@ -65,38 +63,39 @@
 ```
 src/
 ├── App.tsx                    # 单页编排：状态、Toast、弹窗、区块组合
-├── components/                # 11 个展示组件（HeaderGreeting / TodayTasks /
-│                              #   BodyOverview / HowAmIDoing / NextMealCard /
-│                              #   NextWorkoutCard / RecentSection / LifeSection /
-│                              #   RecordSheet / 域层摘要 …）
+├── components/                # 16 个展示组件（HeaderGreeting / TodayTasks /
+│                              #   BodySection / NutritionSection / StatsSection /
+│                              #   NextMealCard / NextWorkoutCard / SectionHead /
+│                              #   RuleMeter / DotScale / 三弹层 Record·Profile·Sync …）
 ├── services/
 │   ├── repository.ts             # ★ 工厂：按 VITE_SUPABASE_* 选择实现，UI 只从这里拿单例
 │   ├── healthRepository.ts       # 数据访问接口 + AuthUser + RepositoryError（单一契约）
-│   ├── mockHealthRepository.ts   # 默认实现：localStorage 持久化 + 调用决策引擎
-│   ├── supabaseHealthRepository.ts# Supabase 桩（每个方法抛 not_implemented，待接通）
+│   ├── todayAssembly.ts          # ★ 唯一组装点：原始记录 → TodayData（本地/云端共用）
+│   ├── mockHealthRepository.ts   # 本地实现：localStorage 持久化 → assembleToday
+│   ├── supabaseHealthRepository.ts # 云端实现：会话（magic link/密码/匿名）+ PostgREST 读写
 │   ├── scientificDecisionEngine.ts# 引擎门面：evaluateFullDecision / verifyDeterminism
-│   ├── scientificRules.ts         # ★ 全部纯函数规则（930 行，核心）
+│   ├── scientificRules.ts         # ★ 全部纯函数规则（核心）
 │   ├── scientificEvidence.ts      # 证据登记表（10 条，含 claim / limitations）
 │   └── scientific/index.ts        # 统一导出
 ├── data/                      # mockData（30 天体重等演示数据）、foods（食物库+餐食模板）
 ├── types/health.ts            # 全部领域模型与审计类型（单一类型来源）
 ├── vite-env.d.ts              # VITE_SUPABASE_* 环境变量类型
-└── tests/scientificAudit.test.ts  # 确定性审计测试（9 组）
+└── tests/                    # 9 套契约与审计测试（scientificAudit / journalContract / …）
 ```
 
 **分层**：`UI (React 19) → HealthRepository (接口) → repository.ts (工厂) → Mock / Supabase 实现 → ScientificDecisionEngine (纯函数)`。换后端只改工厂这一处。
 
 **技术栈**：React 19 + TypeScript + Vite 8 + Tailwind CSS v4 + motion（动效）+ lucide-react（图标）。默认**数据完全保存在浏览器 localStorage**；配置 `VITE_SUPABASE_*` 后改走 Supabase（见第 4 节）。
 
-### 数据接口契约（为 Supabase 免费方案准备）
+### 数据接口契约（本地与云端共用）
 
-`HealthRepository`（`services/healthRepository.ts`）27 个方法，除了 CRUD 还显式带上云后端必需的四类能力：
+`HealthRepository`（`services/healthRepository.ts`）28 个方法，除了 CRUD 还显式带上云后端必需的四类能力：
 
 | 能力 | 内容 | 为什么 |
 | --- | --- | --- |
 | **身份** | `getCurrentUser / signIn / signUp / signOut / onAuthChange`，`AuthUser.id` 即每行数据的 `user_id` | 没有 `user_id` 就没有 RLS，健康数据不能裸奔 |
 | **时间窗** | `getMeals/getWorkouts/getWeightHistory/getTodos/getDailyStates(since?)` | 不再全量拉历史；Supabase 上等价于 `where date >= since` |
-| **类型化错误** | `RepositoryError{code: network\|auth\|conflict\|not_found\|not_implemented}` + `toRepositoryError()` | App 用 `runMutation()` 统一兜底：失败弹出带 code 的 toast；初次加载失败显示重试页 |
+| **类型化错误** | `RepositoryError{code: network\|auth\|rate_limited\|conflict\|not_found\|not_implemented\|unknown}` + `toRepositoryError()` | App 用 `runMutation()` 统一兜底：失败弹出带 code 的 toast；初次加载失败显示重试页 |
 | **可复现时钟** | `HealthContext.now: Date`——引擎只从它读时间 | 同一 `x` 必得同一 `y`，服务端重算与客户端一致（测试 9 覆盖）；ID 也统一为 `crypto.randomUUID()` |
 
 另外两条语义约定：`resetToDefault()` **仅限演示**（后端实现禁止用它删真实数据）；`saveDailyState`/`addWeight` 各自包含两处写入，落到 Postgres 必须是事务或 rpc。
@@ -105,14 +104,14 @@ src/
 
 页面只写事实，口径与原理集中在这里（页面上一切「解释性文字」都已删除）。
 
-- **待核（needs_review）**：只标记，绝不改数。体重：`|今录 − 近七日均重| > max(1.5kg, 均重×2%)`；营养：今日热量 `> 2× 目标`（一键「照准」连点即会触发）。被标记的记录原样保留，可在「近况 · 今日所食」逐条**掷还**；体重不参与训练决策（`decideWorkoutMode` 的入参里没有体重）。
+- **待核（needs_review）**：只标记，绝不改数。体重：`|今录 − 留一基线| > max(1.5kg, 基线×2%)`——基线取近七日均值**剔除自身**后的其余各日均值（留一法，免得自己稀释自己的异常），基线与偏离一并写入 `detail`；营养：今日热量 `> 2× 目标`（一键「照准」连点即会触发）**或低于常度下限**（`minPlausibleKcal`，过低同样提示）。被标记的记录原样保留，可在「营养摄入 · 今日所食」逐条**掷还**；体重不参与训练决策（`decideWorkoutMode` 的入参里没有体重）。
 - **端点变化 ≠ 回归斜率**：`三十日变化 = 末个有效日 − 首个有效日`；`回归斜率 = 对近三十日每日代表值做 OLS × 7`。二者数值通常不同，页面上是两行两个字段。
 - **每日代表值**：同一天多次测量取**当日最新**一条；因此「记录」显示为 `有效日数/窗口日数 · 原始条数`，条数与日数不可混称。
 - **睡眠时长只有一个来源**：`DailyState.sleep` 是判别联合——填了就寝/起身则 `duration = (起身 − 就寝 + 1440) mod 1440`；只记得总时长则用手录眠时。近七日均**只按有记录的夜数平均**并如实报告（如 `1/7 夜`），不伪造完整窗口；睡眠只报「是否达七时之基」，不给百分比（避免读成越多越好的任务）。
-- **拟 / 估算 / 实际**：任务行的「拟 45 分」是**计划**；建议课表的「约 20 分 · 估算」是产品估算；只有用户计时才标「实际计时」。三者互不冒充。
+- **拟 / 估算 / 实际**：任务行的「拟 45 分」是**计划**——可直接修改或取消（1–720 分整数；取消即不设时长，行内显示「拟时长 —」）；建议课表的「约 20 分 · 估算」是产品估算；只有用户计时才标「实际计时」。三者互不冒充。
 - **尚余 / 已超**：`余 = max(目标 − 已录, 0)`、`超 = max(已录 − 目标, 0)`，由同一函数给出，因此不会用「尚余 0」掩盖超额。
-- **计划膳 ≠ 实测**：`MealRecommendation` 是计划，「下一膳」标注「未入账」；只有「照准」写入 `MealRecord` 才计入今日所食。
-- **情景外推**：`method = scenario_trend_projection`，由 `近30日斜率 × 周数 × 衰减(0.95/0.88/0.80) ± 区间(0.35/0.55/0.75 kg)` 得出，标注模型版本与依据日数；数据存疑或不足时**不出数**。它是情景，不是承诺，也不是目标。
+- **计划膳 ≠ 实测**：`MealRecommendation` 是计划，「下一膳」未录时标注「未入账」、已录则改标「建议已录 N 次 · 请核是否重复」；只有「照准」写入 `MealRecord` 才计入今日所食。
+- **情景外推**：`method = scenario_trend_projection`，由 `近30日斜率 × 周数 × 档期折减(0.95/0.88/0.80) ± 区间(0.35/0.55/0.75 kg)` 得出（纯工程情景外推，非代谢模型复现），标注模型版本与依据日数；数据存疑、趋势不足或体征待核时**不出数**。它是情景，不是承诺，也不是目标。
 - **证据三级**：`evidence_derived`（由记录严格算出，如七日均重）／`evidence_constrained`（受文献约束的规则，如 Morton 2018 蛋白区间、AASM 七时之基）／`engineering_heuristic`（为产品决策而设的启发式，如「酸痛 ≥4 或 精力 ≤2 → 恢复」）。启发式不伪装成医学结论。
 
 ### 数据语义（Raw → Derived → Decision → Presentation）
@@ -121,7 +120,7 @@ src/
 
 - **原始记录（Raw）**：`WeightRecord`（带 `source`/`time`）、`MealRecord`（带 `source`/`confirmed`）、`WorkoutRecord`（带 `category`/`durationSource`）、`DailyState`（`sleep` 为判别联合：`interval` 或 `duration`，字段可缺席）、`TodoItem`（`status`）、`UserProfile`（**只有原始输入**：性别/出生年/身高/活动水平/腰围/目标——没有年龄、没有当前体重、没有目标热量）。
 - **体征派生（Derived + Decision）**：`domain/body.ts`（BMI 与 WHO 分类、腰围亚太判定、Mifflin-St Jeor 静息代谢、RMR×PAL 总消耗）、`domain/composition.ts`（建议方向、每日热量与蛋白、每周抗阻处方、速率区间）；阈值与比例集中在 `domain/policy.ts` 的 `TARGET_POLICY`。
-- **派生层 `src/domain/`**：`time.ts`（唯一的今日/本周（周一起）/近七日/近三十日）、`policy.ts`（全部阈值与目标）、`tasks.ts`、`nutrition.ts`、`sleep.ts`、`weight.ts`、`training.ts`、`activity.ts`、`format.ts`、`migrate.ts`。组件内**零业务算术**（由 `src/tests/presentationContract.test.ts` 锁定）。
+- **派生层 `src/domain/`**：`time.ts`（唯一的今日/本周（周一起）/近七日/近三十日）、`policy.ts`（全部阈值与目标）、`tasks.ts`、`nutrition.ts`、`sleep.ts`、`weight.ts`、`training.ts`、`format.ts`、`migrate.ts`。组件内**零业务算术**（由 `src/tests/presentationContract.test.ts` 锁定）。
 - **决策层**：`decideWorkoutMode`（输入只有体感/睡眠/今日是否已练，**体重不在入参内**）、`validateWeightMeasurement`（异常只标记待核，绝不改数）、`assessNutritionQuality`、`f_weight_forecast`（`method: scenario_trend_projection` + 模型版本 + 依据日数，存疑即 `withheld`）。
 - **窗口不混用**：今日任务/饮食/训练/体重/体感用 Today；抗阻进度与本周训练次数用 **ThisWeek（周一起）**；七日均重与睡均用 **Last7Days（滚动）**；端点变化、回归斜率、记录条数与有效日数用 **Last30Days**。
 - **计划 / 预测 / 实测分离**：`MealRecommendation` 是计划，只有「照准」后写入 `MealRecord` 才计入今日所食；预测永远不覆盖实测；任务用时标「拟」并注明未记实际用时。
@@ -137,9 +136,9 @@ src/
 - **圆角只有一档 8px**（`rounded-lg`），只留表单控件与按钮；`rounded-full` 只留给真正的圆形（状态点、圆点单选）；没有 `backdrop-blur`、没有超大阴影，**页面栏目一律不用卡片容器**。
 - **仿真古书纸与版框**：`body` 以 `--color-paper` 为底，叠两层内联 SVG 噪点（纤维纹 6% + 陈化斑驳 7%，不用氛围渐变）做纸张质感；全页内容入「外粗内细」双线版框（`border-2` 外框 + `border/55` 内线），刊头、正文与页脚同框；区块只以墨色粗细线与点线分隔，数值一律入句。
 - **全页只留一张图表，其余数字入句**：唯一图表是 30 日体重折线（`TodayData.weightSeries`，手画 SVG，来自真实记录、不造序列）；摄入、趋势、预测区间都写成手记行文，精力与酸痛用两行对齐的 1–5 圆点点按——**没有 KPI 卡、没有瓦片墙、没有环形进度**；比例信息只用**墨线计量条**（`RuleMeter`：3px 直角细线，底轨 `--color-line`，填充墨＝进行中 / 朱＝达标 / 绛＝超录，无圆角阴影渐变动画），百分比与分子分母一律以真实文本入句（蛋白质 63/110 g · 57%、抗阻 2/2 · 100% · 合议、睡均 7.3/7 h）；睡眠只报达标与否、不给百分比。
-- **版式**：容器 1100px；桌面双栏**按行配对**（`lg:col-start`/`lg:row-start` 显式落位，三对章节横线跨栏同 y，中缝一条 1px 折缝线）；左＝其一/其二/其三，右＝**身体近况 / 体征档 / 近况**（体征档的位置随建档状态自适应：未建档时它是短提示,与「下一膳」同高）；「情景外推」与「今日体感」为通栏两节。移动端单栏按 DOM 次序（其一 → 其二 → 其三 → 身体近况 → 体征档 → 近况 → 情景外推 → 今日体感）。章节级动作统一收在章末「动作脚注行」（`.section-actions`）。
+- **版式**：容器 1100px；**唯一配对行**＝其一 今日之事 ↔ 其二 今日之练（桌面 `lg:grid-cols-[1.45fr_auto_1fr]` 显式落位，中缝一条 1px 折缝线，两章横线跨栏同 y；两格同高，移动端纵排相随）；其下三节**通栏纵列**＝体征 → 营养摄入 → 统计（各自 `lg:pr-9` 留 36px 旁批槽；统计以「情景外推」组块收尾）。体征与统计内部再按两栏并置，各栏自成一轴（名/中/值三列同轴全等，探针逐轴校验）。移动端单栏按 DOM 次序（其一 → 其二 → 体征 → 营养摄入 → 统计）。章节级动作统一收在章末「动作脚注行」（`.section-actions`），节内小标题用 `.group-head`。
 - **文案全取古风行文，不用现代白话**：时段问候作「朝安 / 昼安 / 夜安。」，主句作「凡四事，已成其一。」；章节作「下一膳 / 今日之练」，动作作「录之 / 罢 / 照准 / 毕此一练 / 览毕」，危险动作作「掷还」，报错作「膳食之录未成（code）」，反馈作「知道了 · 一事已列入今日之册」（成功回执一律冠「知道了 ·」，失败不冠），达标作「合议 / 未合议 · 尚差二日」，页脚只留报头与「复其初」；记录表单标签（餐别 / 所食之物 / 就寝 / 起身 / 精力 / 酸痛 …）同此体例。**保留不改的只有三类**：文献引文与 `claim`/`limitations`（`scientificEvidence.ts`，学术原貌即证据本身）、规则 ID 与 ASCII 单位符号（kcal / kg / AASM / RIR）、食物与练习的中文专名。
-- 少量扫描器命中是**刻意保留**的（衬线标题、圆形控件、已完成事项的删除线、规则 ID 的等宽字、图表端点圆点），在源码里用 id 级注释标注原因，例如 `deslop-ignore-file 07 09`；`kill-ai-slop` 扫描器对整个项目目前是 **0 hits**。
+- 少量扫描器命中是**刻意保留**的（衬线标题、圆形控件、已完成事项的删除线、规则 ID 的等宽字、图表端点圆点），在源码里用 id 级注释标注原因，例如 `deslop-ignore-file 07 09`；现行扫描门禁为 `impeccable detect`（对运行页面）——5 项 report-only（暖纸底与主字体为本册定稿的自觉选择、章节头上下留白节奏 ×3），无破坏性发现。
 
 ### Visual Ralph 参考稿与实现偏差
 
@@ -170,7 +169,7 @@ bun run dev          # 或 npm run dev
 npm run lint         # tsc --noEmit
 
 # 科学审计测试
-npm test             # tsx src/tests/scientificAudit.test.ts
+npm test             # 9 套契约与审计测试串联（scientificAudit … layoutContract）
 
 # 生产构建
 npm run build
@@ -194,7 +193,7 @@ npm run build
 | --- | --- | --- |
 | **Cloudflare Pages** | 采用 | 托管 `dist/` 静态产物；build command `npm run build`、output `dist`；项目无路由，不需要 SPA fallback |
 | **Supabase Free** | 采用 | 浏览器直连 PostgREST（不经 Worker），8 张表全是个人手记量级；anon key 是公开键，安全边界在 RLS |
-| **Cloudflare Workflows** | 不采用 | ① **没有服务端工作负载**：27 个 repository 方法全是请求/响应 CRUD，确定性引擎在浏览器里算，没有队列、没有需要持久化的多步骤流程；② **免费前提存疑**：Workflows 挂在 Workers 上，据信需 Workers Paid（约 $5/月）——接入前请核对 `developers.cloudflare.com/workflows/pricing`，若属实会直接打破"免费" |
+| **Cloudflare Workflows** | 不采用 | ① **没有服务端工作负载**：28 个 repository 方法全是请求/响应 CRUD，确定性引擎在浏览器里算，没有队列、没有需要持久化的多步骤流程；② **免费前提存疑**：Workflows 挂在 Workers 上，据信需 Workers Paid（约 $5/月）——接入前请核对 `developers.cloudflare.com/workflows/pricing`，若属实会直接打破"免费" |
 
 **将来真需要后台任务时**（夜间周报聚合、Apple Health 批量导入、备份到 R2）：先用免费的 Supabase 侧方案——`pg_cron` + SQL 函数，或 Supabase Edge Functions；只有当工作负载确实需要跨步骤持久状态、且核验 Workflows 免费可用时再考虑它。
 
@@ -216,7 +215,7 @@ npm run build
 - **方法论诚实**：三层证据分级 + 每条建议附带输入快照、规则 ID、假设与局限；用区间替代伪精确整数，并主动声明「非临床级指标」。
 - **确定性可测试**：规则全部为纯函数，`verifyDeterminism()` 与测试用 JSON 序列化比对验证幂等性。
 - **分层干净**：Repository 接口把 UI 与数据源解耦，类型集中在 `types/health.ts`，职责清晰。
-- **工程质量**：`tsc --noEmit`、`npm test`（9/9 科学审计 + 手记数据契约 + 新增设计令牌对比度用例）、`vite build` 三者本轮实测全绿；产物约 446 KB JS（gzip 142 KB）+ 27 KB CSS（gzip 6.2 KB）。
+- **工程质量**：`tsc --noEmit`、`npm test`（9 套：科学审计 + 手记数据契约 + 设计令牌对比度 + 版式契约等）、`vite build` 三者实测全绿；产物约 503 KB JS（gzip 159 KB）+ 27 KB CSS（gzip 6.5 KB）。
 - **体验完整**：单页流、Toast 反馈、底部记录弹层、演示数据重置，中文文案统一克制。
 
 ### 本轮修复清单（去 AI 味 + 原型 → 工程化）
@@ -255,7 +254,7 @@ npm run build
     - **时间窗口**：唯一的 `DayContext`；「本周」＝周一 00:00 起（原为滚动 7 日），「近七日 / 近三十日」为滚动窗口，二者不再互相冒充；`WEEK_START/MONTH_WINDOW_START` 与各处 `new Date()` 全部移除。
     - **体重**：当日代表值（同日取最新）、`readingCount` 与 `daysWithRecords` 分开、**端点变化 ≠ 回归斜率**、`validateWeightMeasurement` 对偏离近七日均重的记录**只标待核**（例：57kg vs 66.8kg → 待核，预测暂阙），原始数据一字不改。
     - **睡眠**：`DailyState.sleep` 改为判别联合（区间 / 手录眠时），时长由时刻推得（00:55→08:15 = **7h20m**，与旧 `sleepHours 7.3` 的 7h18m 矛盾消失）；近七日均按有记录夜数报告（`1/7 夜有记录`），睡眠不再显示百分比。
-    - **训练**：`WorkoutCategory` + `durationSource` 落库，「抗阻 2/2」只数**本周且 category==='resistance'**；`decideWorkoutMode` 纯函数产出 `{mode, reasons[]}`，页面「定为恢复（据：酸痛显著）」与规则句「酸痛 ≥4 或 精力 ≤2（眠不足 6 时亦然）则降为恢复」同源生成，消解「及四分」歧义；建议时长标「估算」，今日实际训练另列。
+    - **训练**：`WorkoutCategory` + `durationSource` 落库，「抗阻 2/2」只数**本周且 category==='resistance'**；`decideWorkoutMode` 纯函数产出 `{mode, reasons[]}`，页面判定与规则句「酸痛 ≥4 或 精力 ≤2 则降为恢复；眠不足 6 或精力、酸痛居中则降为轻量」同源生成；**眠不足先于「体感未录」判出**——体感未录且眠足才出「常规 · 未录体感」，未录不放行短眠，消解「及四分」歧义；建议时长标「估算」，今日实际训练另列。
     - **饮食**：计划膳与实测入账分离（「计划之膳 · 未入今日所食」）；比例/余量/超额同源（`calculateNutritionProgress`），超出显示「已超 788.8 g」而非「尚余 0」；一键「照准」累计条数对外可见，越常度标朱批并提供「核今日所录（N）」逐条掷还。
     - **任务与手帐**：完成率只由 `status` 决定（今日之事 1/4），任务用时标「拟 45 分」不再冒充实际时长；手记与活动共用一张表但派生规则不同（文字计入近来手记条数、时长计入本周之功，可只计时长）。
     - **验证**：新增 `domain.test.ts` / `migration.test.ts` / `presentationContract.test.ts`（共 7 套测试）、`.shots/qa-states.mjs`（种子态与遗留异常态截图 + 文本断言）。旧 localStorage（57kg / 14159 千卡 / 0-4）经迁移后原样保留并被标记，实测页面出现「待核 / 已超 / 不出推演」。
@@ -285,7 +284,7 @@ npm run build
     - **抽出共用组装层**：`src/services/todayAssembly.ts` 成为「原始记录 → TodayData」的唯一实现，`MockHealthRepository` 与 `SupabaseHealthRepository` 都只负责取数，两条路径不可能算出不同结果（契约测试断言逐字节相同）。
     - **零依赖直连**：新增 `src/services/supabaseRest.ts`（邮箱 magic link 发送/回跳/hash 换会话/到期前 60 秒自动续期/退出）与 `src/services/supabaseMappers.ts`（6 表行到域模型的映射，能吃 Postgres 的 numeric 字符串与 `HH:MM:SS`），从而**不需要 `@supabase/supabase-js`**，云端 `npm ci` 的确定性不被破坏。
     - **仓库实作**：24 个方法全部落地（含「同日体重走 PATCH 不新增事实」「档案 upsert」「删除同时限定 id 与 user_id」「云端拒绝复其初」）；未登录时一律抛 `RepositoryError('auth')`，**绝不静默返回空数据**。
-    - **登录界面**：云端模式未登录时显示邮箱登录页（`src/components/SignIn.tsx`），静态版本不受影响。
+    - **登录界面**：云端模式未登录时显示邮箱登录页（`src/components/AuthGate.tsx`），静态版本不受影响。
     - **验证**：新增 `src/tests/supabaseContract.test.ts`（14 项：映射往返、**跨路径一致性**、magic link 端点与回跳、令牌刷新、错误码映射 401/403/404/409/5xx/断网、未登录抛 auth、写入语义），测试增至 **9 套**；`tsc`（含未用检查）+ `build` + e2e + 三档探针 + 扫描器全绿。
     - **排错**：`docs/deploy.md` 第 2 节给出 Supabase 配置、越权自测、环境变量、首次登录建档流程与 6 类常见故障对照。
 
@@ -297,11 +296,19 @@ npm run build
     - **身份安全规则**：`hasSession()` 区分「从未登录」与「有身份但失效」——前者可静默建立，后者只提示、**绝不静默换新身份**（否则会看到空账以为数据丢了）。
     - **顺带**：第三方登录授权地址与回跳解析就位（`authorizeUrl`，回跳令牌仍由 hash 接住），新增 3 项云端契约用例（匿名登录/未开启提示、授权地址、429 映射），云端用例增至 17 项。
 
+21. **饮食 · 体征 · 训练的有机统一 + IA 重构**（本轮，用户批准的八点方案）：
+    - **食物营养档案库**：新增 `src/data/foods.ts`（115 品、逐品每 100g 热量/蛋白质/脂肪 + 餐食模板 + 逐品出处口径），`foodItemNutrition(food, grams)` 是**全页唯一**的克数→营养换算点；档案库不上主页，只在录事弹层「进食」页内嵌——搜名即现、点选自动回填克数与约计，约计只读不手改（`recordSource = database`）；每膳可带 `items` 明细落库（含 `estimatedFatG`），脂肪不再缺项。
+    - **摄入依个人数据计算**：`deriveTrainingDayTargets` 按「练日 ×1.1 且至多 +400」上浮（蛋白/脂肪不变、碳水补差）；营养摄入通栏直出每日热量 / 蛋白（区间）/ 脂肪 / 碳水四行，练日标「练日」。
+    - **训练计划离线智能搭配**：新增 `domain/trainingPlan.ts`（`muscleGroupLedger` 肌群账本、`selectSession` 组合选择——热身预留、完成态、与已训肌群错开 48h、同族有历史者排前即「每次训练都影响下一次」）、`data/exercises.ts`（44 动作，部位/动作模式/族）；时间预算来自档案「每日训练时间预算」（10–180 分，缺省 30，`normalizeTrainingMinutesBudget` 落档时钳制）；`f_workout` 改走选择器，REST/RECOVERY 门控原样保留；一切新规则标 `engineering_heuristic` 并入审计测试。
+    - **IA 重构**：删状态句（刊头只留问候与日期）；今日之事 ↔ 今日之练并为**唯一配对行**；体征（原始事实 + 待核朱批）/ 营养摄入（目标 + 两笔账 + 下一膳 + 所食账）/ 统计（派生数 + 趋势图 + 合议 + 情景外推）三通栏纵列——原「今日体感 / 身体近况 / 体征档 / 近况 / 情景外推」五节解散归位（`BodySection` / `NutritionSection` / `StatsSection` 三个新组件，旧五件删除）。
+    - **契约重切**：`layoutContract` 的 SECTIONED、行配对（唯一配对行 ≥1 对，旧 ≥6 落位锁作废）、骨架文件清单随新 IA 更新；`presentationContract` 的展示文件与「单源」断言改指新主（刊头锁死不回流状态句）；探针 LINE_CAPS 按新五节重测登记、章节头 ≥5、配对断言改一对；e2e 轴校验按「章节 + 名列左缘」分组（通栏与半栏同 x 不同轴）。
+    - **验证**：9 套测试 + `tsc` + `build` + e2e 全绿；`layout-probe --check` @1440 / 1023 / 768 / 640 / 390 全 PASS（溢出 0、配对行高差 0、同轴三列全等）；qa-states 注入遗留异常态仍「待核 · 不出推演」且今之体重原样 57；1440 与 390 截图复核。
+
 ### 仍待补齐（真实项目的下一步）
 
-1. **工程配套**：无 ESLint/格式化、无 CI、无 E2E。
-2. **数据持久化**：Supabase 后端仍为空壳（方法均 `throw`），数据只在 localStorage，换设备即丢失，也没有导出/备份入口。
-3. **体积**：单包 451 KB（gzip 143 KB），未做代码分割。
+1. **工程配套**：无 ESLint/格式化、无 CI；端到端为自建脚本 `.shots/e2e.mjs`（未引入测试框架）。
+2. **数据持久化**：本地模式的数据只在 localStorage，换设备即丢失，也没有导出/备份入口（云端模式已接通 Supabase：会话 + PostgREST 读写 + RLS，多端同步见页脚「同步到我的账号」）。
+3. **体积**：单包 503 KB（gzip 159 KB）+ 27 KB CSS，未做代码分割。
 4. **视觉回归**：本轮已具备截图级回归——headless chromium 对 `http://localhost:3000` 出 1440/430 两档截图与参考稿比对（`.shots/`），设计令牌对比度已有自动化阈值（`src/tests/contrast.test.ts`），版式现有 `src/tests/layoutContract.test.ts` 源码契约 + `.shots/layout-probe.mjs` 几何探针（章节横线同 y、标题左缘、溢出 0），但**像素级视觉回归仍靠人工看图**。
 
 ### 结论

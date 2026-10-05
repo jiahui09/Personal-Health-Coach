@@ -89,8 +89,13 @@ export function validateWeightMeasurement(
       detail: { days: windowDaysWithRecords },
     };
   }
-  const delta = latest - rollingMean7d;
-  const threshold = Math.max(policy.anomalyAbsKg, Math.abs(rollingMean7d) * policy.anomalyRatio);
+  // 留一（leave-one-out）基线：近七日均值含今值自身,单个异常会把自己的
+  // 基准拉向自己（自稀释 1/n），恰在阈值附近漏判。验值以「剔除今值后其余
+  // 各日之均值」为基线——只用于校验与偏离句,原始读数一律不改。
+  const n = windowDaysWithRecords;
+  const looBaseline = n >= 2 ? (rollingMean7d * n - latest) / (n - 1) : rollingMean7d;
+  const delta = latest - looBaseline;
+  const threshold = Math.max(policy.anomalyAbsKg, Math.abs(looBaseline) * policy.anomalyRatio);
   if (Math.abs(delta) > threshold) {
     return {
       flag: 'needs_review',
@@ -99,6 +104,8 @@ export function validateWeightMeasurement(
       detail: {
         latest,
         rollingMean7d: round1(rollingMean7d),
+        /** 验值基线：剔除今值后其余各日之均重（留一）。 */
+        baselineKg: round1(looBaseline),
         deltaKg: round1(delta),
         thresholdKg: round1(threshold),
       },

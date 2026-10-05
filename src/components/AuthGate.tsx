@@ -89,7 +89,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ reason, onRetry, onSendLink 
                 await onRetry();
                 setBusy(false);
               }}
-              className="btn-primary w-full shadow-md disabled:opacity-50"
+              className="btn-primary w-full disabled:opacity-50"
             >
               {busy ? <span>重试中…</span> : <span>重试</span>}
             </button>
@@ -127,17 +127,18 @@ export const AuthGate: React.FC<AuthGateProps> = ({ reason, onRetry, onSendLink 
               <input
                 type="email"
                 required
+                aria-label="邮箱"
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="flex-1 bg-surface border border-control rounded-lg px-3 py-2 text-sm text-ink focus:border-accent"
+                className="flex-1 bg-surface border border-control rounded-lg px-3 py-2 text-[16px] text-ink focus:border-accent"
               />
             </div>
             <button
               type="submit"
               disabled={!valid || busy || cooldown > 0}
-              className="btn-primary w-full shadow-md disabled:opacity-50"
+              className="btn-primary w-full disabled:opacity-50"
             >
               {busy ? (
                 <span>发送中…</span>

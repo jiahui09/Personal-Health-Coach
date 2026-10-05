@@ -28,6 +28,10 @@ create table if not exists public.profiles (
 );
 
 -- ---------- 2. 体重（同日可多条 → 当日代表值取最新一条） ----------
+-- 每日训练时间预算（分钟；工程字段，可空——未设按政策默认 30 分）
+alter table if not exists public.profiles add column if not exists training_minutes_budget smallint
+  check (training_minutes_budget is null or (training_minutes_budget >= 10 and training_minutes_budget <= 180));
+
 create table if not exists public.weight_records (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users (id) on delete cascade,
@@ -74,6 +78,9 @@ create table if not exists public.meals (
   confirmed          boolean not null default true,
   created_at         timestamptz not null default now()
 );
+-- 库选增量（可空）：旧记录无此二者时保持 null，读回时如实缺席
+alter table if not exists public.meals add column if not exists fat_g  numeric(6, 1) check (fat_g >= 0);
+alter table if not exists public.meals add column if not exists items  jsonb;
 create index if not exists meals_user_day_idx on public.meals (user_id, eaten_on desc);
 
 -- ---------- 5. 训练（类别是结构化事实,抗阻统计只认它） ----------

@@ -1,10 +1,19 @@
 // Serif for the chapter heading; instruction copy stays in the UI sans. deslop-ignore-file 07
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
-import { WorkoutRecommendation, WorkoutRecord } from '../types/health';
+import { WorkoutCategory, WorkoutRecommendation, WorkoutRecord } from '../types/health';
 import type { WorkoutDecision } from '../domain/types';
 import { describeWorkoutDecision } from '../services/decisionCopy';
 import { SectionHead } from './SectionHead';
+
+/** 已录训练的类别:一律译作中文,不把英文原词漏给页面。 */
+const WORKOUT_CATEGORY_CN: Record<WorkoutCategory, string> = {
+  resistance: '抗阻',
+  recovery: '恢复',
+  cardio: '有氧',
+  mobility: '柔韧',
+  other: '其他',
+};
 
 interface NextWorkoutCardProps {
   nextWorkout: WorkoutRecommendation;
@@ -13,7 +22,7 @@ interface NextWorkoutCardProps {
   /** 今日已录的实际训练；有则在章节里如实列出。 */
   todaySession: WorkoutRecord | null;
   isCompletedToday: boolean;
-  onCompleteWorkout: () => void;
+  onCompleteWorkout: () => void | Promise<unknown>;
   onCustomWorkout: () => void;
 }
 
@@ -26,9 +35,26 @@ export const NextWorkoutCard: React.FC<NextWorkoutCardProps> = ({
   onCustomWorkout,
 }) => {
   const [checkedSets, setCheckedSets] = useState<Record<number, boolean>>({});
+  /** 勾销进行中:单发闸在 App 亦有,此处先禁按钮,免得连点两下写两笔。 */
+  const [completing, setCompleting] = useState(false);
+
+  // 换了课（或今日已毕又届明日）即清勾:不把上一回的勾带到新的一天
+  useEffect(() => {
+    setCheckedSets({});
+  }, [nextWorkout.title, isCompletedToday]);
 
   const toggleSetCheck = (index: number) => {
     setCheckedSets((prev) => ({ ...prev, [index]: !prev[index] }));
+  };
+
+  const handleComplete = async () => {
+    if (completing) return;
+    setCompleting(true);
+    try {
+      await onCompleteWorkout();
+    } finally {
+      setCompleting(false);
+    }
   };
 
   const getTrainingStateLabel = () => {
@@ -43,9 +69,9 @@ export const NextWorkoutCard: React.FC<NextWorkoutCardProps> = ({
 
   return (
     <section className="pt-10 lg:pr-9">
-      {/* 章节题：其三 · 今日之练（统一章节头 + 朱批旁注「今日常规」） */}
+      {/* 章节题：其二 · 今日之练（与「其一 今日之事」同排一行,统一章节头 + 朱批旁注） */}
       <SectionHead
-        ordinal="其三"
+        ordinal="其二"
         title="今日之练"
         verdict={`今${getTrainingStateLabel()}`}
         note={
@@ -63,7 +89,7 @@ export const NextWorkoutCard: React.FC<NextWorkoutCardProps> = ({
           <p className="mt-1.5 text-[12px] text-ink2">
             今日已录 {todaySession.title} · {todaySession.durationMinutes} 分 ·{' '}
             {todaySession.durationSource === 'actual' ? '实际计时' : '估算'} ·{' '}
-            {todaySession.category === 'resistance' ? '抗阻' : todaySession.category}
+            {WORKOUT_CATEGORY_CN[todaySession.category]}
           </p>
         )}
 
@@ -110,17 +136,22 @@ export const NextWorkoutCard: React.FC<NextWorkoutCardProps> = ({
             <button onClick={onCustomWorkout} className="btn-link px-2">
               另择动作
             </button>
-            {!isCompletedToday ? (
-              <button onClick={onCompleteWorkout} className="btn-primary whitespace-nowrap">
-                <Check className="w-3.5 h-3.5 shrink-0 stroke-[2.5]" />
-                <span>毕此一练</span>
-              </button>
-            ) : (
+            {isCompletedToday ? (
               <div className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-accent py-1.5 px-3 bg-accentsoft rounded-lg border border-accentline">
                 <Check className="w-3.5 h-3.5 stroke-[3]" />
                 <span>今日之练已毕</span>
               </div>
-            )}
+            ) : nextWorkout.exercises.length > 0 ? (
+              /* 无课之日（休憩/恢复且无动作）不给勾销:点了会凭空记一笔与本页不符的训练 */
+              <button
+                onClick={() => void handleComplete()}
+                disabled={completing}
+                className="btn-primary whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Check className="w-3.5 h-3.5 shrink-0 stroke-[2.5]" />
+                <span>毕此一练</span>
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

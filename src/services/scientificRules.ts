@@ -2,7 +2,7 @@
  * Scientific Rules & Mathematical Functions (V3 Living Journal Audited)
  *
  * Strict separation of:
- * - evidence_derived: Direct formulas & equations from literature (Mifflin-St Jeor 1990, Hall 2011).
+ * - evidence_derived: Direct formulas & equations from literature (Mifflin-St Jeor 1990).
  * - evidence_constrained: Constraints & ranges from systematic reviews/guidelines (Morton 2018, WHO diet, ACSM 2026).
  * - engineering_heuristic: Product logic bridging science to user action (energy threshold, ranking, progression).
  *
@@ -28,10 +28,14 @@ import {
 import type { DataQuality, WorkoutReason } from '../domain/types';
 import { decideWorkoutMode } from '../domain/training';
 import { resolveSleepMinutes } from '../domain/sleep';
-import { trainingStateOf, WORKOUT_REASON_CN } from './decisionCopy';
+import { isInWeek, makeDayContext } from '../domain/time';
+import { trainingStateOf, WORKOUT_REASON_CN, DIRECTION_CN } from './decisionCopy';
 import { ageYears } from '../domain/body';
 import { COMMON_FOOD_DATABASE, MEAL_TEMPLATES, MealTemplate } from '../data/foods';
 import { getEvidenceById } from './scientificEvidence';
+import { TRAINING_POLICY } from '../domain/policy';
+import { sumMealLogs } from '../domain/nutrition';
+import { muscleGroupLedger, selectSession, type SessionPlan } from '../domain/trainingPlan';
 
 export const ENGINE_VERSION = '3.0.0-audited';
 
@@ -61,40 +65,22 @@ export interface RmrPrediction {
  * Output is "predicted RMR", NOT measured metabolic rate.
  * Individual variation spans ±10% (standard error of estimate).
  */
-export function f_RMR(
-  profileOrWeight:
-    | number
-    | {
-        currentWeight?: number;
-        weight?: number;
-        height: number;
-        age: number;
-        sex: 'male' | 'female' | 'other';
-      },
-  heightCm?: number,
-  ageParam?: number,
-  sexParam?: 'male' | 'female' | 'other'
-): RmrPrediction {
-  let currentWeight: number;
-  let height: number;
-  let age: number;
-  let sex: 'male' | 'female' | 'other';
-  let weightIsPlaceholder = false;
-
-  if (typeof profileOrWeight === 'object') {
-    const provided = profileOrWeight.currentWeight ?? profileOrWeight.weight;
-    // 无实测体重时才退回占位值，并把这件事写进 notes/trace，绝不悄悄冒充测量
-    weightIsPlaceholder = !(typeof provided === 'number' && provided > 0);
-    currentWeight = weightIsPlaceholder ? 68.4 : (provided as number);
-    height = profileOrWeight.height;
-    age = profileOrWeight.age;
-    sex = profileOrWeight.sex;
-  } else {
-    currentWeight = profileOrWeight;
-    height = heightCm || 175;
-    age = ageParam || 28;
-    sex = sexParam || 'male';
-  }
+// 只收档案对象（单一调用形态）：位置参数重载曾带 175/28/male 静默兜底，
+// 未传身高/年龄时会冒出合理假数——删除之，缺项一律由调用方显式传入或先判未建档。
+export function f_RMR(profile: {
+  currentWeight?: number;
+  weight?: number;
+  height: number;
+  age: number;
+  sex: 'male' | 'female' | 'other';
+}): RmrPrediction {
+  const provided = profile.currentWeight ?? profile.weight;
+  // 无实测体重时才退回占位值，并把这件事写进 notes/trace，绝不悄悄冒充测量
+  const weightIsPlaceholder = !(typeof provided === 'number' && provided > 0);
+  const currentWeight = weightIsPlaceholder ? 68.4 : (provided as number);
+  const height = profile.height;
+  const age = profile.age;
+  const sex = profile.sex;
 
   const genderOffset = sex === 'male' ? 5 : sex === 'female' ? -161 : -78;
   const rawRmr = 10 * currentWeight + 6.25 * height - 5 * age + genderOffset;
@@ -117,7 +103,7 @@ export function f_RMR(
 // ==========================================
 // 3. Long-Term Energy Calibration: f_energy_calibration
 // Status: engineering_heuristic / dynamic model
-// Source: Hall et al., 2011 (Lancet / NIH Dynamic Model principles)
+// Source: 自身能量平衡记账（近段均摄入 − 体重趋势按 7,700 kcal/kg 换算）
 // ==========================================
 
 export function f_energy_calibration(history: {
@@ -153,14 +139,14 @@ export function f_energy_calibration(history: {
     },
     confidence,
     method: `Empirical energy balance: avg intake (${Math.round(avgIntake)} kcal) - trend delta (${Math.round(dailyKcalDelta)} kcal/d) over ${timePeriodDays} days`,
-    notes: 'Personal calibration accounts for individual metabolic adaptation and NEAT changes over time based on Hall et al. dynamic balance concepts.',
+    notes: 'Personal calibration from your own intake log and weight trend. Metabolic adaptation (NEAT, adaptive thermogenesis) is not separately modeled.',
   };
 }
 
 // ==========================================
 // 5. Weight Forecast Intervals: f_weight_forecast(context)
 // Status: engineering_heuristic scenario projection（情景外推，非承诺）
-// Source: Hall et al., 2011 (dynamic energy balance) 之递减思想
+// Source: 据近期回归趋势的工程化外推；衰减系数为工程假设，非个体代谢建模
 // 注意：本函数只做「据趋势外推」，不是预测模型；数据存疑/不足时不出数。
 // ==========================================
 
@@ -188,7 +174,7 @@ export function f_weight_forecast(context: {
     : undefined;
   const withheld = withholdingReason !== undefined || latestWeight === null || trendKgPerWeek === null;
 
-  // Under Hall et al. dynamic adaptation, weight change slows down as body mass decreases.
+  // 档期越长外推越保守：按 4/8/12 周递减折减（工程折减假设，非 Hall 模型复现）。
   const damping = { 4: 0.95, 8: 0.88, 12: 0.8 } as const;
   const spread = { 4: 0.35, 8: 0.55, 12: 0.75 } as const;
 
@@ -224,11 +210,14 @@ export function f_weight_forecast(context: {
     withheldReason: withholdingReason,
     assumptions: [
       '保持当前能量摄入水平与身体活动节律',
-      '代谢适应符合 Hall et al. 2011 动态非线性递减规律',
+      '外推按 0.95/0.88/0.80 之档期折减逐期放缓——此为保守化的工程假设，非个体代谢建模',
       '无突发肠道水钠潴留或极端饮食结构剧变',
     ],
     limitations: [
-      `仅为情景外推（${round1(trendKgPerWeek ?? 0)} kg/周 × 周数 × 衰减），非承诺、非目标值`,
+      // 数据被扣发时不编「0 kg/周」——外推斜率只在真有趋势时才写进句子
+      withheld
+        ? '数据存疑或不足，暂不出情景区间；体重恢复可信后自动出数'
+        : `仅为情景外推（近期回归斜率 ${round1(trendKgPerWeek as number)} kg/周 × 周数 × 档期折减），非对结果之保证，亦非目标值`,
       '短期内糖原之储耗与食盐之摄入，会致 ±1kg 急性非脂肪体重之波动',
     ],
   };
@@ -274,8 +263,10 @@ export function f_protein(
 // ==========================================
 
 export function f_per_meal_protein(bodyWeightKg: number) {
-  const minGrams = Math.max(20, Math.round(bodyWeightKg * 0.40));
-  const maxGrams = Math.min(45, Math.round(bodyWeightKg * 0.55));
+  // 封顶 45g（单餐上限之群体约束）且恒保 min ≤ max：
+  // 旧式 max=min(45, 0.55×BW) 在 BW≳112.5 时压到 min 之下（40kg 时亦然），区间倒挂。
+  const minGrams = Math.min(45, Math.max(20, Math.round(bodyWeightKg * 0.40)));
+  const maxGrams = Math.max(minGrams, Math.min(45, Math.round(bodyWeightKg * 0.55)));
   return {
     perMealRange: { min: minGrams, max: maxGrams },
     status: 'evidence_constrained' as const,
@@ -286,8 +277,8 @@ export function f_per_meal_protein(bodyWeightKg: number) {
 
 // ==========================================
 // 8. Diet Quality Model: f_diet_quality
-// Status: evidence_constrained
-// Sources: WHO Healthy Diet (2020), DGA (2025–2030)
+// Status: engineering_heuristic（份次/关键词之启发式，非临床膳食评估）
+// 参考: WHO Healthy Diet (2020), DGA (2025–2030)（阈值设计之参考，非其合规判定）
 // ==========================================
 
 export function f_diet_quality(
@@ -299,15 +290,33 @@ export function f_diet_quality(
   let estimatedFiberGrams = 0;
   const foodGroupsSeen = new Set<string>();
 
-  // Scan logged foods against food database
+  // 今日所食对账：有库选明细时按明细逐行（克数已知，纤维按每 100g 精确折算），
+  // 否则退回自由文本匹配（旧记录口径，纤维按默认份数近似）——两条路径不重复计数
   for (const meal of todayMeals) {
+    if (meal.items && meal.items.length > 0) {
+      for (const item of meal.items) {
+        const match = item.foodId
+          ? COMMON_FOOD_DATABASE.find((f) => f.id === item.foodId)
+          : undefined;
+        if (!match) continue;
+        foodGroupsSeen.add(match.foodGroup);
+        estimatedFiberGrams += (match.per100.fiberG * item.grams) / 100;
+        if (match.foodGroup === 'vegetable' || match.foodGroup === 'fruit') {
+          fruitAndVegCount += 1;
+        }
+        if (match.foodGroup === 'grain' && (match.name.includes('糙米') || match.name.includes('燕麦') || match.name.includes('藜麦') || match.name.includes('全麦'))) {
+          wholeGrainsCount += 1;
+        }
+      }
+      continue;
+    }
     for (const foodStr of meal.foods) {
       const match = COMMON_FOOD_DATABASE.find(
         (f) => foodStr.includes(f.name) || f.name.includes(foodStr.split(' ')[0])
       );
       if (match) {
         foodGroupsSeen.add(match.foodGroup);
-        estimatedFiberGrams += match.fiber;
+        estimatedFiberGrams += (match.per100.fiberG * match.defaultGrams) / 100;
         if (match.foodGroup === 'vegetable' || match.foodGroup === 'fruit') {
           fruitAndVegCount += 1;
         }
@@ -332,7 +341,7 @@ export function f_diet_quality(
 
   const constraintsNotes: string[] = [];
   if (fruitAndVegCount >= 3) {
-    constraintsNotes.push('蔬菜与水果摄入充裕，符合 WHO 宏观膳食多样性');
+    constraintsNotes.push('蔬菜与水果已录达 3 份，份次充裕');
   } else {
     constraintsNotes.push('建议在下一餐或加餐中适度增加绿叶蔬菜或浆果');
   }
@@ -354,9 +363,10 @@ export function f_diet_quality(
     fruitAndVegetableServings: fruitAndVegCount,
     fiberGrams: Math.round(estimatedFiberGrams),
     wholeGrainsPresent: wholeGrainsCount > 0,
-    excessFreeSugar: false,
+    // 游离糖无从判（食物库无营养标签）——未知即 null，不冒充「未超标」
+    excessFreeSugar: null,
     foodDiversityScore,
-    ruleStatus: 'evidence_constrained',
+    ruleStatus: 'engineering_heuristic',
     constraintsNotes,
     evidenceIds: ['who-diet-2020', 'dga-2025'],
   };
@@ -518,7 +528,7 @@ export function f_meal(context: HealthContext): MealRecommendation {
     ruleStatuses: ['evidence_derived', 'evidence_constrained', 'engineering_heuristic'],
     evidenceIds: ['mifflin-1990', 'morton-2018', 'schoenfeld-2018', 'who-diet-2020'],
     assumptions: [
-      '个体处于抗阻与减脂双重平衡期，单餐宜优先保证优质蛋白质与膳食纤维摄入',
+      '单餐宜优先保证优质蛋白质与膳食纤维摄入（不预设减脂/增肌之方向，方向只由档案目标决定）',
       '采用 1.4–2.0 g/kg/day 作为群体约束区间，单餐目标 ~30–45g 蛋白质',
       '餐食评分公式 (proteinFit + energyFit - repetitionPenalty) 属于工程启发式排序',
     ],
@@ -565,7 +575,7 @@ export function f_meal(context: HealthContext): MealRecommendation {
     estimatedProtein: bestTemplate.approxProtein,
     energyRange: { min: energyMin, max: energyMax },
     proteinRange: { min: proteinMin, max: proteinMax },
-    reason: `均衡补 ≈${proteinMin}–${proteinMax}g 蛋白质与全食膳食纤维，合于今日减脂之节律。`,
+    reason: `均衡补 ≈${proteinMin}–${proteinMax}g 蛋白质与全食膳食纤维，合于今日${DIRECTION_CN[targets.direction]}之节律。`,
     ruleId,
     ruleName,
     ruleStatus,
@@ -616,13 +626,15 @@ export function f_training_state(input: {
         .join('且')}（酸痛 ≥${highSorenessMin} 或 精力 ≤${lowEnergyMax}），故调低刺激之拉伸与缓速核心之激活`;
       break;
     case 'light':
-      heuristicReason = `体感平稳或眠稍短（< ${shortSleepHours} 时），取温和容量之徒手维持循环`;
+      heuristicReason = decision.reasons.includes('no_wellbeing_record')
+        ? `今日尚未录体感，然眠不足 ${shortSleepHours} 时，故降为温和容量之徒手维持循环；录其体感后自动改判`
+        : `体感平稳或眠稍短（< ${shortSleepHours} 时），取温和容量之徒手维持循环`;
       break;
     default:
       heuristicReason =
         decision.reasons[0] === 'no_wellbeing_record'
           ? '今日尚未录体感，故按常规课表安排；录其精力与酸痛后自动改判'
-          : '精力与睡眠俱足且无明显酸痛，行完整之徒手渐进循环';
+          : '已录项皆未越阈，行完整之徒手渐进循环';
   }
 
   return {
@@ -640,8 +652,13 @@ export function f_training_state(input: {
 // Source: WHO 2020, ACSM 2026
 // ==========================================
 
-export function f_training_volume(recentWorkouts: WorkoutRecord[]) {
-  const completedThisWeek = recentWorkouts.filter((w) => w.completed);
+export function f_training_volume(recentWorkouts: WorkoutRecord[], now: Date) {
+  // 「本周」按周一起算（docs §5：一切本周统计走 isInWeek）——
+  // 入参可能掺全史，窗口在此收紧，本地与云端两条路径才不会算出不同的周量。
+  const ctx = makeDayContext(now);
+  const completedThisWeek = recentWorkouts.filter(
+    (w) => w.completed && isInWeek(ctx, w.date)
+  );
   let totalSets = 0;
   for (const w of completedThisWeek) {
     for (const ex of w.exercises) {
@@ -726,7 +743,7 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
   });
 
   const trainingState = trainingStateDecision.state;
-  const trainingVolume = f_training_volume(recentWorkouts);
+  const trainingVolume = f_training_volume(recentWorkouts, context.now);
 
   let title = '徒手全身轻量循环';
   let sessionType: 'Normal session' | 'Light session' | 'Recovery session' | 'Rest' = 'Light session';
@@ -736,6 +753,12 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
   let reason = '以温和自重激活下肢与推力之肌群，通血脉而缓神经。';
   let ruleId = 'RULE_WORKOUT_LIGHT_BODYWEIGHT_01';
   let ruleName = '自重低负荷神经维持循环';
+  let plan: SessionPlan | null = null;
+  // 规划器输入先算一份（REST/RECOVERY 亦可入 trace，保持快照同源）
+  const plannerPolicy = TRAINING_POLICY.planner;
+  const plannerBudget = context.profile.trainingMinutesBudget ?? plannerPolicy.budgetDefaultMinutes;
+  const plannerLedger = muscleGroupLedger(recentWorkouts, context.now);
+  const dayTotals = sumMealLogs(context.todayMeals);
 
   if (trainingState === 'REST') {
     title = '今日恢复与休息';
@@ -759,37 +782,42 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
     recoveryGuidance = '动作以无痛舒展为度，毕后可温水沐身。';
     ruleId = 'RULE_WORKOUT_RECOVERY_FLOW_01';
     ruleName = '低负荷主动恢复流';
-  } else if (trainingState === 'NORMAL') {
-    title = '徒手自重力量进阶循环';
-    sessionType = 'Normal session';
-    durationMinutes = 20;
-    exercises = [
-      { name: '徒手深蹲', sets: 3, repsOrDuration: '12 次', movementPattern: 'lower body', progressionNote: '全脚掌踩实，臀部向后下沉' },
-      { name: '标准俯卧撑', sets: 3, repsOrDuration: '8–10 次', movementPattern: 'push', progressionNote: '核心收紧，慢下快推' },
-      { name: '交替后箭步蹲', sets: 2, repsOrDuration: '每侧 10 次', movementPattern: 'lower body', progressionNote: '保护前膝不过度前移' },
-      { name: '单腿臀桥', sets: 2, repsOrDuration: '每侧 8 次', movementPattern: 'posterior chain', progressionNote: '强化骨盆后倾稳定' },
-      { name: '平板支撑', sets: 2, repsOrDuration: '35 秒', movementPattern: 'core', progressionNote: '肘部下压地面，避免塌腰' },
-    ];
-    reason = '精力与睡眠俱佳，故安排覆盖全身推力、下肢与后链之抗阻渐进练习。';
-    recoveryGuidance = '组间歇 60–90 秒，预留 2 次力竭之备 (RIR 2)。';
-    ruleId = 'RULE_WORKOUT_NORMAL_PROGRESSION_01';
-    ruleName = '复合自重多关节进阶循环';
   } else {
-    // LIGHT
-    title = '徒手基础全身循环';
-    sessionType = 'Light session';
-    durationMinutes = 16;
-    exercises = [
-      { name: '徒手深蹲', sets: 2, repsOrDuration: '10 次', movementPattern: 'lower body', progressionNote: '节奏平稳，下蹲 2 秒' },
-      { name: '跪姿俯卧撑', sets: 2, repsOrDuration: '8 次', movementPattern: 'push', progressionNote: '肩胛平稳下沉' },
-      { name: '双腿臀桥', sets: 2, repsOrDuration: '10 次', movementPattern: 'posterior chain', progressionNote: '顶峰停顿 1 秒' },
-      { name: '平板支撑', sets: 2, repsOrDuration: '30 秒', movementPattern: 'core', progressionNote: '保持脊柱中立' },
-    ];
-    reason = '体感平稳，以十六分钟基础动作激活诸大肌群，不加中枢神经之劳。';
-    ruleId = 'RULE_WORKOUT_LIGHT_CYCLE_01';
-    ruleName = '徒手低负荷神经维持循环';
+    // NORMAL / LIGHT —— 离线规划器：台账轮转 × 目标拆分 × 时间预算 × 摄入就绪门。
+    // 每一练都入台账影响下一练；饮食达成与眠时经摄入就绪门影响今日之课。
+    const targets = context.targets ?? null;
+    plan = selectSession({
+      state: trainingState === 'NORMAL' ? 'NORMAL' : 'LIGHT',
+      goal: context.profile.goal,
+      budgetMinutes: plannerBudget,
+      ledger: plannerLedger,
+      recentWorkouts,
+      intake: {
+        kcalRatio: targets && targets.caloriesKcal > 0 ? dayTotals.calories / targets.caloriesKcal : null,
+        proteinRatio: targets && targets.proteinG > 0 ? dayTotals.protein / targets.proteinG : null,
+      },
+      now: context.now,
+    });
+    title = plan.title;
+    sessionType = plan.sessionType;
+    durationMinutes = plan.durationMinutes;
+    exercises = plan.exercises;
+    reason = plan.reason;
+    recoveryGuidance =
+      plan.state === 'LIGHT'
+        ? '组间歇充分，动作以平稳为度，不逐酸胀力竭。'
+        : '组间歇 60–90 秒，预留 2 次力竭之备 (RIR 2)。';
+    ruleId = plan.ruleId;
+    ruleName = plan.ruleName;
   }
 
+  const targetsForTrace = context.targets ?? null;
+  const traceRuleIds = [
+    ruleId,
+    ...(plan ? plan.extraRuleIds : []),
+    'HEURISTIC_TRAINING_STATE_01',
+    'HEURISTIC_PROGRESSION_01',
+  ];
   const trace: DecisionTrace = {
     inputSnapshot: {
       sleepHours: sleepMinutes === null ? null : Math.round((sleepMinutes / 60) * 100) / 100,
@@ -797,6 +825,17 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
       sorenessScore: todayState.soreness ?? null,
       workoutCompletedToday: !!(todayWorkout && todayWorkout.completed),
       weeklySessionsSoFar: trainingVolume.weeklySessions,
+      timeBudgetMinutes: plannerBudget,
+      goal: context.profile.goal ?? null,
+      intakeKcalRatio:
+        targetsForTrace && targetsForTrace.caloriesKcal > 0
+          ? Math.round((dayTotals.calories / targetsForTrace.caloriesKcal) * 100) / 100
+          : null,
+      intakeProteinRatio:
+        targetsForTrace && targetsForTrace.proteinG > 0
+          ? Math.round((dayTotals.protein / targetsForTrace.proteinG) * 100) / 100
+          : null,
+      patternLedger: plannerLedger,
     },
     derivedValues: {
       trainingState,
@@ -804,11 +843,16 @@ export function f_workout(context: HealthContext): WorkoutRecommendation {
       targetDurationMinutes: durationMinutes,
       exerciseCount: exercises.length,
       heuristicDecision: trainingStateDecision.heuristicReason,
+      focusPatterns: plan ? plan.focusPatterns : [],
+      selectionNotes: plan ? plan.notes : [],
+      downgradedReason: plan ? plan.downgraded : null,
     },
-    ruleIds: [ruleId, 'HEURISTIC_TRAINING_STATE_01', 'HEURISTIC_PROGRESSION_01'],
-    ruleStatuses: ['engineering_heuristic', 'engineering_heuristic', 'engineering_heuristic'],
+    ruleIds: traceRuleIds,
+    ruleStatuses: traceRuleIds.map(() => 'engineering_heuristic' as RuleStatus),
     evidenceIds: ['who-2020', 'acsm-2026', 'helms-2016'],
     assumptions: [
+      '排课之周缺口、恢复门（同模式 ≥48h 才重复同族）与预算贪心皆为工程启发式，非临床处方；台账只记已完成之练',
+      '摄入就绪门：今日热量或蛋白达成不足半 → 常规课降轻量，防能量不足时强训（low_intake_before_session）；短眠维度上游已判（<6 时即轻量）',
       '仅使用徒手自重 (bodyweight only)，推力、下肢与深层核心具备良好力学刺激，拉力动作因无单杠受限',
       '精力/酸痛阈值 (Energy <= 2, Soreness >= 4) 为产品工程启发式判定，并非临床级准备度指标',
       '每次练习采 RIR 2–3（留 2–3 次至力竭）之自主节律调节',

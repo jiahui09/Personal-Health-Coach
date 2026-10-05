@@ -61,13 +61,12 @@ export const WeightTrendChart: React.FC<WeightTrendChartProps> = ({ series, summ
         <circle cx={last[0]} cy={last[1]} r="4" fill="var(--color-accent)" />
       </svg>
 
-      <div className="flex justify-between text-[12px] text-ink3 tabular-nums mt-1.5">
-        <span>{label(0)}</span>
-        <span>{label(Math.floor(series.length / 2))}</span>
-        <span>{label(series.length - 1)}</span>
-      </div>
-      <div className="text-[12px] text-ink3 tabular-nums mt-1">
-        最高 {max} · 最低 {min} 公斤
+      {/* 图下轻注脚一行：左时间轴（首/中/末日），右区间极值；两行并一行省竖向空间,信息不减 */}
+      <div className="flex flex-wrap justify-between gap-x-3 text-[12px] text-ink3 tabular-nums mt-1.5">
+        <span>
+          {label(0)} · {label(Math.floor(series.length / 2))} · {label(series.length - 1)}
+        </span>
+        <span>最高 {max} · 最低 {min} 公斤</span>
       </div>
     </div>
   );

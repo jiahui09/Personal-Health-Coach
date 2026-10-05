@@ -93,6 +93,10 @@ assert(intervalMinutes('23:30', '07:00') === 450, '跨午夜 23:30 → 07:00 = 4
 assert(formatNightDuration(440) === '7h20m', 'formatNightDuration(440) = 7h20m');
 assert(resolveSleepMinutes({ kind: 'duration', minutes: 438 })?.source === 'duration', '手录眠时来源标注');
 assert(resolveSleepMinutes({ kind: 'duration', minutes: 438 })?.minutes === 438, '手录眠时不与时刻混算');
+assert(
+  resolveSleepMinutes({ kind: 'interval', sleepStart: '23:00', wakeTime: '23:00' }) === null,
+  '两刻相同推得 0 分：不计为一夜'
+);
 
 const oneNight: DailyState[] = [
   { date: '2026-09-25', sleep: { kind: 'interval', sleepStart: '00:55', wakeTime: '08:15' }, energy: 4, soreness: 2 },
@@ -141,14 +145,28 @@ assert(slopeProbe !== null && approx(slopeProbe, 0.1, 1e-9), `斜率应为 0.1 k
 const tooFew = weightSummary([day(-2, 68.5), day(-1, 68.4)], ctx);
 assert(tooFew.trendKgPerWeek === null && tooFew.direction === 'insufficient_data', '样本不足 → 数据不足');
 
-// 异常值保护：57 vs 近七日均重 66.8 → needs_review，且不改数
+// 异常值保护：57 相对留一基线（剔除自身后的 68.43）→ needs_review，且不改数
 const anomaly = validateWeightMeasurement(57, 66.8, 7);
 assert(anomaly.flag === 'needs_review', '57 相对 66.8 应标为待核');
-assert(approx(Number(anomaly.detail.deltaKg), -9.8, 0.05), `偏离应为 -9.8，得 ${anomaly.detail.deltaKg}`);
+assert(approx(Number(anomaly.detail.deltaKg), -11.4, 0.05), `留一偏离应为 -11.4，得 ${anomaly.detail.deltaKg}`);
+assert(approx(Number(anomaly.detail.baselineKg), 68.4, 0.05), `留一基线应为 68.4，得 ${anomaly.detail.baselineKg}`);
 const normal = validateWeightMeasurement(68.0, 68.4, 7);
 assert(normal.flag === 'normal', '常度之内不打扰');
+
+// 留一回归锁：均值含自身时 delta 被自稀释 1/7——70.5 vs 含自身均值 69.0
+// 恰在 1.5kg 限上（旧法放过），剔除自身后基线 68.75 → 偏离 1.75 → 越限待核
+const looCase = validateWeightMeasurement(70.5, 69.0, 7);
+assert(approx(Number(looCase.detail.baselineKg), 68.75, 0.05), `留一基线应为 68.75，得 ${looCase.detail.baselineKg}`);
+assert(looCase.flag === 'needs_review', '留一基线不放过自稀释过的异常');
+
+// 方向噪声带：0.15 kg/周（旧阈 0.05 会把噪声读成「在涨」）→ 持平
+const flat = weightSummary([day(-14, 68.0), day(-7, 68.15), day(0, 68.3)], ctx);
+assert(flat.trendKgPerWeek !== null && approx(flat.trendKgPerWeek, 0.15, 0.005), `斜率应为 0.15，得 ${flat.trendKgPerWeek}`);
+assert(flat.direction === 'flat', '0.15 kg/周 在噪声带内 → 持平');
+assert(WEIGHT_POLICY.directionThresholdKgPerWeek === 0.2, '方向阈值 0.2 kg/周 集中于 policy');
+assert(WEIGHT_POLICY.anomalyAbsKg === 1.5 && WEIGHT_POLICY.anomalyRatio === 0.02, '异常阈值 1.5 kg / 2% 集中于 policy');
 assert(WEIGHT_POLICY.rollingAvgDays === 7 && WEIGHT_POLICY.trendWindowDays === 30, '窗口来自 policy');
-ok('体重：异常只标记待核，绝不修改原始数值');
+ok('体重：异常只标记待核，绝不修改原始数值（留一基线 + 噪声带）');
 
 // ---------------- 5. 训练决策与抗阻进度 ----------------
 const rest = decideWorkoutMode({ sleepMinutes: 480, energy: 5, soreness: 1, completedToday: true });
@@ -166,6 +184,17 @@ assert(normalMode.mode === 'normal' && normalMode.reasons.includes('ready'), '�
 const noReport = decideWorkoutMode({ sleepMinutes: null, energy: null, soreness: null, completedToday: false });
 assert(noReport.mode === 'normal' && noReport.reasons.includes('no_wellbeing_record'), '未录体感 → 不猜，明说');
 assert(noReport.thresholds.highSorenessMin === TRAINING_POLICY.highSorenessMin, '阈值快照来自 policy');
+
+// A1 回归：体感未录 + 眠 5 时 → 轻量（不得被「未录体感」早退放行成常规课）
+const noWellbeingShort = decideWorkoutMode({ sleepMinutes: 300, energy: null, soreness: null, completedToday: false });
+assert(noWellbeingShort.mode === 'light', '未录体感亦不放行短眠 → 轻量');
+assert(
+  noWellbeingShort.reasons.includes('short_sleep') && noWellbeingShort.reasons.includes('no_wellbeing_record'),
+  '短眠与判据缺失都如实上报'
+);
+// 未录体感且眠足 → 仍常规，且原因如实标「未录」而非「俱足」
+const noWellbeingOk = decideWorkoutMode({ sleepMinutes: 480, energy: null, soreness: null, completedToday: false });
+assert(noWellbeingOk.mode === 'normal' && noWellbeingOk.reasons[0] === 'no_wellbeing_record', '眠足未录体感 → 常规 + 如实说明');
 ok('训练决策：纯函数、原因可机器判读、体重不在入参内');
 
 const resistance2 = resistanceProgress(

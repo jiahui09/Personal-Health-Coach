@@ -10,6 +10,7 @@
 
 import {
   DailyState,
+  MealItem,
   MealRecord,
   TodoItem,
   UserProfile,
@@ -64,6 +65,8 @@ export function profileFromRow(row: Row): UserProfile {
   if (row.goal_source === 'user' || row.goal_source === 'advice') {
     profile.goalSource = row.goal_source;
   }
+  const budget = num(row.training_minutes_budget);
+  if (budget !== undefined) profile.trainingMinutesBudget = budget;
   return profile;
 }
 
@@ -78,6 +81,7 @@ export function profileToRow(userId: string, profile: UserProfile): Row {
   if (profile.waistCm !== undefined) row.waist_cm = profile.waistCm;
   if (profile.goal !== undefined) row.goal = profile.goal;
   if (profile.goalSource !== undefined) row.goal_source = profile.goalSource;
+  if (profile.trainingMinutesBudget !== undefined) row.training_minutes_budget = profile.trainingMinutesBudget;
   return row;
 }
 
@@ -160,7 +164,7 @@ export function mealFromRow(row: Row): MealRecord | null {
   const name = str(row.name);
   if (!id || !date || !name) return null;
   const category = row.category;
-  return {
+  const record: MealRecord = {
     id,
     date,
     time: clock(row.eaten_at) ?? '00:00',
@@ -176,10 +180,34 @@ export function mealFromRow(row: Row): MealRecord | null {
       row.source === 'suggested' || row.source === 'database' ? row.source : 'manual',
     confirmed: bool(row.confirmed, true),
   };
+  // 库选字段是可选增量：旧库列缺省/为空时如实缺席，不填 0 冒充「脂肪已知」
+  const fat = num(row.fat_g);
+  if (fat !== undefined) record.estimatedFatG = fat;
+  if (Array.isArray(row.items)) {
+    const items = (row.items as unknown[])
+      .map((raw): MealItem | null => {
+        if (!raw || typeof raw !== 'object') return null;
+        const it = raw as Record<string, unknown>;
+        const n = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+        const grams = n(it.grams);
+        const kcal = n(it.kcal);
+        const proteinG = n(it.proteinG);
+        const fatG = n(it.fatG);
+        if (typeof it.name !== 'string' || grams === null || kcal === null || proteinG === null || fatG === null) {
+          return null;
+        }
+        const item: MealItem = { name: it.name, grams, kcal, proteinG, fatG };
+        if (typeof it.foodId === 'string') item.foodId = it.foodId;
+        return item;
+      })
+      .filter((it): it is MealItem => it !== null);
+    if (items.length > 0) record.items = items;
+  }
+  return record;
 }
 
 export function mealToRow(userId: string, meal: Omit<MealRecord, 'id'>): Row {
-  return {
+  const row: Row = {
     user_id: userId,
     eaten_on: meal.date,
     eaten_at: meal.time,
@@ -191,6 +219,10 @@ export function mealToRow(userId: string, meal: Omit<MealRecord, 'id'>): Row {
     source: meal.source,
     confirmed: meal.confirmed,
   };
+  // 可选列：无值即 null（列可空），让旧记录保持「未录」而非 0
+  row.fat_g = meal.estimatedFatG ?? null;
+  row.items = meal.items ?? null;
+  return row;
 }
 
 // ---------------- workout_sessions ----------------

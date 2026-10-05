@@ -37,12 +37,12 @@
 | 抗阻 2/2 · 100% | 滚动 7 日内全部 completed | 无 `category`；「本周」定义错误 | `resistanceProgress()`：`ThisWeek` + `category === 'resistance'` |
 | 899/110g · 14159/1950kcal | 今日 `MealRecord` 直接累加 | 一键「照准」无上限无去重无提示 | 同源 `calculateNutritionProgress`；越常度标朱批并可逐条掷还 |
 | 尚余 0g / 0kcal | `Math.max(target-consumed, 0)` | 超出信息被抹掉 | `remaining` 与 `over` 并列，超出显示「已超 788.8 g」 |
-| 10.8 时 | 各分类先四舍五入到 0.1 时再求和 | 先圆整后求和 | 先合分钟（`totalMinutes`），最后一处转时 |
-| 近七日 5 条 | `this.lifeLogs.length` | 完全未按日期过滤 | `journalSummary()`：`Last7Days` 且 `content` 非空 |
+| 10.8 时 | 各分类先四舍五入到 0.1 时再求和 | 先圆整后求和 | —（生活纪事域已在三域改造中删除,页面不再出分类时长） |
+| 近七日 5 条 | `this.lifeLogs.length` | 完全未按日期过滤 | —（`journalSummary` 已随生活纪事域删除,页面不再出手记条数） |
 | 0/4 | App 与 TodayTasks 各算一次 | 同一事实两处派生 | `calculateTaskProgress()` 全站唯一入口 |
 | 45 分 | `todo.estimatedMinutes` | 计划用时按实际时长样式呈现 | 标「拟 45 分」，并注明未记实际用时 |
 | 今日之练 12 分钟 | 推荐函数的 `durationMinutes` | 估算当实际 | `WorkoutRecommendation.durationSource = 'estimated'`；今日实际训练另列 |
-| 及四分，则降为恢复 | 硬编码文案 | 「四分」指哪一项不可判 | `decideWorkoutMode` + policy 生成「酸痛 ≥4 或 精力 ≤2（眠不足 6 时亦然）」 |
+| 及四分，则降为恢复 | 硬编码文案 | 「四分」指哪一项不可判 | `decideWorkoutMode` + policy 生成「酸痛 ≥4 或 精力 ≤2 则降为恢复；眠不足 6 或精力、酸痛居中则降为轻量」（体感未录且眠足 → 常规并如实标注,未录不放行短眠） |
 | 渐降 / 抗阻合议 | `monthDelta<0` / `workoutsThisWeek>=2` | 组件内比较 | `WeightSummary.direction` / `ResistanceProgress.met` |
 
 ---
@@ -99,8 +99,8 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 | 窗口 | 定义 | 用于 |
 |---|---|---|
 | Today | `[今天 00:00, 明天 00:00)`（本地日键） | 今日任务、今日饮食、今日训练、今之体重、今日体感、今日睡眠 |
-| ThisWeek | 周一 00:00 → 周日 23:59:59.999（ISO 周） | 本周之功（分类时长/次数）、抗阻 N/目标、本周总时长 |
-| Last7Days | 滚动七日（今天 + 前六日） | 七日均重、近七日睡均、近七日手记条数、异常偏离参照 |
+| ThisWeek | 周一 00:00 → 周日 23:59:59.999（ISO 周） | 抗阻 N/目标、本周已完成次数与训练量（`f_training_volume` 同窗） |
+| Last7Days | 滚动七日（今天 + 前六日） | 七日均重、近七日睡均、异常偏离参照 |
 | Last30Days | 滚动三十日（今天 + 前廿九日） | 端点变化、回归斜率、记录条数与有效日数 |
 
 **规则**：一切窗口判定走 `isInWeek / isInLast7 / isInLast30`；组件不得自行加减天数或读时钟；文案的「本周」「近七日」由 `WINDOW_CN` / summary 的 `windowLabel` 提供，不能互换。
@@ -116,15 +116,14 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 | 近七日均重 | `Σ(每日代表值) / 有记录日数`（近 7 自然日内） | `domain/weight.ts` |
 | 三十日端点变化 | `lastDailyRep.weight − firstDailyRep.weight`（近 30 日内首末**有效日**） | `domain/weight.ts` |
 | 三十日趋势 | `OLS(dailyReps, x = 距首日天数) × 7` → kg/周 | `domain/weight.ts` |
-| 偏离度 | `latest − rollingMean7d`；`|偏离| > max(1.5kg, 均值×2%)` → `needs_review` | `domain/weight.ts` |
-| 营养比例 | `consumed / target` | `domain/nutrition.ts` |
+| 偏离度 | `latest − 留一基线`；基线 = 近 7 日均值**剔除自身**后的其余各日均值（`(Σ−latest)/(n−1)`，n<2 回落至均值，免得自己稀释自己的异常）；`|偏离| > max(1.5kg, 基线×2%)` → `needs_review` | `domain/weight.ts` |
+| 营养比例 | `consumed / target`（`target ≤ 0` → 比例 0） | `domain/nutrition.ts` |
 | 营养余量 | `max(target − consumed, 0)` | 同上 |
 | 营养超额 | `max(consumed − target, 0)` | 同上 |
-| 睡眠时长（区间） | `(wakeMinutes − startMinutes + 1440) mod 1440` | `domain/sleep.ts` |
+| 营养状态 | `target ≤ 0` → `no_target`（未立目标：不判达标、不判超额）；否则 `over / under / met` | 同上 |
+| 睡眠时长（区间） | `(wakeMinutes − startMinutes + 1440) mod 1440`；两刻相同推得 0 分 → 不计为一夜 | `domain/sleep.ts` |
 | 睡眠均值 | `Σ(夜时长) / 有记录夜数` | `domain/sleep.ts` |
-| 抗阻完成率 | `count(ThisWeek ∧ completed ∧ category==='resistance') / policy.weeklyResistanceTarget` | `domain/training.ts` |
-| 活动总时长 | `Σ durationMinutes`（本周），分类再分组 | `domain/activity.ts` |
-| 手记条数 | `count(Last7Days ∧ content 非空)` | `domain/activity.ts` |
+| 抗阻完成率 | `count(ThisWeek ∧ completed ∧ category==='resistance') / decideTrainingTarget({direction, goal, activityLevel}).resistanceDaysPerWeek`（个性化 2–4 日；`policy.weeklyResistanceTarget` 为缺省下限） | `domain/training.ts` |
 | 情景区间 | `latest + trendKgPerWeek × weeks × damping[weeks] ± spread[weeks]`；质量不达标 → `withheld` | `services/scientificRules.ts` |
 
 ---
@@ -136,19 +135,20 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 | `TRAINING_POLICY.lowEnergyMax` | 2 | 工程启发式 |
 | `TRAINING_POLICY.highSorenessMin` | 4 | 工程启发式 |
 | `TRAINING_POLICY.shortSleepHours` | 6 | 工程启发式 |
-| `TRAINING_POLICY.weeklyResistanceTarget` | 2 | WHO 2020（每周 ≥2 日抗阻） |
+| `TRAINING_POLICY.weeklyResistanceTarget` | 2 | WHO 2020（每周 ≥2 日抗阻）；实际处方由 `decideTrainingTarget` 依目标与活动水平给 2–4 日 |
 | `SLEEP_POLICY.targetMinutes` | 420 | AASM 2015（每晚 ≥7 时） |
 | `WEIGHT_POLICY.rollingAvgDays / trendWindowDays` | 7 / 30 | 工程设定 |
 | `WEIGHT_POLICY.anomalyAbsKg / anomalyRatio` | 1.5kg / 2% | 工程启发式 |
 | `WEIGHT_POLICY.minDaysForTrend` | 3 | 工程设定（不足即「数据不足」） |
+| `WEIGHT_POLICY.directionThresholdKgPerWeek` | 0.2 | 工程启发式（日重与水钠波动的噪声带,以内读作「持平」） |
 | `NUTRITION_POLICY.overRatioReview` | 2.0 | 工程启发式（越 2 倍即提示核对） |
 
 训练决策顺序（`decideWorkoutMode`，纯函数）：
 1. 今日已练 → `rest`（原因 `workout_completed_today`）
-2. 未录精力与酸痛 → `normal`（原因 `no_wellbeing_record`，**不猜**）
+2. 精力与酸痛**皆未录** → 眠不足 6 时：`light`（原因 `short_sleep` + `no_wellbeing_record`——短眠是客观事实，不因未录体感被放行成常规课）；眠足：`normal`（原因 `no_wellbeing_record`，**不猜**）
 3. `soreness ≥ 4` 或 `energy ≤ 2` → `recovery`
 4. 眠 < 6 时 / `energy === 3` / `soreness === 3` → `light`
-5. 其余 → `normal`
+5. 其余 → `normal`（原因 `ready`）
 
 **体重不在该函数入参内**：异常体重不可能影响训练决策。
 
@@ -174,13 +174,13 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 
 | 门槛 | 结果 |
 |---|---|
-| `npm test`（7 套） | scientificAudit / journalContract / contrast / **domain** / **migration** / **presentationContract** / layoutContract 全通过 |
+| `npm test`（9 套） | scientificAudit / journalContract / contrast / **domain** / **body** / **migration** / **supabaseContract** / **presentationContract** / layoutContract 全通过 |
 | `npx tsc --noEmit` | 通过 |
-| `npm run build` | 通过（473 KB / gzip 151 KB） |
-| `.shots/e2e.mjs` | 进食需填分子分母并入账、空手记不可提交、纯计时手记入「本周之功」而不入「近来手记」、体征由时刻推得 7h20m、异常体重二次确认后**原样保存**并标待核 |
-| `.shots/layout-probe.mjs --check` | 1440 / 1024 / 390 全 PASS（横线同 y、左下缘一致、溢出 0） |
+| `npm run build` | 通过（500 KB / gzip 158 KB） |
+| `.shots/e2e.mjs` | 未建档不出人体数字 → 立档后 BMI/代谢/目标出现 → 食物库搜选回填（明细克数与 `estimatedFatG` 落库）→ 体征由时刻推得 7h20m、异常体重二次确认后**原样保存**并标待核 → 页面无方法学文案、同轴计量列全等 |
+| `.shots/layout-probe.mjs --check` | 1440 / 1023 / 768 / 640 / 390 全 PASS（配对行横线同 y、诸头左缘一致、同轴三列全等、溢出 0） |
 | `.shots/qa-states.mjs` | 注入遗留异常态（57kg / 33 条建议膳 / 旧 `sleepHours`）后：页面出现「待核 · 已超 · 不出推演」，今之体重仍为 **57**（未被改写） |
-| `kill-ai-slop` 扫描 | 0 hits |
+| `impeccable detect` | 9 项 report-only（既有遗留，未新增） |
 
 ---
 
@@ -189,7 +189,7 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 - 唯一组装点：`src/services/todayAssembly.ts` 的 `assembleToday(snapshot, now)` —— 输入是六种原始记录，输出是整个 `TodayData`。
 - 本地：`MockHealthRepository` 读 localStorage 后调用它；云端：`SupabaseHealthRepository` 取 PostgREST 行、经 `supabaseMappers` 映射为域模型后调用**同一个**函数。
 - 因此两条路径的统计口径不可能分叉；`src/tests/supabaseContract.test.ts` 用同一批记录分别走两条路径，断言产出逐字节相同。
-- 云端会话：邮箱 magic link，令牌存本机并在到期前 60 秒自动续期；未登录时数据方法抛 `auth`，页面显示登录页而不是空数据。
+- 云端会话：邮箱 magic link，令牌存本机并在到期前 60 秒自动续期；未登录时数据方法抛 `auth`，页面显示登录页而不是空数据。刷新并发去重（多个请求同时到期只打一次端点）；只有 400/401（令牌确已失效）才注销会话，5xx / 429 / 空响应体等瞬时故障保留会话——网络抖动不得把用户静默登出。
 
 ## 11. 版面与文案纪律（与数据层的分工）
 
@@ -202,5 +202,4 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 
 - `UserProfile.currentWeight` 仍是「最近一次测量」的缓存（供引擎入参）；页面显示已全部改读 `WeightSummary.latest`，但字段本身尚未移除。
 - 预测尚未落库为 `WeightPrediction` 记录，因此「上周推演 vs 本周实测」的误差复验（spec §9）只做了纯函数与出处标注，未做持久化复盘。
-- 手记与活动仍共用 `LifeLog` 一张表（以 `content` 有无区分）；若未来要分别统计「行为次数」与「写作篇数」，可拆表但需迁移。
 - 阈值目前全部是工程启发式（除 WHO/AASM 两项），`evidenceStatus` 已在决策结果中标注，尚未在页面上逐条展示证据等级。

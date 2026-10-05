@@ -41,7 +41,8 @@ export function resolveSleepMinutes(sleep: SleepEntry | undefined): {
   if (!sleep) return null;
   if (sleep.kind === 'interval') {
     const minutes = intervalMinutes(sleep.sleepStart, sleep.wakeTime);
-    if (minutes === null) return null;
+    // 两刻相同推得 0 分：与手录眠时同规，不计为一夜（免得均值被空夜拉低）
+    if (minutes === null || minutes <= 0) return null;
     return { minutes, source: 'interval', sleepStart: sleep.sleepStart, wakeTime: sleep.wakeTime };
   }
   const minutes = Math.round(sleep.minutes);

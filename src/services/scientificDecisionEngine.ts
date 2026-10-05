@@ -114,6 +114,13 @@ export class ScientificDecisionEngine {
     const consumedCalories = context.todayMeals.reduce((acc, m) => acc + m.estimatedCalories, 0);
     const consumedProtein = context.todayMeals.reduce((acc, m) => acc + m.estimatedProtein, 0);
 
+    // 睡眠缺失/不可解 → null：旧式 `?? 0` 会把「没睡可记」记成 0 时,
+    // 下游短眠判据随之误降档（缺数不是短眠）。
+    const sleepMinutes =
+      context.todayState.sleep === undefined
+        ? null
+        : resolveSleepMinutes(context.todayState.sleep)?.minutes ?? null;
+
     return {
       version: this.version,
       evaluatedAt: context.now.toISOString(),
@@ -128,11 +135,9 @@ export class ScientificDecisionEngine {
         energy: context.todayState.energy ?? null,
         soreness: context.todayState.soreness ?? null,
         sleepHours:
-          context.todayState.sleep === undefined
+          sleepMinutes === null
             ? null
-            : Math.round(
-                ((resolveSleepMinutes(context.todayState.sleep)?.minutes ?? 0) / 60) * 100
-              ) / 100,
+            : Math.round((sleepMinutes / 60) * 100) / 100,
       },
       mealRecommendation: meal,
       workoutRecommendation: workout,

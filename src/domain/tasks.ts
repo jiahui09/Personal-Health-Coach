@@ -26,3 +26,22 @@ export function calculateTaskProgress(todos: TodoItem[]): TaskProgress {
     ratio: active.length > 0 ? completed / active.length : 0,
   };
 }
+
+/** 拟时长的取值域：1 分钟至 12 小时（一天的待办不至离谱）。 */
+const ESTIMATE_MIN_MINUTES = 1;
+const ESTIMATE_MAX_MINUTES = 720;
+
+/**
+ * 拟时长规范化（录入与改录共用）：字符串或数字 → 整数分钟。
+ * 空、非法、越界之外的取值夹回 [1, 720]；空或非法返回 null（即「无时长」）。
+ */
+export function normalizeEstimateMinutes(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const trimmed = typeof value === 'string' ? value.trim() : value;
+  if (trimmed === '') return null;
+  const parsed = typeof trimmed === 'string' ? Number(trimmed) : trimmed;
+  if (!Number.isFinite(parsed)) return null;
+  const rounded = Math.round(parsed);
+  if (rounded < ESTIMATE_MIN_MINUTES) return null;
+  return Math.min(rounded, ESTIMATE_MAX_MINUTES);
+}

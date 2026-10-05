@@ -23,10 +23,16 @@ export const ACTIVITY_PAL: Record<ActivityLevel, number> = {
   very_active: 1.9,
 };
 
-/** 亚太标准腰围提示线（cm）。 */
+/** 亚太标准腰围提示线（cm）：IDF/WPRO 亚太口径,男 ≥90、女 ≥80。 */
 export const WAIST_LIMIT_CM = { male: 90, female: 80 } as const;
 
-export type BmiCategory = 'underweight' | 'normal' | 'overweight' | 'obese_1' | 'obese_2';
+export type BmiCategory =
+  | 'underweight'
+  | 'normal'
+  | 'overweight'
+  | 'obese_1'
+  | 'obese_2'
+  | 'obese_3';
 
 /** 出生年 → 周岁（用注入时钟，年龄不另存一份）。 */
 export function ageYears(birthYear: number, now: Date): number | null {
@@ -42,13 +48,14 @@ export function bmi(weightKg: number | null, heightCm: number | null | undefined
   return weightKg / (meters * meters);
 }
 
-/** WHO 成人 BMI 分类。 */
+/** WHO 成人 BMI 分类（含三度：35–39.9 二度,≥40 三度,2026 审查补全）。 */
 export function bmiCategory(value: number): BmiCategory {
   if (value < 18.5) return 'underweight';
   if (value < 25) return 'normal';
   if (value < 30) return 'overweight';
   if (value < 35) return 'obese_1';
-  return 'obese_2';
+  if (value < 40) return 'obese_2';
+  return 'obese_3';
 }
 
 /**

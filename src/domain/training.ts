@@ -20,6 +20,20 @@ export interface WorkoutDecisionInput {
   completedToday: boolean;
 }
 
+/**
+ * 档案字段「每日训练时间预算」规范化：
+ * 未填/非法 → undefined（未设，读取处按政策默认）；越界 → 夹到政策上下限。
+ * 组件不写阈值字面量，一律由此函数落刀。
+ */
+export function normalizeTrainingMinutesBudget(value: unknown): number | undefined {
+  const { budgetMinMinutes, budgetMaxMinutes } = TRAINING_POLICY.planner;
+  const n = typeof value === 'string' ? Number(value) : value;
+  if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return undefined;
+  if (n < budgetMinMinutes) return budgetMinMinutes;
+  if (n > budgetMaxMinutes) return budgetMaxMinutes;
+  return Math.round(n);
+}
+
 export function decideWorkoutMode(
   input: WorkoutDecisionInput,
   policy: TrainingDecisionPolicy = TRAINING_POLICY
@@ -38,8 +52,21 @@ export function decideWorkoutMode(
     return { mode: 'rest', reasons: ['workout_completed_today'], thresholds, evidenceStatus };
   }
 
-  // 未录体感 → 不猜，按常规课表并如实说明判据缺失
+  // 短眠是客观事实，与体感录没录无关——先于「体感未录」早退判出，
+  // 免得 4 小时之眠 + 未录体感被放行成整套常规课（A1 短路缺陷）。
+  const shortSleep =
+    sleepMinutes !== null && sleepMinutes < policy.shortSleepHours * 60;
+
+  // 未录体感 → 不猜等级，只按眠之客观事实降档或维持常规，并如实说明判据缺失
   if (energy === null && soreness === null) {
+    if (shortSleep) {
+      return {
+        mode: 'light',
+        reasons: ['short_sleep', 'no_wellbeing_record'],
+        thresholds,
+        evidenceStatus,
+      };
+    }
     return { mode: 'normal', reasons: ['no_wellbeing_record'], thresholds, evidenceStatus };
   }
 
@@ -50,8 +77,6 @@ export function decideWorkoutMode(
     return { mode: 'recovery', reasons, thresholds, evidenceStatus };
   }
 
-  const shortSleep =
-    sleepMinutes !== null && sleepMinutes < policy.shortSleepHours * 60;
   if (shortSleep) reasons.push('short_sleep');
   if (energy !== null && energy === policy.moderateEnergy) reasons.push('moderate_energy');
   if (soreness !== null && soreness === policy.moderateSoreness) reasons.push('moderate_soreness');

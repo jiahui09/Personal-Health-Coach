@@ -17,7 +17,6 @@ import {
   CreateTodoInput,
   CreateWorkoutInput,
   DailyState,
-  HealthContext,
   MealRecord,
   TodayData,
   TodoItem,
@@ -27,31 +26,17 @@ import {
 } from '../types/health';
 import {
   STORAGE_KEYS,
-  buildNutritionSummary,
-  buildTrainingSummary,
-  calculateTaskProgress,
-  dailyRepresentatives,
-  decideWorkoutMode,
-  adviseWeightGoal,
-  bodySummary,
-  decideTrainingTarget,
-  deriveNutritionTargets,
   makeDayContext,
-  profileCheck,
   migrateMeals,
   migrateProfile,
   migrateState,
   migrateTodos,
   migrateWeights,
   migrateWorkouts,
-  sleepSummary,
-  tasksForDay,
-  weightSummary,
 } from '../domain';
 import { AuthUser, HealthRepository, RepositoryError } from './healthRepository';
-import { scientificDecisionEngine } from './scientificDecisionEngine';
-import { f_meal_slot } from './scientificRules';
-import { clockTimeOf, formatDisplayDate, timeGreetingOf } from '../utils/calendar';
+import { assembleToday } from './todayAssembly';
+import { clockTimeOf } from '../utils/calendar';
 
 /**
  * Collision-safe id. `Date.now()` ids break as soon as two writes land in the
@@ -75,10 +60,17 @@ function getStorage<T>(key: string, fallback: T): T {
 }
 
 function setStorage<T>(key: string, value: T): void {
+  // 无 DOM（契约测试环境）→ 本机无存储可写，保持内存态即可
+  if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (err) {
-    console.warn(`[MockHealthRepository] Failed writing key ${key}:`, err);
+    // 浏览器里写失败 = 数据真的没存上（配额已满/隐私设置）：
+    // 如实抛给调用方让页面报「未成」——旧实现只 console.warn，
+    // 用户看到的是「保存成功」，刷新后记录无声消失。
+    throw new RepositoryError('unknown', `本机存储写入失败：${key}（配额已满或浏览器隐私设置）`, {
+      cause: err,
+    });
   }
 }
 
@@ -126,6 +118,28 @@ export class MockHealthRepository implements HealthRepository {
     this.meals = readCollection(STORAGE_KEYS.MEALS, migrateMeals, seed.meals);
     this.workouts = readCollection(STORAGE_KEYS.WORKOUTS, migrateWorkouts, seed.workouts);
     this.todos = readCollection(STORAGE_KEYS.TODOS, migrateTodos, seed.todos);
+
+    // 跨标签页：另一标签写了存储 → 刷新内存快照。
+    // 否则本页继续拿旧快照做「读-改-写」，会把别处刚存的记录无声覆盖掉。
+    // storage 事件只在别的标签页触发，同页写入不会回环。
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', () => this.refreshFromStorage());
+    }
+  }
+
+  /** 从存储重读全量（读失败时保底用当前内存,不退回种子数据）。 */
+  private refreshFromStorage(): void {
+    try {
+      const storedProfile = getStorage<unknown>(STORAGE_KEYS.PROFILE, null);
+      if (storedProfile !== null) this.profile = migrateProfile(storedProfile);
+      this.weightHistory = readCollection(STORAGE_KEYS.WEIGHTS, migrateWeights, this.weightHistory);
+      this.dailyStates = readCollection(STORAGE_KEYS.DAILY_STATE, migrateState, this.dailyStates);
+      this.meals = readCollection(STORAGE_KEYS.MEALS, migrateMeals, this.meals);
+      this.workouts = readCollection(STORAGE_KEYS.WORKOUTS, migrateWorkouts, this.workouts);
+      this.todos = readCollection(STORAGE_KEYS.TODOS, migrateTodos, this.todos);
+    } catch (err) {
+      console.warn('[MockHealthRepository] Cross-tab refresh failed:', err);
+    }
   }
 
   // ================= Identity (demo auth) =================
@@ -198,134 +212,20 @@ export class MockHealthRepository implements HealthRepository {
 
   // ================= Aggregated view =================
   async getToday(): Promise<TodayData> {
-    const now = this.clock();
-    const ctx = makeDayContext(now);
-    const today = ctx.todayKey;
-
-    // --- 原始记录的今日切片 ---
-    const todayMeals = this.meals.filter((meal) => meal.date === today && meal.confirmed !== false);
-    const todayTodos = tasksForDay(this.todos, today);
-    const todayWorkout = this.workouts.find((w) => w.date === today && w.completed);
-    const todayState = this.dailyStates.find((state) => state.date === today);
-
-    // --- 派生指标（domain 纯函数，全站唯一计算处） ---
-    const weight = weightSummary(this.weightHistory, ctx);
-    const body = bodySummary(this.profile, weight.latest, now);
-    const check = profileCheck(this.profile, now);
-
-    // 建议（据 BMI/腰围）→ 用户确认后的目标方向 → 每日目标 → 每周抗阻处方
-    const goalAdvice = adviseWeightGoal({
-      bmiCategory: body.bmiCategory,
-      waistElevated: body.waist ? body.waist.elevated : null,
-      goal: this.profile.goal,
-    });
-    const direction =
-      this.profile.goal === undefined
-        ? goalAdvice.direction
-        : this.profile.goal === 'fat loss'
-        ? 'lose'
-        : this.profile.goal === 'muscle gain'
-        ? 'gain'
-        : 'maintain';
-    const targets = deriveNutritionTargets({
-      tdeeKcal: body.tdeeKcal,
-      weightKg: weight.latest,
-      direction,
-      sex: this.profile.sex,
-    });
-    const trainingTarget = decideTrainingTarget({
-      direction,
-      goal: this.profile.goal,
-      activityLevel: this.profile.activityLevel,
-    });
-
-    const nutrition = buildNutritionSummary(
-      todayMeals,
-      targets ? targets.caloriesKcal : 0,
-      targets ? targets.proteinG : 0
-    );
-    const sleep = sleepSummary(this.dailyStates, ctx);
-    const tasks = calculateTaskProgress(todayTodos);
-
-    // --- 决策：训练模式由纯函数判定；体重不在入参内，异常体重无法污染它 ---
-    const decision = decideWorkoutMode({
-      sleepMinutes: sleep.today ? sleep.today.minutes : null,
-      energy: todayState?.energy ?? null,
-      soreness: todayState?.soreness ?? null,
-      completedToday: !!todayWorkout,
-    });
-    const training = buildTrainingSummary(
-      this.workouts,
-      ctx,
-      decision,
-      trainingTarget.resistanceDaysPerWeek
-    );
-
-    // --- 决策：引擎推荐（餐食/训练课表），复用同一决策结果 ---
-    const context: HealthContext = {
-      now,
-      profile: this.profile,
-      currentWeight: weight.latest ?? 0,
-      todayState: todayState ?? { date: today },
-      todayMeals,
-      recentMeals: this.meals,
-      recentWorkouts: this.workouts,
-      weightHistory: this.weightHistory,
-      todayWorkout,
-      trainingDecision: decision,
-      targets,
-    };
-
-    const nextMeal = scientificDecisionEngine.recommendNextMeal(context);
-    const nextWorkout = scientificDecisionEngine.recommendNextWorkout(context);
-    const dietQuality = scientificDecisionEngine.assessDietQuality(context);
-    const forecast = scientificDecisionEngine.computeWeightForecast({
-      latestWeight: weight.latest,
-      trendKgPerWeek: weight.trendKgPerWeek,
-      basedOnDays: weight.trendDays,
-      inputWindowDays: weight.windowDays,
-      quality: weight.quality,
-    });
-
-    const flags = [weight.quality, nutrition.quality, sleep.quality];
-    const weightPoints = dailyRepresentatives(this.weightHistory)
-      .slice(-ctx.last30Keys.length)
-      .map((point) => ({ date: point.dayKey, weight: point.weight }));
-
-    return {
-      date: today,
-      displayDate: formatDisplayDate(now),
-      timeGreeting: timeGreetingOf(ctx.hour),
-      profile: this.profile,
-      mealSlot: f_meal_slot(ctx.hour),
-
-      todos: todayTodos,
-      todayMeals,
-
-      tasks,
-      weight,
-      nutrition,
-      sleep,
-      state: todayState ?? { date: today },
-      weightSeries: weightPoints,
-
-      training,
-      dataQuality: {
-        flags,
-        reviewCount: flags.filter((flag) => flag.flag === 'needs_review').length,
+    // 唯一组装点在 todayAssembly（docs §10）：本地与云端走同一段代码。
+    // 此前这里内联过一份复制的派生逻辑，已与真源分叉（体重序列窗口、训练周量等），
+    // 现一律收回，两路径不可能再算出不同的 TodayData。
+    return assembleToday(
+      {
+        profile: this.profile,
+        weights: this.weightHistory,
+        dailyStates: this.dailyStates,
+        meals: this.meals,
+        workouts: this.workouts,
+        todos: this.todos,
       },
-      forecast,
-      nextMeal,
-      nextWorkout,
-      dietQuality,
-
-      profileStatus: check.complete ? 'complete' : 'incomplete',
-      missingProfileFields: check.missing,
-      body,
-      targets,
-      goalAdvice,
-      trainingTarget,
-    };
+      this.clock()
+    );
   }
 
   // ================= Meals =================
@@ -343,6 +243,8 @@ export class MockHealthRepository implements HealthRepository {
       foods: input.foods && input.foods.length > 0 ? input.foods : [input.name],
       estimatedCalories: input.estimatedCalories,
       estimatedProtein: input.estimatedProtein,
+      ...(input.estimatedFatG !== undefined ? { estimatedFatG: input.estimatedFatG } : {}),
+      ...(input.items && input.items.length > 0 ? { items: input.items } : {}),
       source: input.source ?? 'manual',
       confirmed: true,
     };
@@ -493,6 +395,17 @@ export class MockHealthRepository implements HealthRepository {
     const todo = this.todos.find((t) => t.id === id);
     if (!todo) throw new RepositoryError('not_found', `Todo not found: ${id}`);
     todo.status = todo.status === 'done' ? 'todo' : 'done';
+    setStorage(STORAGE_KEYS.TODOS, this.todos);
+    return todo;
+  }
+
+  async updateTodo(id: string, patch: { estimatedMinutes?: number | null }): Promise<TodoItem> {
+    const todo = this.todos.find((t) => t.id === id);
+    if (!todo) throw new RepositoryError('not_found', `Todo not found: ${id}`);
+    if ('estimatedMinutes' in patch) {
+      todo.estimatedMinutes = patch.estimatedMinutes ?? undefined;
+      if (todo.estimatedMinutes === undefined) delete todo.estimatedMinutes;
+    }
     setStorage(STORAGE_KEYS.TODOS, this.todos);
     return todo;
   }

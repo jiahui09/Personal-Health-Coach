@@ -39,7 +39,7 @@ export function adviseWeightGoal(input: {
   const reasons: GoalReason[] = [];
 
   let direction: WeightDirection = 'maintain';
-  if (bmiCategory === 'obese_1' || bmiCategory === 'obese_2') {
+  if (bmiCategory === 'obese_1' || bmiCategory === 'obese_2' || bmiCategory === 'obese_3') {
     direction = 'lose';
     reasons.push('bmi_obese');
   } else if (bmiCategory === 'overweight') {
@@ -92,6 +92,12 @@ export function deriveNutritionTargets(input: {
   const proteinMax = Math.round(weightKg * TARGET_POLICY.proteinGPerKg.max);
   const proteinG = Math.round((proteinMin + proteinMax) / 2);
 
+  // 脂肪随体重取区间中点；碳水 = 千卡余量（非独立测定，口径写在类型注释里）
+  const fatMin = Math.round(weightKg * TARGET_POLICY.fatGPerKg.min);
+  const fatMax = Math.round(weightKg * TARGET_POLICY.fatGPerKg.max);
+  const fatG = Math.round((fatMin + fatMax) / 2);
+  const carbG = Math.max(0, Math.round((caloriesKcal - proteinG * 4 - fatG * 4) / 4));
+
   const rate =
     direction === 'lose'
       ? TARGET_POLICY.loseRatePctPerWeek
@@ -103,6 +109,9 @@ export function deriveNutritionTargets(input: {
     caloriesKcal,
     proteinG,
     proteinRange: { min: proteinMin, max: proteinMax },
+    fatG,
+    fatRange: { min: fatMin, max: fatMax },
+    carbG,
     kcalFromTdee: tdeeKcal,
     ratio,
     floored: raw < floor,
@@ -113,6 +122,29 @@ export function deriveNutritionTargets(input: {
         }
       : null,
     direction,
+  };
+}
+
+/**
+ * 训练日之标：当日排定有练时的热量上调（比例与封顶取小者），
+ * 蛋白/脂肪不变（日总量已按体重定），碳水随余量自然上浮。
+ * 依据为训练日能量可用性调节的工程启发式，不当作医学处方。
+ */
+export function deriveTrainingDayTargets(base: NutritionTargets | null): NutritionTargets | null {
+  if (!base) return null;
+  const bumped = Math.min(
+    base.caloriesKcal + TARGET_POLICY.trainingDayKcalCap,
+    Math.round(base.caloriesKcal * TARGET_POLICY.trainingDayKcalPct)
+  );
+  const carbG = Math.max(0, Math.round((bumped - base.proteinG * 4 - base.fatG * 4) / 4));
+  return {
+    ...base,
+    caloriesKcal: bumped,
+    carbG,
+    ratio:
+      base.kcalFromTdee > 0
+        ? Math.round((bumped / base.kcalFromTdee) * 100) / 100
+        : base.ratio,
   };
 }
 

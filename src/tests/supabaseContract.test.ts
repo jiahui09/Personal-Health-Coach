@@ -161,6 +161,15 @@ assert(JSON.stringify(mealBack) === JSON.stringify(meal), '膳食映射往返一
 assert(mealBack?.confirmed === true, '入库膳食视为已确认');
 assert(mealFromRow({ ...mealToRow(UID, meal) }) === null, '缺 id（未真正入库的行）→ null');
 ok('膳食映射：往返一致');
+const mealWithItems = { ...meal, estimatedFatG: 22.5, items: [{ name: '鸡胸肉', grams: 150, kcal: 248, proteinG: 46.4, fatG: 5.4, foodId: 'f-chicken-breast' }] };
+assert(JSON.stringify(mealFromRow({ id: meal.id, ...mealToRow(UID, mealWithItems) })) === JSON.stringify(mealWithItems), '库选明细与脂肪列往返一致');
+const legacyBack = mealFromRow({ id: meal.id, ...mealToRow(UID, meal) });
+assert(legacyBack?.estimatedFatG === undefined && legacyBack?.items === undefined, '旧记录无 items/脂肪 → 如实缺席（不填 0）');
+ok('膳食库选增量：往返一致且旧记录缺席');
+const budgetProfile = { ...seeded, trainingMinutesBudget: 45 };
+assert(profileFromRow({ ...profileToRow(UID, budgetProfile) }).trainingMinutesBudget === 45, '训练时间预算列往返一致');
+assert(profileFromRow(profileToRow(UID, seeded)).trainingMinutesBudget === undefined, '未设预算 → 字段缺席（不填 30 冒充已设）');
+ok('档案训练时间预算：往返一致且未设缺席');
 
 const workout = { id: 'wo-1', date: '2026-09-23', time: '18:15', title: '徒手循环', durationMinutes: 20, durationSource: 'estimated' as const, exercises: [{ name: '深蹲', sets: 3, repsOrDuration: '12 次' }], perceivedDifficulty: 'moderate' as const, completed: true, category: 'resistance' as const };
 assert(JSON.stringify(workoutFromRow({ id: 'wo-1', ...workoutToRow(UID, workout) })) === JSON.stringify(workout), '训练映射往返一致');
@@ -278,16 +287,47 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
     assert(err instanceof SupabaseError && err.kind === 'network', '网络异常 → network');
   }
 
-  // 响应体缺失（代理/网关异常）：不崩,视为会话失效
+  // 瞬时故障（刷新响应空体 / 5xx）：不误登出——保留会话，真失效留给下游如实报 auth
   {
     const storage = authedStorage(Date.now() - 1000); // 已过期 → 触发刷新
     const { fetchImpl } = makeFetch([
-      { method: 'GET', match: () => true, status: 200, body: undefined },
       { method: 'POST', match: (u) => u.includes('grant_type=refresh_token'), status: 200, body: undefined },
     ]);
     const broken = new SupabaseRest(cfg, { fetchImpl, storage });
-    assert((await broken.ensureSession()) === null, '刷新响应为空 → 会话失效（不抛异常）');
-    assert(broken.getSession() === null, '失效会话被清除');
+    assert((await broken.ensureSession()) !== null, '刷新响应为空（网关瞬时异常）→ 保留会话,不误登出');
+    assert(broken.getSession() !== null, '会话仍在（后续请求若真失效会如实报 auth）');
+  }
+  {
+    const storage = authedStorage(Date.now() - 1000);
+    const { fetchImpl } = makeFetch([
+      { method: 'POST', match: (u) => u.includes('grant_type=refresh_token'), status: 500, body: { message: 'oops' } },
+    ]);
+    const flaky = new SupabaseRest(cfg, { fetchImpl, storage });
+    assert((await flaky.ensureSession()) !== null, '刷新遇 5xx（瞬时故障）→ 保留会话');
+  }
+  // 明确的令牌失效（401）：清会话、止住重试
+  {
+    const storage = authedStorage(Date.now() - 1000);
+    const { fetchImpl } = makeFetch([
+      { method: 'POST', match: (u) => u.includes('grant_type=refresh_token'), status: 401, body: { message: 'invalid refresh token' } },
+    ]);
+    const expired = new SupabaseRest(cfg, { fetchImpl, storage });
+    assert((await expired.ensureSession()) === null, '刷新 401 → 会话失效');
+    assert(expired.getSession() === null, '失效会话被清除');
+  }
+  // 并发刷新去重：同时到期的多个请求只打一次刷新端点
+  {
+    const storage = authedStorage(Date.now() - 1000);
+    const { fetchImpl, calls } = makeFetch([
+      { method: 'POST', match: (u) => u.includes('grant_type=refresh_token'), status: 200, body: { ...sessionBody, access_token: 'at-x' } },
+    ]);
+    const concurrent = new SupabaseRest(cfg, { fetchImpl, storage });
+    const [a, b] = await Promise.all([concurrent.ensureSession(), concurrent.ensureSession()]);
+    assert(a?.accessToken === 'at-x' && b?.accessToken === 'at-x', '并发刷新共享同一结果');
+    assert(
+      calls.filter((c) => c.url.includes('grant_type=refresh_token')).length === 1,
+      '并发只打一次刷新端点'
+    );
   }
   ok('错误映射：401/403→auth、404→not_found、409→conflict、5xx→unknown、断网→network');
 }
@@ -492,6 +532,7 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
     { method: 'GET', match: (u) => u.includes('/profiles'), body: [{ user_id: UID, ...profileToRow(UID, seeded) }] },
     { method: 'GET', match: (u) => u.includes('/weight_records'), body: [{ id: 'w-existing' }] },
     { method: 'PATCH', match: (u) => u.includes('/weight_records'), body: [{ id: 'w-existing', measured_on: '2026-09-25', weight_kg: 57, source: 'manual' }] },
+    { method: 'PATCH', match: (u) => u.includes('/todos'), body: [{ id: 't-1', ...todoToRow(UID, { date: '2026-09-25', title: '甲', estimatedMinutes: 30, status: 'todo' }) }] },
     { method: 'POST', match: (u) => u.includes('/profiles'), body: [{ user_id: UID, ...profileToRow(UID, seeded) }] },
     { method: 'DELETE', match: (u) => u.includes('/meals'), body: null },
   ];
@@ -512,6 +553,17 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
   const upsert = calls.find((c) => c.method === 'POST' && c.url.includes('on_conflict=user_id'));
   assert(upsert !== undefined, '档案走 upsert（on_conflict=user_id）');
   assert(upsert!.headers.Prefer.includes('merge-duplicates'), '档案 upsert 带 merge-duplicates');
+
+  // 改拟时长：按 id 的 PATCH、限本人、载荷即列名（null = 清空,不写 0）
+  const todoSetResult = await repo.updateTodo('t-1', { estimatedMinutes: 30 });
+  assert(todoSetResult.estimatedMinutes === 30, 'PATCH 回映射带出新时长');
+  const todoSet = calls.find((c) => c.method === 'PATCH' && c.url.includes('/todos'));
+  assert(todoSet !== undefined && todoSet.url.includes('id=eq.t-1') && todoSet.url.includes('user_id=eq.'), '改拟时长走按 id 的 PATCH 且限本人');
+  assert((todoSet!.body as { estimated_minutes?: number | null }).estimated_minutes === 30, '载荷写 estimated_minutes');
+
+  await repo.updateTodo('t-1', { estimatedMinutes: null });
+  const todoClear = calls.filter((c) => c.method === 'PATCH' && c.url.includes('/todos'))[1];
+  assert((todoClear.body as { estimated_minutes?: number | null }).estimated_minutes === null, '取消时长 → estimated_minutes 置 null（列可空,不写 0）');
 
   await repo.deleteMeal('m-1');
   const del = calls.find((c) => c.method === 'DELETE');

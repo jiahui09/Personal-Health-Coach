@@ -40,6 +40,8 @@ export interface UserProfile {
   goalSource?: 'user' | 'advice';
   /** 腰围（cm，可选）：BMI 之外的第二证据，判断中心性肥胖。 */
   waistCm?: number;
+  /** 每日预留的训练时间（分钟，10–180）：离线排课的时长背包上限；缺省视为 30。 */
+  trainingMinutesBudget?: number;
 }
 
 export interface WeightRecord {
@@ -76,6 +78,17 @@ export interface DailyState {
 
 export type MealCategory = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
+/** 食物库条目：按克记账的一行（kcal/蛋白/脂由每 100g 值 × 克数换算）。 */
+export interface MealItem {
+  /** 库内 id；手录增补（不在库中）时缺席。 */
+  foodId?: string;
+  name: string;
+  grams: number;
+  kcal: number;
+  proteinG: number;
+  fatG: number;
+}
+
 /** 实际摄入（MealLog）。计划膳是 MealRecommendation，永不自动进入此表。 */
 export interface MealRecord {
   id: string;
@@ -86,6 +99,10 @@ export interface MealRecord {
   foods: string[];
   estimatedCalories: number;
   estimatedProtein: number; // grams
+  /** 脂肪（g）：库选行由每 100g 值换算求和；旧记录（无此值）如实缺席。 */
+  estimatedFatG?: number;
+  /** 库选明细（食物档案库录入）；旧记录为自由文本，无此字段。 */
+  items?: MealItem[];
   /** 手录 / 采纳建议（一键照准）/ 食物库。 */
   source: 'manual' | 'suggested' | 'database';
   /** 只有确认入账的记录才计入今日所食。 */
@@ -97,7 +114,11 @@ export interface BodyweightExercise {
   sets: number;
   repsOrDuration: string; // e.g. "12 reps", "8-12 reps", "30 sec"
   progressionNote?: string;
-  movementPattern?: 'push' | 'lower body' | 'core' | 'posterior chain' | 'pull (limited)';
+  movementPattern?: 'push' | 'lower body' | 'core' | 'posterior chain' | 'pull (limited)' | 'cardio';
+  /** 训练部位（展示口径，由动作库提供；旧记录缺席）。 */
+  muscleGroups?: string[];
+  /** 动作库 id（进阶阶梯的定位键；旧记录缺席，可由 name 回查）。 */
+  exerciseId?: string;
 }
 
 export type PerceivedDifficulty = 'light' | 'moderate' | 'challenging';
@@ -261,17 +282,37 @@ export interface WeightForecast {
   limitations: string[];
 }
 
+/**
+ * 食物档案库条目：一切换算以每 100g 为基准（每克 = per100 / 100）。
+ * 数值为约值：整理自《中国食物成分表（第 6 版）》与 USDA FoodData Central 的公开口径，
+ * 生熟状态写在 name 里（如「熟」），录入界面才展示，主页不陈列。
+ */
 export interface FoodItem {
   id: string;
   name: string;
-  foodGroup: 'protein' | 'vegetable' | 'fruit' | 'grain' | 'dairy' | 'fat' | 'legume';
+  foodGroup:
+    | 'protein'
+    | 'vegetable'
+    | 'fruit'
+    | 'grain'
+    | 'dairy'
+    | 'fat'
+    | 'legume'
+    | 'drink'
+    | 'seasoning';
+  /** 展示份数（如「120g」「2 个 (100g)」），仅供录入时的默认克数参考。 */
   serving: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  fiber: number;
-  sodium: number; // mg
+  /** 默认录入克数（由份数折算）。 */
+  defaultGrams: number;
+  /** 每 100g：热量千卡与三大营养素克数（纤维并列，供膳食质量评估）。 */
+  per100: {
+    kcal: number;
+    proteinG: number;
+    fatG: number;
+    carbG: number;
+    fiberG: number;
+    sodiumMg: number;
+  };
 }
 
 export interface DietQualityAssessment {
@@ -279,9 +320,11 @@ export interface DietQualityAssessment {
   fruitAndVegetableServings: number;
   fiberGrams: number;
   wholeGrainsPresent: boolean;
-  excessFreeSugar: boolean;
+  /** 游离糖是否超标：食物库无从判，未知即 null（不冒充「未超标」）。 */
+  excessFreeSugar: boolean | null;
   foodDiversityScore: number;
-  ruleStatus: 'evidence_constrained';
+  /** 份次/关键词启发式，非临床膳食评估。 */
+  ruleStatus: RuleStatus;
   constraintsNotes: string[];
   evidenceIds: string[];
 }
@@ -368,6 +411,8 @@ export interface TodayData {
   body: import('../domain/types').BodySummary;
   /** 由 TDEE 与目标派生的每日目标；未建档为 null。 */
   targets: import('../domain/types').NutritionTargets | null;
+  /** 训练日之标（基准之上按当日排定之练上调）；休整日或未建档为 null。 */
+  trainingDayTargets: import('../domain/types').NutritionTargets | null;
   goalAdvice: import('../domain/types').WeightGoalAdvice;
   trainingTarget: import('../domain/types').TrainingTarget;
 }
@@ -381,6 +426,10 @@ export interface CreateMealInput {
   foods?: string[];
   estimatedCalories: number;
   estimatedProtein: number;
+  /** 脂肪（g）：库选时由每 100g 值换算；手录可缺省。 */
+  estimatedFatG?: number;
+  /** 食物库明细行；自由文本手录时缺席。 */
+  items?: MealItem[];
   /** 缺省视为手录；「照准」采纳建议时传 suggested。 */
   source?: MealRecord['source'];
 }

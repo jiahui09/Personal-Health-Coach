@@ -2,18 +2,18 @@
 
 ## Source of truth
 - Status: **Active**
-- Last refreshed: 2026-09-25（三域改造：锻炼 + 体征 + 饮食，删除手记域）
+- Last refreshed: 2026-10-05（八点重构：食物营养档案库 + 摄入依个人数据计算 + 训练计划智能搭配 + IA 重构——刊头只留问候、其一其二并为唯一配对行、体征/营养摄入/统计三通栏，原五节解散归位；此前：五项优化与三域改造）
 - Primary product surfaces:
-  - 单页主应用 `src/App.tsx`（刊头 → 双栏正文 → 通栏情景外推/今日体感 → 页脚，版框内单页流）
-  - 体征档弹层 `src/components/ProfileSheet.tsx`（建档 / 改档：性别·出生年·身高·活动水平·腰围·目标）
-  - 录事弹层 `src/components/RecordSheet.tsx`（四签：进食 / 习练 / 体征 / 手记）
+  - 单页主应用 `src/App.tsx`（刊头 → 配对行（其一 今日之事 ↔ 其二 今日之练，折缝分栏） → 通栏体征 → 通栏营养摄入 → 通栏统计（情景外推收于其末） → 页脚，版框内单页流）
+  - 建档弹层 `src/components/ProfileSheet.tsx`（立档 / 改档：性别·出生年·身高·活动水平·腰围·目标·每日训练时间预算）
+  - 录事弹层 `src/components/RecordSheet.tsx`（三签：进食 / 习练 / 体征；进食页内嵌食物营养档案库搜选，库不上主页）
   - 比选稿 `docs/palette-options.html`（五版色组，当前选中其五）
-  - 成稿截图 `.shots/za-desktop2.png`（1440）、`.shots/za-mobile.png`（390）、`.shots/za-mobile-*.png`（局部）
+  - 成稿截图 `.shots/b4-desktop.png`（1440 全页）、`.shots/b4-mobile.png`（390 全页）、`.shots/za-mobile-*.png`（历史局部）
 - Evidence reviewed:
-  - `README.md`（§2 功能表、§字体与视觉约定、变更清单 1–14 条、仍待补齐）
+  - `README.md`（§2 功能表、§字体与视觉约定、变更清单 1–21 条、仍待补齐）
   - `src/index.css` `@theme` 令牌与 `@layer components`（btn 三级、`.section-actions`、`.leader`）
   - 全部 `src/components/*.tsx`；`.omx/artifacts/visual-ralph/editorial-journal/`（参考稿 html + 双端截图，已批准基线）
-  - 实测几何：`.shots/layout-probe.mjs` @1440/1024/768/390（本轮改版前后各量一次）
+  - 实测几何：`.shots/layout-probe.mjs` @1440/1023/768/640/390（本轮改版后全量 `--check`）
   - **版式契约**：`src/tests/layoutContract.test.ts`（共列网格、三级横线、零方法学文案）＋ `.shots/layout-probe.mjs --check`（条同起同止、值列不折行、章节行数上限）
   - **数据语义契约：`docs/data-semantics.md`**（Raw/Derived/Decision/Presentation 分层、窗口定义、公式表、迁移规则、审计结论）
   - 回归门槛：`src/tests/contrast.test.ts`、`journalContract.test.ts`、`scientificAudit.test.ts`、`domain.test.ts`、`migration.test.ts`、`presentationContract.test.ts`、`layoutContract.test.ts`
@@ -21,39 +21,38 @@
 
 ## Brand
 - Personality: **御批奏折**——臣工以墨书事（正文、数据、事实一律墨色），皇帝以朱批裁（裁决、状态、旁注、回执一律朱色）。安静、克制、有权威感；一册可读的手记，不是一块仪表盘。
-- Trust signals: 数值入句、每个数字可追到唯一函数（`docs/data-semantics.md`）、证据分级（`evidence_derived` / `evidence_constrained` / `engineering_heuristic`）、「缘由」把输入快照与局限摊开、`journalContract`/`contrast`/`layoutContract` 三重回归。
+- Trust signals: 数值入句、每个数字可追到唯一函数（`docs/data-semantics.md`）、证据分级（`evidence_derived` / `evidence_constrained` / `engineering_heuristic`）、决策痕迹留在数据层（`nextMeal.trace` / `nextWorkout.trace`，口径归 README）、`journalContract`/`contrast`/`layoutContract` 三重回归。
 - Avoid: KPI 卡、瓦片墙、环形进度、渐变、投影堆砌、backdrop-blur、多强调色并存、现代白话 UI 文案、AI 默认配色（靛紫渐变、语义色块）。
 
 ## Product goals
 - Goals: 让人一眼看清「现在该吃、该动、身体如何」，且每条建议都可追溯到规则与证据；改版后额外目标是**版面本身可信**——横线对齐、动作不浮空、比例有余光线索。
 - Non-goals: 多页面路由、社交/排行榜、生成式内容（LLM = OFF）、后端排版本轮不动；页面上不设决策稽核入口（痕迹留在数据层与 README）。
-- Success signals: 三对章节横线跨栏 y 差 ≤2px（实测 0px）；移动端标题左缘一致（实测 38px 全页一致）；四套测试 + tsc + build + e2e 全绿；截图复核无浮空/挤行。
+- Success signals: 唯一配对行两章横线跨栏 y 差 ≤2px（实测 0px）；移动端标题左缘一致（全页同缘）；9 套测试 + tsc + build + e2e + 五档探针全绿；截图复核无浮空/挤行。
 
 ## Personas and jobs
 - Primary personas: 唯一用户——记录自己健康账目的中文使用者，桌面查、手机记。
-- User jobs: ① 今日要做什么（其一）② 下一餐/下一次练什么（其二/其三）③ 身体与本周是否在正轨（近况、身体近况、今日体感、生活纪事）④ 随手记一笔（右下 FAB）。
+- User jobs: ① 今日要做什么、练什么（其一 ↔ 其二同一配对行，先看裁决再看清单）② 体征如何（体征通栏：睡眠、体感、今之体重、档案所录）③ 该吃多少、吃了多少（营养摄入通栏：今日之标、两笔账、下一膳、所食账）④ 是否在正轨（统计通栏：派生数、趋势、合议、情景外推）⑤ 随手记一笔（右下 FAB）。
 - Key contexts of use: 桌面 1440 浏览全页；手机 390 单手速记；两者都要求扫读时先看到「裁决」再看到细节。
 
 ## Information architecture
 - Primary navigation: 无路由；单页纵向流 + 录事弹层。
-- Core routes/screens: 刊头（印章 + 时段问候 + 干支日期 + 录一笔）→ 正文双栏 → 近来手记（通栏）→ 页脚（复其初）。
+- Core routes/screens: 刊头（印章 + 时段问候 + 干支日期）→ 配对行（其一/其二）→ 通栏体征 → 通栏营养摄入 → 通栏统计 → 页脚（复其初）；录事靠右下 FAB 单入口。
 - Content hierarchy:
-  - **行动类**（左栏章目）：其一 今日之事、其二 下一膳、其三 今日之练——目录式清单 + 章末动作脚注行。
-  - **计量类**（比例）：蛋白质 / 热量 / 本周抗阻 / 睡均 / 生活纪事时长占比——墨线计量条 + 颜色分级。
-  - **体征类**：体征档（Raw 输入 + BMI/腰围/RMR/TDEE + 每日目标 + 抗阻处方）、身体近况（含唯一图表）、今日体感（睡眠与 1–5 点阵）。
-  - **推演类**：情景外推（四周/八周/十二周，标注模型版本与依据日数，存疑即暂阙）。
-  - 桌面行配对（右栏次序为等高配对重排，**与移动端次序不同**）：
-    | 行 | 左（章目） | 右（附目） | 实测高度差 |
+  - **行动类**（唯一配对行）：其一 今日之事、其二 今日之练——目录式清单 + 章末动作脚注行。
+  - **体征通栏**：只收原始事实——今之体重、档案所录（身高/性别/岁/活动/腰围）、夜眠与近七夜、精力·酸痛 1–5 圆点、数据待核朱批；未建档只显缺项。
+  - **营养摄入通栏**：今日之标（每日热量/蛋白/脂肪/碳水，练日上浮）、两笔账（蛋白质/热量计量条，尚余/已超）、下一膳（组块，`.group-head`）、今日所食（逐条掷还）。
+  - **统计通栏**：一切算出来的数——BMI/RMR/TDEE/每周抗阻（未建档不出人体数字）、近七日均重/三十日变化/回归斜率/记录、睡均与抗阻合议计量条、三十日趋势图（全页唯一图表）、情景外推（组块：四周/八周/十二周 + 推演所据，存疑即暂阙）。
+  - 桌面唯一配对行（两格同高、章节横线跨栏同 y，探针断言行差与配对）：
+    | 行 | 左 | 折缝 | 右 |
     | --- | --- | --- | --- |
-    | 一 | 其一 今日之事 | 近况（计量＋记述） | 86px 内 |
-    | 二 | 其二 下一膳 | 生活纪事 · 本周之功 | 56px 内 |
-    | 三 | 其三 今日之练 | 身体近况 ＋ 今日体感 | 88px 内 |
-  - 移动端单栏次序（README §1 已同步）：其一 → 其二 → 其三 → 身体近况 → 近况 → 生活纪事 → 近来手记。
+    | 一 | 其一 今日之事 | 1px | 其二 今日之练 |
+  - 通栏三节无配对，纵向排列（体征 → 营养摄入 → 统计），各留 36px 旁批槽。
+  - 移动端单栏次序（README §1 已同步）：其一 → 其二 → 体征 → 营养摄入 → 统计。
 
 ## Data semantics（数据语义，先于视觉）
 - 四层：**Raw**（用户/设备记录）→ **Derived**（`src/domain/` 纯函数）→ **Decision**（Derived + `policy.ts`）→ **Presentation**（组件只措辞）。
 - 同一事实只有一个权威来源；组件零业务算术、零阈值字面量、零 `new Date()`（`presentationContract.test.ts` 锁定）。
-- 窗口不混用：Today / ThisWeek（周一起）/ Last7Days（滚动）/ Last30Days（滚动）；「本周之功」与「抗阻 N/目标」用本周，「七日均重 / 睡均 / 近来手记」用近七日。
+- 窗口不混用：Today / ThisWeek（周一起）/ Last7Days（滚动）/ Last30Days（滚动）；「抗阻 N/目标」用本周，「七日均重 / 睡均 / 近七夜」用近七日。
 - 计划 ≠ 实测：`MealRecommendation` 未「照准」不入今日所食；建议时长标「估算」；任务用时标「拟」。
 - 预测 ≠ 实测：预测为「情景外推」（带模型版本与依据日数），数据存疑即暂阙，永不写入实测。
 - 异常只标记不改数：`needs_review` + 朱批 + 可掷还；训练决策入参不含体重。
@@ -67,7 +66,7 @@
 - Principle 2 — **信息按性质选形态**：比例 → 计量条；可执行 → 目录清单 + 动作脚注；可感知 → 入句 + 单图 + 点阵；叙述 → 行文。不为「好看」给事实加容器。
 - Principle 3 — **对齐即可信**：章节头一律出自一个组件，横线必须跨栏同 y；章节级动作一律落在章末脚注行，不浮空。
 - Principle 4 — **数值一律入句**，计量条只是句子的余光注脚；百分比永远是真实文本（可选中、可朗读）。
-- Tradeoffs: 行配对会带来单元格留白（本轮用右栏次序重排压到 ≤100px）；眉行式章节头比行内章序高约 6px/节（换取标题左缘一致）；朱与绛明度接近，故绛只用于「超录/删除」两种极少数场景。
+- Tradeoffs: 配对行两格同高（格底以内容较高者为准，格内自然留白受探针 ≤110px 约束）；眉行式章节头比行内章序高约 6px/节（换取标题左缘一致）；朱与绛明度接近，故绛只用于「超录/删除」两种极少数场景。
 
 ## Visual language
 - Color（`src/index.css @theme`，全部由 `contrast.test.ts` 锁定）:
@@ -88,9 +87,9 @@
 - Imagery/iconography: `lucide-react` 单色图标 13–16px；全页唯一图表为 30 日体重折线（手绘 SVG，朱线 + 朱 10% 填充）；纸面为两层内联 SVG 噪点（纤维 6% + 斑驳 7%）。
 
 ## Components
-- Existing components to reuse: `SectionHead`、`RuleMeter`、`.btn-primary` / `.btn-link`、`.section-actions`、`.leader`、`WeightTrendChart`、`RecordSheet`、`BodyProfile`、`ForecastBand`、`ProfileSheet`。
+- Existing components to reuse: `SectionHead`、`RuleMeter`、`.btn-primary` / `.btn-link`、`.section-actions`、`.leader`、`WeightTrendChart`、`RecordSheet`、`BodySection` / `NutritionSection` / `StatsSection`（本轮新设的三通栏）、`ProfileSheet`。
 - New/changed components:
-  - `src/components/SectionHead.tsx`（新）：眉行（章序 + 右注）→ 题行 → 2px 墨线 + 竖排朱批旁注；全页 6 处章节头唯一出口。
+  - `src/components/SectionHead.tsx`（新）：眉行（章序 + 右注）→ 题行 → 2px 墨线 + 竖排朱批旁注；全页 5 处章节头（其一/其二 + 三通栏）唯一出口。
   - `src/components/RuleMeter.tsx`（新）：`label | 3px 条 | 分子/分母/百分比`；`tone: ink | accent | danger`；`max<=0` 时渲染 `—`。
   - `Marginalia` 内联于 `SectionHead`（`verdict` prop）：桌面 `absolute -right-9 -top-0.5` + `[writing-mode:vertical-rl]`，≤768 换行内横排。
   - `.section-actions`（`@layer components`）：章末动作脚注行；窄屏 `flex-col`、sm+ 一行两端。
@@ -102,28 +101,28 @@
 - Target standard: WCAG 2.1 AA；文本 ≥4.5:1、控件边框 ≥3:1（`contrast.test.ts` 回归锁定）。
 - Keyboard/focus behavior: 全局 `:focus-visible` 2px 墨环；所有可点行都是 `<button>` 并带 `aria-pressed`；点击目标 ≥24px（复选框 24 热区 + 18 可视，点阵 `w-6 h-6`）。
 - Contrast/readability: 字号地板 12px、交互文字 13px；朱对纸 5.66、绛对纸 8.82、褐对纸 5.55。
-- Screen-reader semantics: 朱批旁注是真实文本；计量条本体 `aria-hidden`，语义由可见的「63/110 g · 57%」承载；生活纪事行带 `aria-label`（含占比）；体重图 `aria-label` 带真值单位。
+- Screen-reader semantics: 朱批旁注是真实文本；计量条本体 `aria-hidden`，语义由可见的「63/110 g · 57%」承载；名录式动作行（动作勾选、膳行掷还）带 `aria-label`；体重图 `aria-label` 带真值单位。
 - Reduced motion and sensory considerations: 无自动动画、无计量条动画；Toast 只做 160ms 位移淡入。
 
 ## Responsive behavior
 - Supported breakpoints/devices: 1440 / 1024 / 768（单栏分界）/ 390。
-- Layout adaptations: `lg:` 起启用双栏行配对 + 折缝 + 竖排旁批；`sm:` 起动作脚注改一行两端；其余单栏按原次序流下。探针要求四档 `overflow = 0`。
+- Layout adaptations: `lg:` 起启用唯一配对行（`1.45fr | auto | 1fr` + 折缝）+ 竖排旁批；通栏内两栏并置也只在 `lg:` 起；`sm:` 起动作脚注改一行两端；其余单栏按 DOM 次序流下。探针要求五档 `overflow = 0`。
 - Touch/hero differences: 移动端动作整行另起、右对齐；点阵与复选框保持 24px 热区；FAB「记一笔」常驻，页面 `pb-32` 让位。
 
 ## Interaction states
 - Loading: 「手记启卷…」+ 6px 朱点（居中纸面）。
-- Empty: 无待办 → 朱批「今日无事」；本周无纪事 → 「本周尚无纪事。」，计量条渲染 `—`；无动作 → 不渲染空脚注行。
+- Empty: 无待办 → 朱批「今日无事」；未入账 → 「今日尚未入账一膳 · 由「记一笔」录之」，计量条渲染 `—`；无动作 → 不渲染空脚注行。
 - Error: `runMutation` 失败 Toast **不冠**「知道了 ·」，格式「膳食之录未成（code）」；加载失败整页重试态。
 - Success: Toast「知道了 · <事实>」+ 朱亮色勾；完成态徽标 `bg-accentsoft / border-accentline / text-accent`。
-- Disabled: 提交按钮随表单校验禁用（e2e 锁定「空手记不可提交」）。
+- Disabled: 提交按钮随表单校验禁用（e2e 锁定进食页「所食为空不可提交」、训练页不提交空动作）。
 - Offline/slow network: 本机 mock 仓库即时；云库走同一 `runMutation` 错误通道。
 
 ## Content voice
 - Tone: 古风行文、第一人称手记体；克制、不推销、不空话。**数字必须带口径**（「7/7 日」「30/30 日 · 30 次」「拟 45 分」「估算」）。
 - **不写方法学**：`非首末/不予修改/仅标记/仅指/非健康度/非承诺/做线性回归/原始记录…` 等句子禁止出现在页面（`layoutContract` 锁定），口径写入 README「术语与口径」，模型出处写入「推演所据」面板。
 - 判定与其数值同行（`RuleMeter suffix`：`2/2 次 · 100% · 合议`），不再单列「判」行。
-- 数据待核的措辞固定为「朱批 · 待核 N 项」＋「高于/低于近七日均重 X 公斤」＋「原始记录不予修改，仅标记待核」。
-- Terminology: 章作「其一/其二/其三」，膳作「下一膳」，练作「今日之练」，记录作「录之/添录一事」。
+- 数据待核的措辞固定为「朱批 · 待核 N 项」＋「今日体重高于/低于近七日其余各日之均重 X 公斤」——集中于体征通栏的 `DataQualityNote`，只标不改，口径归 README「术语与口径」。
+- Terminology: 章作「其一/其二」，节作「体征 / 营养摄入 / 统计」，膳作「下一膳」，练作「今日之练」，记录作「录之/添录一事」。
 - Microcopy rules（御批词表，`layoutContract.test.ts` 锁定关键项）:
   | 场合 | 用词 |
   | --- | --- |
@@ -132,7 +131,7 @@
   | 危险/删除 | 「掷还」（今日之事删条 title） |
   | 达标 | 「合议 · 每周两日抗阻」「合议 · 七时之基 AASM 2015」 |
   | 未达标 | 「未合议 · 尚差 N 日」「未合议 · 不及七时之基 AASM 2015」 |
-  | 旁批（≤8 字） | 「已成其一」「照减脂之期」「今日常规」「渐降」「抗阻合议」「本周 9.8 时」「近七日 4 条」 |
+  | 旁批（≤8 字） | 「已成其一」「照减脂之期」「今常规」「渐降」「待核」「未建档」「抗阻合议」 |
   | 保留不改 | 「毕此一练」「复其初」「录之 / 罢」「览毕」「记此一刻」；文献引文、规则 ID、ASCII 单位 |
 
 ## Implementation constraints
@@ -140,19 +139,18 @@
 - 分层约束：业务算术与阈值只能出现在 `src/domain/`（`policy.ts` 是唯一常量表）；`services/scientificRules.ts` 只保留证据规则并消费 policy；仓库实现只做「读存储 → 迁移 → 调 domain → 组装 TodayData」。
 - 数据契约：`TodayData` = 今日原始切片 + 派生指标 + 决策结果；`DailyState.sleep` 为判别联合（区间/手录眠时），字段可缺席表示「未录」。
 - Design-token constraints: 颜色只写令牌类；组件源码禁裸 hex；单档 8px 圆角；不引入新依赖、不新增令牌（除非先改 `contrast.test.ts` 并说明对比度）。
-- Performance constraints: 单包 451 KB（gzip 143 KB）不回退；无新增网络请求、无图表库。
+- Performance constraints: 单包 503 KB（gzip 159 KB）不回退；无新增网络请求、无图表库。
 - Compatibility constraints: 仅现代 evergreen 浏览器；`writing-mode` 降级在 ≤1024 走横排。
-- Test/screenshot expectations: 改动前后必跑 `npm test`（四套）、`npm run lint`、`npm run build`、`.shots/e2e.mjs`；版式用 `.shots/layout-probe.mjs <url> <width>` 断言横线同 y、标题左缘、`overflow=0`；截图 `.shots/shot.mjs <url> <width> <out.png>` 并人工复核。
+- Test/screenshot expectations: 改动前后必跑 `npm test`（9 套）、`npm run lint`、`npm run build`、`.shots/e2e.mjs`、`.shots/qa-states.mjs`；版式用 `.shots/layout-probe.mjs <url> <width> --check` 断言配对横线同 y、标题左缘、同轴三列全等、章节行数上限、`overflow=0`（@1440/1023/768/640/390）；截图 `.shots/shot.mjs <url> <width> <out.png>` 并人工复核。
 
 ## Open questions
 - [x] **云端数据路径已实作**（零依赖 fetch 直连；表结构与 RLS 见 `supabase/schema.sql`，逐步启用见 `docs/deploy.md`）。遗留：本机 localStorage → 云端的一次性导入尚未提供。Owner: 实现 / 影响: 老数据迁移。
 - [ ] BMI 分不清肌肉与脂肪：已用腰围作第二证据，是否再加体脂率（需设备测量）待定。Owner: 用户 / 影响: 判定精度。
 - [ ] `共列网格` 的名列定宽 84px 意味着标签限 5 字以内；若未来出现更长指标名，需要新的网格变体或允许折行。
 - [ ] 名录式条目的点线引导在中列伸缩（标题越长点线越短）；是否改为「点线定长 + 标题截断」待定。
-- [ ] 右栏桌面次序（近况 / 生活纪事 / 身体近况）是**等高配对的产物**，语义上「身体近况」落到了末行；若用户希望恢复「身体近况」居首，则需接受行二留白 ≈300px 或给其二增内容。Owner: 用户 / 影响: IA 与截图。
+- [x] **IA 重构已按批准方案执行**：右栏三行配对取消，改为唯一配对行（其一 ↔ 其二）+ 体征/营养摄入/统计三通栏纵列；五旧节解散归位，原「右栏次序」问题随之消失。
 - [ ] `UserProfile.currentWeight` 仍是「最近测量」缓存，页面已不读；是否彻底移除该字段（需改引擎入参契约）。Owner: 实现 / 影响: 类型。
 - [ ] 预测是否落库为 `WeightPrediction` 记录以支持「上期推演 vs 本期实测」误差复验。Owner: 用户 / 影响: 数据模型。
-- [ ] 手记与活动是否拆表（现共用 `LifeLog`，以 `content` 有无区分）。Owner: 用户 / 影响: 迁移成本。
 - [ ] 朱兼印章与状态两色同值（`seal === accent`），若嫌印章存在感被稀释，是否给印章加深 1px 绛边。Owner: 用户 / 影响: 刊头。
 - [ ] 旁批文案目前由各组件就地拼装（取自真实数据），是否要抽成统一 `verdicts.ts` 词表以便统一口吻。Owner: 实现 / 影响: 可维护性。
 - [ ] 计量条是否扩展到「其一完成度 x/4」（用户本轮明确**不**选，现为纯文本）。Owner: 用户 / 影响: 计量范围。

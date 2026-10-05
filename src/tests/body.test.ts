@@ -15,6 +15,8 @@ import {
   bodySummary,
   decideTrainingTarget,
   deriveNutritionTargets,
+  deriveTrainingDayTargets,
+  normalizeTrainingMinutesBudget,
   mifflinStJeor,
   profileCheck,
   totalDailyEnergy,
@@ -47,6 +49,7 @@ assert(bmiCategory(18.4) === 'underweight', '<18.5 偏瘦');
 assert(bmiCategory(18.5) === 'normal' && bmiCategory(24.9) === 'normal', '18.5–24.9 正常');
 assert(bmiCategory(25) === 'overweight' && bmiCategory(29.9) === 'overweight', '25–29.9 超重');
 assert(bmiCategory(30) === 'obese_1' && bmiCategory(35) === 'obese_2', '≥30 肥胖（一/二度）');
+assert(bmiCategory(39.9) === 'obese_2' && bmiCategory(40) === 'obese_3', '35–39.9 二度、≥40 三度');
 ok('BMI 与 WHO 分类边界正确');
 
 // ---------------- 3. 腰围（亚太标准） ----------------
@@ -54,6 +57,8 @@ assert(WAIST_LIMIT_CM.male === 90 && WAIST_LIMIT_CM.female === 80, '亚太提示
 assert(waistAssessment(84, 'male')?.elevated === false, '男 84cm 未越线');
 assert(waistAssessment(92, 'male')?.elevated === true, '男 92cm 越线');
 assert(waistAssessment(82, 'female')?.elevated === true, '女 82cm 越线');
+assert(waistAssessment(90, 'male')?.elevated === true, '男恰在 90 线上算越线（≥ 判定）');
+assert(waistAssessment(79.5, 'female')?.elevated === false, '女 79.5cm 未越线（< 80）');
 assert(waistAssessment(undefined, 'male') === null, '未录腰围 → null（不猜）');
 ok('腰围判定：未录即 null，越线即提示');
 
@@ -89,6 +94,26 @@ assert(notFloored?.caloriesKcal === 1200 && notFloored.floored === false, '恰�
 assert(deriveNutritionTargets({ tdeeKcal: null, weightKg: 68.4, direction: 'lose', sex: 'male' }) === null, '无 TDEE → 无目标（不编造）');
 assert(lose?.targetRateKgPerWeek !== null && lose!.targetRateKgPerWeek!.max <= 0.7, '减脂速率 0.5–1.0 %体重/周');
 ok('每日目标热量与蛋白由 TDEE、体重与目标方向派生');
+
+// ---------------- 5b. 脂肪/碳水目标与训练日之标 ----------------
+assert(lose?.fatRange.min === Math.round(68.4 * 0.6) && lose?.fatRange.max === Math.round(68.4 * 1.0), '脂肪区间 0.6–1.0 g/kg（工程启发式）');
+assert(lose?.fatG === Math.round((Math.round(68.4 * 0.6) + Math.round(68.4 * 1.0)) / 2), '脂肪目标取区间中点');
+assert(lose?.carbG === Math.max(0, Math.round((lose.caloriesKcal - lose.proteinG * 4 - lose.fatG * 4) / 4)), '碳水 = 千卡余量 ÷4（非独立测定）');
+const trainDay = deriveTrainingDayTargets(lose!);
+assert(trainDay?.caloriesKcal === Math.min(lose!.caloriesKcal + 400, Math.round(lose!.caloriesKcal * 1.1)), '训练日 ×1.1，封顶 +400');
+assert(trainDay?.proteinG === lose?.proteinG && trainDay?.fatG === lose?.fatG, '训练日不动蛋白与脂肪');
+assert(trainDay?.carbG !== lose?.carbG, '训练日碳水随余量上浮');
+assert(deriveTrainingDayTargets(null) === null, '无基准 → 无训练日之标（不编数）');
+ok('脂肪/碳水目标与训练日之标（比例与封顶取小者）');
+
+// ---------------- 5c. 训练时间预算规范化（组件不写阈值） ----------------
+assert(normalizeTrainingMinutesBudget('') === undefined, '未填 → undefined（按默认）');
+assert(normalizeTrainingMinutesBudget(0) === undefined && normalizeTrainingMinutesBudget(-5) === undefined, '非正数 → undefined');
+assert(normalizeTrainingMinutesBudget(45) === 45, '区间内原值');
+assert(normalizeTrainingMinutesBudget(5) === 10, '低于下限夹到 10');
+assert(normalizeTrainingMinutesBudget(500) === 180, '高于上限夹到 180');
+assert(normalizeTrainingMinutesBudget('40') === 40, '表单字符串同样规范化');
+ok('训练时间预算：未填按默认，越界夹到政策上下限');
 
 // ---------------- 6. 建议：「该减、该守、还是该增」 ----------------
 const fatAdvice = adviseWeightGoal({ bmiCategory: 'obese_1', waistElevated: null, goal: 'fat loss' });

@@ -1,9 +1,11 @@
 // Serif for the sheet title only. deslop-ignore-file 07 19 22 28
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Check } from 'lucide-react';
 import type { ActivityLevel, FitnessGoal, UserProfile } from '../types/health';
 import { ACTIVITY_CN, DIRECTION_CN } from '../services/decisionCopy';
+import { useSheetBehavior } from '../hooks/useSheetBehavior';
+import { TRAINING_POLICY } from '../domain/policy';
 
 interface ProfileSheetProps {
   isOpen: boolean;
@@ -41,30 +43,39 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>('light');
   const [waistCm, setWaistCm] = useState<number | ''>('');
   const [goal, setGoal] = useState<FitnessGoal>('fat loss');
+  const [trainingMinutes, setTrainingMinutes] = useState<number | ''>(TRAINING_POLICY.planner.budgetDefaultMinutes);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Esc 阖之、点遮罩阖之、开时锁背景滚动、阖时焦点归位（三弹层共用）
+  const { panelRef, backdropProps } = useSheetBehavior(isOpen, onClose);
+
+  // 开时照最近一次存盘的档回填；profile 走 ref,别处数据刷新不中断正在填写的内容
+  const profileRef = useRef(profile);
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
+
   useEffect(() => {
     if (!isOpen) return;
-    setSex(profile.sex === 'female' ? 'female' : 'male');
-    setBirthYear(profile.birthYear ?? '');
-    setHeightCm(profile.heightCm ?? '');
-    setActivityLevel(profile.activityLevel ?? 'light');
-    setWaistCm(profile.waistCm ?? '');
-    setGoal(profile.goal ?? 'fat loss');
+    const p = profileRef.current;
+    setSex(p.sex === 'female' ? 'female' : 'male');
+    setBirthYear(p.birthYear ?? '');
+    setHeightCm(p.heightCm ?? '');
+    setActivityLevel(p.activityLevel ?? 'light');
+    setWaistCm(p.waistCm ?? '');
+    setGoal(p.goal ?? 'fat loss');
+    setTrainingMinutes(p.trainingMinutesBudget ?? TRAINING_POLICY.planner.budgetDefaultMinutes);
     setSaved(false);
     setIsSaving(false);
-  }, [isOpen, profile]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const valid =
-    typeof birthYear === 'number' &&
-    birthYear >= 1900 &&
-    birthYear <= maxBirthYear &&
-    typeof heightCm === 'number' &&
-    heightCm >= 100 &&
-    heightCm <= 250;
+  const birthInvalid =
+    typeof birthYear !== 'number' || birthYear < 1900 || birthYear > maxBirthYear;
+  const heightInvalid = typeof heightCm !== 'number' || heightCm < 100 || heightCm > 250;
+  const valid = !birthInvalid && !heightInvalid;
 
   const chip = (active: boolean) =>
     `py-1.5 rounded-lg border text-center transition-colors cursor-pointer ${
@@ -83,6 +94,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
       waistCm: typeof waistCm === 'number' && waistCm > 0 ? Number(waistCm) : undefined,
       goal,
       goalSource: 'user',
+      trainingMinutesBudget: trainingMinutes === '' ? undefined : trainingMinutes,
     });
     setIsSaving(false);
     if (!ok) return;
@@ -94,19 +106,25 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40"
+      {...backdropProps}
+    >
       <motion.div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-sheet-title"
+        tabIndex={-1}
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 30 }}
-        className="w-full sm:max-w-lg bg-paper rounded-t-lg sm:rounded-lg border border-line shadow-md overflow-hidden flex flex-col max-h-[90vh]"
+        /* 版框：与主页同源的外粗内细墨线,不用阴影 */
+        className="w-full sm:max-w-lg bg-paper rounded-t-lg sm:rounded-lg border-2 border-ink p-[3px] overflow-hidden flex flex-col max-h-[90vh]"
       >
-        <div className="p-4 sm:p-5 border-b border-line flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {/* deslop-ignore-next-line 19 — literal 8px status dot */}
-            <span className="w-2 h-2 rounded-full bg-accent" />
-            <h3 className="font-serif text-lg font-medium text-ink">体征档</h3>
-          </div>
+        <div className="flex flex-col min-h-0 flex-1 border border-ink/55 rounded-[5px] overflow-hidden">
+        <div className="px-4 sm:px-5 py-3.5 border-b-2 border-ink flex items-center justify-between">
+          <h3 id="profile-sheet-title" className="font-serif text-lg font-medium text-ink">体征档</h3>
           <button
             onClick={onClose}
             aria-label="阖之"
@@ -137,8 +155,9 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
               </div>
             </div>
             <div>
-              <label className="block text-ink3 mb-1">出生年（派生年龄）</label>
+              <label htmlFor="ps-birth-year" className="block text-ink3 mb-1">出生年（派生年龄）</label>
               <input
+                id="ps-birth-year"
                 type="number"
                 min="1900"
                 max={maxBirthYear}
@@ -146,15 +165,16 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
                 value={birthYear}
                 onChange={(e) => setBirthYear(e.target.value === '' ? '' : Number(e.target.value))}
                 placeholder="1990"
-                className="w-full bg-surface border border-control rounded-lg px-3 py-2 tabular-nums text-sm text-ink focus:border-accent"
+                className="w-full bg-surface border border-control rounded-lg px-3 py-2 tabular-nums text-[16px] text-ink focus:border-accent"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-ink3 mb-1">身高 (cm)</label>
+              <label htmlFor="ps-height" className="block text-ink3 mb-1">身高 (cm)</label>
               <input
+                id="ps-height"
                 type="number"
                 min="100"
                 max="250"
@@ -162,19 +182,20 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
                 value={heightCm}
                 onChange={(e) => setHeightCm(e.target.value === '' ? '' : Number(e.target.value))}
                 placeholder="175"
-                className="w-full bg-surface border border-control rounded-lg px-3 py-2 tabular-nums text-sm text-ink focus:border-accent"
+                className="w-full bg-surface border border-control rounded-lg px-3 py-2 tabular-nums text-[16px] text-ink focus:border-accent"
               />
             </div>
             <div>
-              <label className="block text-ink3 mb-1">腰围 (cm，可无)</label>
+              <label htmlFor="ps-waist" className="block text-ink3 mb-1">腰围 (cm，可无)</label>
               <input
+                id="ps-waist"
                 type="number"
                 min="40"
                 max="200"
                 value={waistCm}
                 onChange={(e) => setWaistCm(e.target.value === '' ? '' : Number(e.target.value))}
                 placeholder="未录"
-                className="w-full bg-surface border border-control rounded-lg px-3 py-2 tabular-nums text-sm text-ink focus:border-accent"
+                className="w-full bg-surface border border-control rounded-lg px-3 py-2 tabular-nums text-[16px] text-ink focus:border-accent"
               />
             </div>
           </div>
@@ -219,11 +240,38 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
             </p>
           </div>
 
+          <div>
+            <label htmlFor="ps-train-budget" className="block text-ink3 mb-1">
+              每日训练时间预算（分钟，排课按此装箱）
+            </label>
+            <input
+              id="ps-train-budget"
+              type="number"
+              min={TRAINING_POLICY.planner.budgetMinMinutes}
+              max={TRAINING_POLICY.planner.budgetMaxMinutes}
+              value={trainingMinutes}
+              onChange={(e) => setTrainingMinutes(e.target.value === '' ? '' : Number(e.target.value))}
+              placeholder="30"
+              className="w-full bg-surface border border-control rounded-lg px-3 py-2 tabular-nums text-[16px] text-ink focus:border-accent"
+            />
+            <p className="mt-1 text-[12px] text-ink3">
+              未填按 {TRAINING_POLICY.planner.budgetDefaultMinutes} 分计；允许 {TRAINING_POLICY.planner.budgetMinMinutes}–{TRAINING_POLICY.planner.budgetMaxMinutes} 分。
+            </p>
+          </div>
+
+          {/* 照准为何不可点：就地给出缺项，不叫用户猜 */}
+          {!valid && (
+            <p className="text-[12px] text-danger leading-relaxed">
+              {birthInvalid && `出生年须在 1900–${maxBirthYear} 之间；`}
+              {heightInvalid && '身高须在 100–250 之间。'}
+            </p>
+          )}
+
           <div className="pt-2">
             <button
               type="submit"
               disabled={!valid || isSaving}
-              className="btn-primary w-full shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saved ? (
                 <>
@@ -236,6 +284,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
             </button>
           </div>
         </form>
+        </div>
       </motion.div>
     </div>
   );

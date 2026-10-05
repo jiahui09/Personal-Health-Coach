@@ -278,6 +278,8 @@ export class SupabaseHealthRepository implements HealthRepository {
       foods: input.foods && input.foods.length > 0 ? input.foods : [input.name],
       estimatedCalories: input.estimatedCalories,
       estimatedProtein: input.estimatedProtein,
+      ...(input.estimatedFatG !== undefined ? { estimatedFatG: input.estimatedFatG } : {}),
+      ...(input.items && input.items.length > 0 ? { items: input.items } : {}),
       source: input.source ?? 'manual',
       confirmed: true,
     });
@@ -504,6 +506,29 @@ export class SupabaseHealthRepository implements HealthRepository {
     );
     const todo = todoFromRow(updated[0]);
     if (!todo) throw new RepositoryError('unknown', '切换待办后未取回记录');
+    return todo;
+  }
+
+  async updateTodo(id: string, patch: { estimatedMinutes?: number | null }): Promise<TodoItem> {
+    const userId = await this.requireUserId();
+    if (!('estimatedMinutes' in patch)) {
+      // 目前唯一可改字段即预计时长；空 patch 原样返回，不做无意义往返
+      const rows = await guard(() =>
+        this.rest.select<Row>('todos', `select=*&user_id=eq.${userId}&id=eq.${id}&limit=1`)
+      );
+      const todo = rows.length > 0 ? todoFromRow(rows[0]) : null;
+      if (!todo) throw new RepositoryError('not_found', `Todo not found: ${id}`);
+      return todo;
+    }
+    // null = 清空时长（列可空），数字即改
+    const rows = await guard(() =>
+      this.rest.update<Row>('todos', `id=eq.${id}&user_id=eq.${userId}`, {
+        estimated_minutes: patch.estimatedMinutes ?? null,
+      })
+    );
+    if (rows.length === 0) throw new RepositoryError('not_found', `Todo not found: ${id}`);
+    const todo = todoFromRow(rows[0]);
+    if (!todo) throw new RepositoryError('unknown', '改时长后未取回记录');
     return todo;
   }
 

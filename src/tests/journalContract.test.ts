@@ -12,6 +12,9 @@
  */
 
 import { f_meal_slot } from '../services/scientificRules';
+import { normalizeEstimateMinutes } from '../domain/tasks';
+import { foodItemNutrition, sumMealItems, sumMealLogs } from '../domain/nutrition';
+import { COMMON_FOOD_DATABASE } from '../data/foods';
 import { MockHealthRepository } from '../services/mockHealthRepository';
 
 function assert(condition: boolean, message: string): asserts condition {
@@ -101,13 +104,23 @@ assert(today.goalAdvice.direction === 'maintain', 'BMI 22.3 + 腰围未越线 �
 assert(today.goalAdvice.conflicting === false, '建议维持与「减脂」并不相反 → 不报警,仅并列显示');
 assert(today.trainingTarget.resistanceDaysPerWeek >= 2, '抗阻周目标不低于 WHO 基线 2 日');
 
-// 营养：实测入账 vs 派生目标，余量与超额同源
+// 营养：实测入账 vs 今日之标（训练日之标与建议同源），余量与超额同源
 assert(today.nutrition.calories.consumed === 1020, 'seed intake 1020 kcal');
-assert(today.nutrition.calories.target === t.caloriesKcal, 'nutrition target reads the derived target');
+const effective = today.trainingDayTargets ?? today.targets!;
+assert(today.trainingDayTargets !== null, '常规课之日 → 有训练日之标（基准之上上调）');
+assert(
+  effective.caloriesKcal === Math.min(t.caloriesKcal + 400, Math.round(t.caloriesKcal * 1.1)),
+  '训练日热量 = 基准 ×1.1，封顶 +400'
+);
+assert(effective.proteinG === t.proteinG && effective.fatG === t.fatG, '蛋白与脂肪不随训练日上调');
+assert(today.nutrition.calories.target === effective.caloriesKcal, 'nutrition target reads the day\'s target');
 assert(today.nutrition.protein.target === t.proteinG, 'protein target reads the derived target');
-assert(approx(today.nutrition.calories.remaining, t.caloriesKcal - 1020), 'remaining calories = target - consumed');
+assert(approx(today.nutrition.calories.remaining, effective.caloriesKcal - 1020), 'remaining calories = target - consumed');
 assert(today.nutrition.calories.status === 'under' && today.nutrition.protein.status === 'under', 'under target');
-assert(approx(today.nutrition.calories.ratio, 1020 / t.caloriesKcal), 'ratio === consumed/target (single source)');
+assert(approx(today.nutrition.calories.ratio, 1020 / effective.caloriesKcal), 'ratio === consumed/target (single source)');
+// 脂肪与碳水（隐含口径）：种子膳无脂肪实测 → 如实 0，不冒充已知
+assert(today.nutrition.fat.consumed === 0 && today.nutrition.fat.target === t.fatG, 'fat target present, consumed honest 0');
+assert(today.nutrition.carbs.consumed > 0 && today.nutrition.carbs.target === effective.carbG, 'carbs target from kcal remainder (训练日随热量上浮)');
 assert(today.nutrition.mealCount === 2, 'meal count = confirmed logs today');
 assert(today.nutrition.quality.flag === 'normal', 'seed intake is plausible');
 
@@ -147,6 +160,49 @@ assert(Array.isArray(today.dataQuality.flags) && today.dataQuality.reviewCount >
 // 同一 clock 两次调用必须完全一致（可复算）
 const again = await repository.getToday();
 assert(JSON.stringify(again) === JSON.stringify(today), 'getToday is deterministic for a fixed clock');
+
+// --- 2c. 今日之事：拟时长规范化与改录往返（需求①回归锁） -------------------
+assert(normalizeEstimateMinutes('') === null, '空 → 无时长');
+assert(normalizeEstimateMinutes('n/a') === null, '非数字 → 无时长');
+assert(normalizeEstimateMinutes('0') === null && normalizeEstimateMinutes('-30') === null, '0/负数不合常理 → 无时长');
+assert(normalizeEstimateMinutes('45') === 45, '45 → 45');
+assert(normalizeEstimateMinutes('25.6') === 26, '四舍五入到整分');
+assert(normalizeEstimateMinutes('9999') === 720, '超上限 → 夹到 720（不编 16 小时的拟时长）');
+assert(normalizeEstimateMinutes(15) === 15, '数字入参同样规范化');
+
+const todosBefore = await repository.getTodos();
+const subject = todosBefore[0];
+const setEstimate = await repository.updateTodo(subject.id, { estimatedMinutes: 75 });
+assert(setEstimate.estimatedMinutes === 75, '改拟时长写入');
+const setAgain = await repository.updateTodo(subject.id, { estimatedMinutes: 40 });
+assert(setAgain.estimatedMinutes === 40, '再改以新值为准（不是累加/置空）');
+const clearedTodo = await repository.updateTodo(subject.id, { estimatedMinutes: null });
+assert(clearedTodo.estimatedMinutes === undefined, '取消时长 → 字段清除（不写 0,0 会被读成「拟 0 分」）');
+const reloadedTodos = await repository.getTodos();
+assert(reloadedTodos.find((t) => t.id === subject.id)?.estimatedMinutes === undefined, '重读后仍为无时长（往返一致）');
+const noPatch = await repository.updateTodo(todosBefore[1].id, {});
+assert(noPatch.title === todosBefore[1].title && noPatch.status === todosBefore[1].status, '空 patch 不动任何字段');
+
+// --- 2d. 食物档案库：每 100g 口径的线性换算与脂肪入账（需求④回归锁） -------
+assert(COMMON_FOOD_DATABASE.length >= 100, `库覆盖日常饮食（≥100 项，今 ${COMMON_FOOD_DATABASE.length} 项）`);
+for (const f of COMMON_FOOD_DATABASE) {
+  assert(f.defaultGrams > 0 && f.per100.kcal > 0, `${f.name} 有默认克数与每 100g 热量`);
+  assert(f.per100.proteinG >= 0 && f.per100.fatG >= 0 && f.per100.carbG >= 0, `${f.name} 三大素非负`);
+}
+const sample = COMMON_FOOD_DATABASE.find((f) => f.id === 'f-chicken-breast') ?? COMMON_FOOD_DATABASE[0];
+const full = foodItemNutrition(sample, 100);
+assert(full.kcal === Math.round(sample.per100.kcal), '100g 摄入 = 每 100g 热量值');
+const half = foodItemNutrition(sample, 50);
+assert(Math.abs(half.kcal - full.kcal / 2) <= 1, '克数减半 → 热量约减半（线性，整数舍入内）');
+assert(foodItemNutrition(sample, 0).kcal === 0 && foodItemNutrition(sample, 0).proteinG === 0, '0 克 → 0，不编数');
+const rows = [foodItemNutrition(sample, 100), foodItemNutrition(sample, 50)];
+const summed = sumMealItems(rows);
+assert(approx(summed.kcal, rows[0].kcal + rows[1].kcal), '行合计 = 各行之和');
+const seedMeal = today.todayMeals[0];
+assert(sumMealLogs([seedMeal]).fat === 0, '旧记录无脂肪实测 → 如实 0');
+assert(sumMealLogs([{ ...seedMeal, estimatedFatG: 12.5 }]).fat === 12.5, '存有脂肪总额 → 入账');
+assert(approx(sumMealLogs([{ ...seedMeal, items: rows }]).fat, summed.fatG, 0.05), '无总额 → 明细求和入账');
+console.log('   ✓ 食物库每 100g 口径：线性换算、四舍五入与脂肪入账（库外手录仍为 0，不冒充已知）');
 
 // --- 3. storage fallback: corrupt key -> seed data, no throw ----------------
 const storage = (globalThis as { localStorage?: Storage }).localStorage;
