@@ -4,7 +4,7 @@
 // deslop-ignore-file 07 22 28
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { X, Check, Utensils, Dumbbell, Activity, AlertTriangle } from 'lucide-react';
+import { X, Check, Plus, Utensils, Dumbbell, Activity, AlertTriangle } from 'lucide-react';
 import {
   FoodItem,
   MealItem,
@@ -120,6 +120,9 @@ export const RecordSheet: React.FC<RecordSheetProps> = ({
   const [workoutRows, setWorkoutRows] = useState<BodyweightExercise[]>(() => fallbackWorkoutRows());
   /** 库选行（食物库 → 折算之账）；空即手录模式。 */
   const [pickedRows, setPickedRows] = useState<{ foodId: string; gramsText: string }[]>([]);
+  /** 库中择品下滑栏：不打字也能从档案库点选（三列只列名称，可连点多选）。 */
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const [workoutDuration, setWorkoutDuration] = useState<number | ''>(20);
   const [durationSource, setDurationSource] = useState<'actual' | 'estimated'>('estimated');
 
@@ -182,6 +185,7 @@ export const RecordSheet: React.FC<RecordSheetProps> = ({
     setMealCalories('');
     setMealProtein('');
     setPickedRows([]);
+    setPickerOpen(false);
     // 习练页：依今日之荐预填；休整无荐则回默认课表
     setWorkoutTitle(d?.workoutTitle ?? '徒手基础习练');
     setWorkoutCategory('resistance');
@@ -203,6 +207,26 @@ export const RecordSheet: React.FC<RecordSheetProps> = ({
     setSoreness(d?.soreness ?? null);
     setStateNotes(d?.note ?? '');
   }, [isOpen, initialTab]);
+
+  // 择品栏开时：点栏外即阖、Esc 先阖栏再阖弹层（capture 抢在 useSheetBehavior 之前）
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [pickerOpen]);
 
   const sleepIntervalPreview = useMemo(() => {
     if (sleepMode !== 'interval' || !sleepStart || !wakeTime) return null;
@@ -430,41 +454,81 @@ export const RecordSheet: React.FC<RecordSheetProps> = ({
                 </Group>
 
                 <Group title="所食">
-                  <label htmlFor="rs-food" className="sr-only">搜库或手录所食之物</label>
-                  <input
-                    id="rs-food"
-                    type="text"
-                    required={pickedRows.length === 0}
-                    value={foodText}
-                    onChange={(e) => setFoodText(e.target.value)}
-                    className={INPUT}
-                    placeholder="搜库（如：鸡胸、糙米）；查无此物可逗号分隔手录"
-                  />
-                  {foodMatches.length > 0 && (
-                    <div className="mt-2 border border-control rounded-lg overflow-hidden divide-y divide-linesoft">
-                      {foodMatches.map((f) => (
-                        <button
-                          key={f.id}
-                          type="button"
-                          onClick={() => {
-                            setPickedRows((rows) =>
-                              rows.some((r) => r.foodId === f.id)
-                                ? rows
-                                : [...rows, { foodId: f.id, gramsText: String(f.defaultGrams) }]
-                            );
-                            setFoodText('');
-                          }}
-                          className="w-full text-left px-2.5 py-1.5 hover:bg-surface transition-colors"
-                        >
-                          <span className="text-[13px] text-ink">{f.name}</span>
-                          <span className="text-[12px] text-ink3 tabular-nums">
-                            {' '}
-                            每 100g：{f.per100.kcal} 千卡 · 蛋 {f.per100.proteinG} · 脂 {f.per100.fatG}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <div ref={pickerRef}>
+                    <label htmlFor="rs-food" className="sr-only">搜库或手录所食之物</label>
+                    <input
+                      id="rs-food"
+                      type="text"
+                      required={pickedRows.length === 0}
+                      value={foodText}
+                      onChange={(e) => setFoodText(e.target.value)}
+                      className={INPUT}
+                      placeholder="搜库（如：鸡胸、糙米）；查无此物可逗号分隔手录"
+                    />
+                    {/* 加号：不打字也能择——开下滑栏三列只列名称，点名即入已选（默认克数） */}
+                    <button
+                      type="button"
+                      onClick={() => setPickerOpen((o) => !o)}
+                      aria-expanded={pickerOpen}
+                      aria-controls="rs-food-picker"
+                      className="btn-link mt-2 inline-flex items-center gap-1"
+                    >
+                      <Plus size={14} aria-hidden="true" />
+                      库中择品
+                    </button>
+                    {pickerOpen && (
+                      <div
+                        id="rs-food-picker"
+                        role="group"
+                        aria-label="食物档案库点选"
+                        className="mt-2 border border-control rounded-lg p-2 grid grid-cols-3 gap-x-3 gap-y-1 max-h-44 overflow-y-auto"
+                      >
+                        {COMMON_FOOD_DATABASE.map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() =>
+                              setPickedRows((rows) =>
+                                rows.some((r) => r.foodId === f.id)
+                                  ? rows
+                                  : [...rows, { foodId: f.id, gramsText: String(f.defaultGrams) }]
+                              )
+                            }
+                            className="min-w-0 truncate text-left text-[12px] py-0.5 text-ink hover:text-accent transition-colors"
+                            title={f.name}
+                          >
+                            {f.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {/* 打字建议与择品栏二选一，免得双列表重复陈列 */}
+                    {foodMatches.length > 0 && !pickerOpen && (
+                      <div className="mt-2 border border-control rounded-lg overflow-hidden divide-y divide-linesoft">
+                        {foodMatches.map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => {
+                              setPickedRows((rows) =>
+                                rows.some((r) => r.foodId === f.id)
+                                  ? rows
+                                  : [...rows, { foodId: f.id, gramsText: String(f.defaultGrams) }]
+                              );
+                              setFoodText('');
+                            }}
+                            className="w-full text-left px-2.5 py-1.5 hover:bg-surface transition-colors"
+                          >
+                            <span className="text-[13px] text-ink">{f.name}</span>
+                            <span className="text-[12px] text-ink3 tabular-nums">
+                              {' '}
+                              每 100g：{f.per100.kcal} 千卡 · 蛋 {f.per100.proteinG} · 脂 {f.per100.fatG}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </Group>
 
                 {pickedRows.length > 0 && (

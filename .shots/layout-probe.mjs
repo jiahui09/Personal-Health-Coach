@@ -32,13 +32,17 @@ const ev = async (expr) => (await send('Runtime.evaluate', { expression: expr, r
 const PROBE = [
   '(() => {',
   "  const r = (e) => { const b = e.getBoundingClientRect(); return { t: Math.round(b.top + scrollY), l: Math.round(b.left), w: Math.round(b.width), h: Math.round(b.height) }; };",
-  "  const heads = [...document.querySelectorAll('main h2')].map((h) => ({",
-  "    txt: h.textContent.trim().slice(0, 10),",
-  '    font: getComputedStyle(h).fontSize,',
-  '    box: r(h),',
-  '    rule: r(h.parentElement),',
-  '    ruleW: getComputedStyle(h.parentElement).borderBottomWidth,',
-  '  }));',
+  "  const heads = [...document.querySelectorAll('main h2')].map((h) => {",
+  "    const rb = h.closest('.border-b-2');",
+  "    return {",
+  "      txt: h.textContent.trim().slice(0, 10),",
+  "      font: getComputedStyle(h).fontSize,",
+  "      box: r(h),",
+  "      rule: rb ? r(rb) : { t: -1, l: -1, w: 0, h: 0 },",
+  "      ruleW: rb ? getComputedStyle(rb).borderBottomWidth : '0px',",
+  "    };",
+  "  });",
+  "  const folds = [...document.querySelectorAll('main .bg-line.w-px')].map((f) => r(f));",
   "  const sections = [...document.querySelectorAll('main section')].map((s) => ({",
   "    sec: (s.querySelector('h2') || s).textContent.trim().slice(0, 8),",
   '    box: r(s),',
@@ -62,7 +66,7 @@ const PROBE = [
   "  const byRow = {};",
   "  for (const c of cells) { const k = r(c).t; (byRow[k] ||= []).push(r(c).h); }",
   "  const rowSlack = Object.entries(byRow).filter(([, hs]) => hs.length > 1).map(([t, hs]) => Math.max(...hs) - Math.min(...hs));",
-  '  return JSON.stringify({ heads, sections, actions, rows, lines, rowSlack, overflow, docH: document.documentElement.scrollHeight, vw: innerWidth });',
+  '  return JSON.stringify({ heads, sections, actions, rows, lines, folds, rowSlack, overflow, docH: document.documentElement.scrollHeight, vw: innerWidth });',
   '})()',
 ].join('\n');
 
@@ -179,6 +183,19 @@ if (width >= 1024) {
   ok(sRows.filter((t) => secTops.filter((x) => near(x, t, 6)).length >= 2).length >= 2, '配对行 section 顶对齐（两处）', JSON.stringify(sRows));
   const leftL = [...new Set(d.heads.map((h) => h.box.l))].sort((a, b) => a - b);
   ok(leftL.length <= 2, '最多两列标题左缘', JSON.stringify(leftL));
+
+  // 折缝不越墨线：每条可见折缝顶端 ≥ 其行墨线顶（上方无墨线则取下方最近墨线并判失）
+  const ruleTops = d.heads
+    .filter((h) => parseFloat(h.ruleW) > 0)
+    .map((h) => h.rule.t + h.rule.h - parseFloat(h.ruleW));
+  const visFolds = (d.folds || []).filter((f) => f.w > 0).map((f) => f.t);
+  ok(visFolds.length >= 3, '折缝条数 ≥3（两配对行 + 体征中缝）', String(visFolds.length));
+  for (const ft of visFolds) {
+    const above = ruleTops.filter((y) => y <= ft + 2).sort((a, b) => b - a)[0];
+    const below = ruleTops.filter((y) => y > ft + 2).sort((a, b) => a - b)[0];
+    const gov = above ?? below;
+    ok(gov !== undefined && ft >= gov - 2, '折缝自墨线起（不越实心黑横线）', `折缝 t=${ft} 墨线 y=${gov}`);
+  }
 } else {
   ok(new Set(headTops.map((t) => 0)).size === 1, '移动端结构', '');
   const lefts = [...new Set(d.heads.map((h) => h.box.l))];

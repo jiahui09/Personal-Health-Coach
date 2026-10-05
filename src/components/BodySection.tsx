@@ -66,38 +66,43 @@ export const BodySection: React.FC<BodySectionProps> = ({
   );
 
   return (
-    <section className="pt-10 lg:pr-9">
-      <SectionHead
-        title="体征"
-        verdict={!body.complete ? '未建档' : weight.quality.flag === 'needs_review' ? '待核' : undefined}
-        note={
-          <span className="flex items-center gap-3 text-[12px] text-ink3">
-            {goal && <span>目标 {GOAL_CN[goal] ?? goal}</span>}
-            <button onClick={onEditWeight} className="btn-link">
-              录新体重
-            </button>
-            {editButton}
-          </span>
-        }
-      />
+    <section className="pt-10">
+      {/* 头与通栏说明留旁批槽（lg:pr-9）；下方两列格改用配对行同网格，列缘与折缝上下对齐 */}
+      <div className="lg:pr-9">
+        <SectionHead
+          title="体征"
+          verdict={!body.complete ? '未建档' : weight.quality.flag === 'needs_review' ? '待核' : undefined}
+          note={
+            <span className="flex items-center gap-3 text-[12px] text-ink3">
+              {goal && <span>目标 {GOAL_CN[goal] ?? goal}</span>}
+              <button onClick={onEditWeight} className="btn-link">
+                录新体重
+              </button>
+              {editButton}
+            </span>
+          }
+        />
 
-      {/* 数据待核朱批：只标记不改数（体重、所录、睡眠的核验集中于此） */}
-      <DataQualityNote flags={dataQuality.flags} reviewCount={dataQuality.reviewCount} />
+        {/* 数据待核朱批：只标记不改数（体重、所录、睡眠的核验集中于此） */}
+        <DataQualityNote flags={dataQuality.flags} reviewCount={dataQuality.reviewCount} />
 
-      {!body.complete && (
-        <div className="mt-4 border-l-2 border-danger pl-3 py-1">
-          <p className="text-[13px] text-ink leading-relaxed">
-            尚未建档：缺 {missingFields.map((f) => PROFILE_FIELD_CN[f] ?? f).join('、')}。
-          </p>
-          <p className="mt-1 text-[12px] text-ink3">
-            身高、性别、出生年与活动水平决定代谢与每日目标；未齐备前不显示人体数字。
-          </p>
-        </div>
-      )}
+        {!body.complete && (
+          <div className="mt-4 border-l-2 border-danger pl-3 py-1">
+            <p className="text-[13px] text-ink leading-relaxed">
+              尚未建档：缺 {missingFields.map((f) => PROFILE_FIELD_CN[f] ?? f).join('、')}。
+            </p>
+            <p className="mt-1 text-[12px] text-ink3">
+              身高、性别、出生年与活动水平决定代谢与每日目标；未齐备前不显示人体数字。
+            </p>
+          </div>
+        )}
+      </div>
 
-      {/* 左：体重与档案所录；右：眠与体感（精力/酸痛可就地点评） */}
-      <div className="mt-4 grid gap-x-8 lg:grid-cols-2">
-        <div>
+      {/* 左：体重与档案所录；右：眠与体感（精力/酸痛可就地点评）。
+          网格与折缝同两处配对行（1.45fr|auto|1fr），折缝自本节墨线之下的行区起，
+          格内 lg:pr-9 让两列行值右缘与上下两栏逐像素对齐 */}
+      <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1.45fr_auto_1fr] lg:gap-x-8">
+        <div className="lg:col-start-1 lg:row-start-1 lg:pr-9">
           <Row label="今之体重">
             <span className="font-semibold">{weight.latest ?? '—'}</span> 公斤
           </Row>
@@ -130,7 +135,13 @@ export const BodySection: React.FC<BodySectionProps> = ({
           )}
         </div>
 
-        <div>
+        {/* 中缝：行区 1px 灰线，列格与上下配对行同 x（仅 lg；自墨线之下的行区起，不越线） */}
+        <div
+          aria-hidden="true"
+          className="hidden lg:block lg:self-stretch lg:col-start-2 lg:row-start-1 w-px bg-line"
+        />
+
+        <div className="lg:col-start-3 lg:row-start-1 lg:pr-9">
           <Row label="夜眠">
             {night ? formatNightDuration(night.minutes) : '未录'}
             {night?.source === 'interval' && (

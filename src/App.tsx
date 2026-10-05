@@ -536,10 +536,11 @@ export default function App() {
         {/* 今日之事 ↔ 今日之练同行：待办与今日之练排一行（折缝分栏;移动端纵向相随,
             桌面两格同高同顶,章节横线跨栏同 y） */}
         <div className="grid grid-cols-1 lg:grid-cols-[1.45fr_auto_1fr] lg:gap-x-8">
-          {/* 折缝：桌面中缝 1px 竖线,移动端隐藏 */}
+          {/* 折缝：桌面中缝 1px 竖线,自章节头 2px 墨线处起向下（不越过墨线,免得竖线突兀;
+              偏移 = pt-10 40 + 眉行 18 + mt-1.5 6 + 题行 39 + pb-3 12 = 115,五头等高契约保证三处同基准）,移动端隐藏 */}
           <div
             aria-hidden="true"
-            className="hidden lg:block lg:self-stretch lg:col-start-2 lg:row-start-1 w-px bg-line"
+            className="hidden lg:block lg:self-stretch lg:mt-[115px] lg:col-start-2 lg:row-start-1 w-px bg-line"
           />
 
           <div className="lg:col-start-1 lg:row-start-1">
@@ -582,10 +583,10 @@ export default function App() {
         {/* 营养摄入 ↔ 统计同行：与第一处配对行同列格同折缝（移动端纵向相随,
             桌面两格同高同顶,列缘与上一行上下对齐） */}
         <div className="grid grid-cols-1 lg:grid-cols-[1.45fr_auto_1fr] lg:gap-x-8">
-          {/* 折缝：桌面中缝 1px 竖线,移动端隐藏 */}
+          {/* 折缝：同上,自本行章节头墨线起向下（与第一处折缝同基准同 x）,移动端隐藏 */}
           <div
             aria-hidden="true"
-            className="hidden lg:block lg:self-stretch lg:col-start-2 lg:row-start-1 w-px bg-line"
+            className="hidden lg:block lg:self-stretch lg:mt-[115px] lg:col-start-2 lg:row-start-1 w-px bg-line"
           />
 
           <div className="lg:col-start-1 lg:row-start-1">
