@@ -69,9 +69,8 @@ export const NextWorkoutCard: React.FC<NextWorkoutCardProps> = ({
 
   return (
     <section className="pt-10 lg:pr-9">
-      {/* 章节题：其二 · 今日之练（与「其一 今日之事」同排一行,统一章节头 + 朱批旁注） */}
+      {/* 章节题：今日之练（与「今日之事」同排一行,统一章节头 + 朱批旁注） */}
       <SectionHead
-        ordinal="其二"
         title="今日之练"
         verdict={`今${getTrainingStateLabel()}`}
         note={

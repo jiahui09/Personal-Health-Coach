@@ -43,7 +43,7 @@ assert(
   `every <h2 lives in SectionHead.tsx (found in: ${headingFiles.join(', ') || 'none'})`
 );
 
-// 自治章节（自带章节头 + 旁批槽）：其一其二同行 + 三通栏;
+// 自治章节（自带章节头 + 旁批槽）：两处配对行（今日之事/今日之练、营养摄入/统计）+ 体征通栏;
 // NextMealCard 嵌在营养摄入节内为组块,由组题 .group-head 承担,不占章节头。
 const SECTIONED = [
   'TodayTasks.tsx',
@@ -72,10 +72,11 @@ for (const f of componentFiles) {
 }
 
 // --- 3. row pairing in App (cross-column rules must share y) --------------------
-// 新 IA（经批准的重构）：只有其一其二一处配对行(折缝 + 两格 = 3 处落位),
-// 体征/营养/统计为通栏纵列,不再参与行配对;配对等高改由 probe 的行顶/行差断言把守。
+// 新 IA（经批准的重构）：两处配对行——今日之事↔今日之练、营养摄入↔统计
+// (每处 = 折缝 + 两格 = 3 处落位,共 6 处),体征为唯一通栏纵列;
+// 配对等高改由 probe 的行顶/行差断言把守。
 const rowStarts = app.match(/lg:row-start-\d/g) ?? [];
-assert(rowStarts.length >= 3, `App places the paired row explicitly (found ${rowStarts.length} placements)`);
+assert(rowStarts.length >= 6, `App places both paired rows explicitly (found ${rowStarts.length} placements)`);
 assert(app.includes('lg:col-start-1'), 'left column is explicitly placed');
 assert(/lg:col-start-\d/.test(app.replace(/lg:col-start-1/g, '')), 'right column is explicitly placed');
 

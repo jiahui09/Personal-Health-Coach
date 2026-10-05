@@ -44,9 +44,8 @@ export const TodayTasks: React.FC<TodayTasksProps> = ({
 
   return (
     <section className="pt-10 lg:pr-9">
-      {/* 章节题：其一 · 今日之事（统一章节头 + 朱批旁注） */}
+      {/* 章节题：今日之事（统一章节头 + 朱批旁注） */}
       <SectionHead
-        ordinal="其一"
         title="今日之事"
         verdict={
           tasks.total === 0

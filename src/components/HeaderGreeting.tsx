@@ -16,7 +16,7 @@ export const HeaderGreeting: React.FC<HeaderGreetingProps> = ({
       {/* 刊头：印章 + 报头（录一笔只在右下角一处,不在刊头重复） */}
       <div className="flex items-center gap-3.5 pt-7 pb-4 border-b-2 border-ink">
         <span className="w-8 h-8 shrink-0 grid place-items-center rounded-lg bg-seal text-white font-serif text-lg font-bold select-none">
-          记
+          記
         </span>
 
         <div className="font-serif text-[17px] font-bold text-ink leading-tight tracking-[0.08em]">

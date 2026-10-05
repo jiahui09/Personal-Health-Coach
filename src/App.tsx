@@ -522,7 +522,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* 单页流：刊头 → 其一其二同行 → 通栏体征 → 通栏营养摄入 → 通栏统计（外推收于统计之末） */}
+      {/* 单页流：刊头 → 今日之事 ↔ 今日之练同行 → 通栏体征 → 营养摄入 ↔ 统计同行（外推收于统计之末） */}
       <main className="w-full max-w-[1160px] mx-auto px-3 sm:px-6 py-6">
         {/* 版框：古书页式外粗内细双线，刊头、正文与页脚同入一框 */}
         <div className="border-2 border-ink p-[3px]">
@@ -533,7 +533,7 @@ export default function App() {
           timeGreeting={todayData.timeGreeting}
         />
 
-        {/* 其一其二同行：待办与今日之练排一行（折缝分栏;移动端纵向相随,
+        {/* 今日之事 ↔ 今日之练同行：待办与今日之练排一行（折缝分栏;移动端纵向相随,
             桌面两格同高同顶,章节横线跨栏同 y） */}
         <div className="grid grid-cols-1 lg:grid-cols-[1.45fr_auto_1fr] lg:gap-x-8">
           {/* 折缝：桌面中缝 1px 竖线,移动端隐藏 */}
@@ -579,32 +579,46 @@ export default function App() {
           onEditProfile={() => setProfileSheetOpen(true)}
         />
 
-        {/* 营养摄入通栏：今日之标、两笔账、下一膳与今日所食 */}
-        <NutritionSection
-          targets={todayData.targets}
-          trainingDayTargets={todayData.trainingDayTargets}
-          nutrition={todayData.nutrition}
-          meals={todayData.todayMeals}
-          onDeleteMeal={handleDeleteMeal}
-          nextMeal={todayData.nextMeal}
-          slotLabel={SLOT_CN[todayData.mealSlot] ?? '今日'}
-          goalLabel={GOAL_CN[todayData.profile.goal ?? 'general fitness'] ?? '日常强身'}
-          suggestedLoggedToday={
-            todayData.todayMeals.filter((meal) => meal.source === 'suggested').length
-          }
-          onQuickLogSuggested={handleQuickLogSuggestedMeal}
-          onAddCustomMeal={() => handleOpenRecord('meal')}
-        />
+        {/* 营养摄入 ↔ 统计同行：与第一处配对行同列格同折缝（移动端纵向相随,
+            桌面两格同高同顶,列缘与上一行上下对齐） */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1.45fr_auto_1fr] lg:gap-x-8">
+          {/* 折缝：桌面中缝 1px 竖线,移动端隐藏 */}
+          <div
+            aria-hidden="true"
+            className="hidden lg:block lg:self-stretch lg:col-start-2 lg:row-start-1 w-px bg-line"
+          />
 
-        {/* 统计通栏：由此算出的数、趋势与均值、履行合议与情景外推 */}
-        <StatsSection
-          body={todayData.body}
-          weight={todayData.weight}
-          sleep={todayData.sleep}
-          trainingTarget={todayData.trainingTarget}
-          training={todayData.training}
-          forecast={todayData.forecast}
-        />
+          <div className="lg:col-start-1 lg:row-start-1">
+            {/* 营养摄入：今日之标、两笔账、下一膳与今日所食 */}
+            <NutritionSection
+              targets={todayData.targets}
+              trainingDayTargets={todayData.trainingDayTargets}
+              nutrition={todayData.nutrition}
+              meals={todayData.todayMeals}
+              onDeleteMeal={handleDeleteMeal}
+              nextMeal={todayData.nextMeal}
+              slotLabel={SLOT_CN[todayData.mealSlot] ?? '今日'}
+              goalLabel={GOAL_CN[todayData.profile.goal ?? 'general fitness'] ?? '日常强身'}
+              suggestedLoggedToday={
+                todayData.todayMeals.filter((meal) => meal.source === 'suggested').length
+              }
+              onQuickLogSuggested={handleQuickLogSuggestedMeal}
+              onAddCustomMeal={() => handleOpenRecord('meal')}
+            />
+          </div>
+
+          <div className="lg:col-start-3 lg:row-start-1">
+            {/* 统计：由此算出的数、趋势与均值、履行合议与情景外推 */}
+            <StatsSection
+              body={todayData.body}
+              weight={todayData.weight}
+              sleep={todayData.sleep}
+              trainingTarget={todayData.trainingTarget}
+              training={todayData.training}
+              forecast={todayData.forecast}
+            />
+          </div>
+        </div>
 
         {/* 页脚：2px 粗线收尾 */}
         <footer className="mt-12 pt-6 pb-4 text-xs text-ink4 flex flex-col sm:flex-row items-center justify-between gap-3 font-sans border-t-2 border-ink">

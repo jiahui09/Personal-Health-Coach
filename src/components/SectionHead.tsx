@@ -1,11 +1,9 @@
-// 奏折式章节头:眉行(章序 + 右注) → 题行(26px 衬线) → 全页唯一的 2px 墨线。
+// 奏折式章节头:眉行(右注) → 题行(26px 衬线) → 全页唯一的 2px 墨线。
 // 朱批旁注竖排贴在章节右侧的旁批槽(lg:pr-9 预留 36px),窄屏降级为题下横排朱批。
 // deslop-ignore-file 07
 import React from 'react';
 
 interface SectionHeadProps {
-  /** 章序「其一 / 其二 / 其三」;右栏附目与通栏不带章序 */
-  ordinal?: string;
   title: string;
   /** 右注:时段、计数、章节级动作(眉行右端) */
   note?: React.ReactNode;
@@ -13,18 +11,13 @@ interface SectionHeadProps {
   verdict?: string;
 }
 
-export const SectionHead: React.FC<SectionHeadProps> = ({ ordinal, title, note, verdict }) => (
+export const SectionHead: React.FC<SectionHeadProps> = ({ title, note, verdict }) => (
   <div className="relative pb-3 border-b-2 border-ink">
     {/* 题下双线：2px 墨 + 1px 细线（与版框同构） */}
     <div aria-hidden="true" className="absolute inset-x-0 -bottom-[3px] border-b border-line" />
-    {/* 眉行:固定 18px 定高(居中而非基线对齐,免得衬线序与无衬线右注的字面差 2px),
-        保证六个章节头等高 → 跨栏横线同 y */}
+    {/* 眉行:固定 18px 定高(居中而非基线对齐,免得衬线字与无衬线右注的字面差 2px),
+        保证五个章节头等高 → 跨栏横线同 y */}
     <div className="flex items-center gap-4 h-[18px] leading-[18px]">
-      {ordinal && (
-        <span className="font-serif text-[13px] font-bold text-ink2 tracking-[0.3em] shrink-0">
-          {ordinal}
-        </span>
-      )}
       {note && <span className="ml-auto shrink-0">{note}</span>}
     </div>
 
