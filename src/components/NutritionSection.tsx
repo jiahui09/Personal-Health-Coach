@@ -207,7 +207,7 @@ export const NutritionSection: React.FC<NutritionSectionProps> = ({
 
         {showMealLog && meals.length === 0 && (
           <p className="mt-2 border-t border-line pt-2 text-[12px] text-ink3">
-            今日尚未入账一膳 · 由「记一笔」录之
+            今日尚未入账一膳 · 由「别录一品」录之
           </p>
         )}
       </div>

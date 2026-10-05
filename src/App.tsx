@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Check, RotateCcw, X } from 'lucide-react';
+import { Check, RotateCcw, X } from 'lucide-react';
 import { HeaderGreeting } from './components/HeaderGreeting';
 import { TodayTasks } from './components/TodayTasks';
 import { BodySection } from './components/BodySection';
@@ -502,7 +502,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen text-ink selection:bg-accentsoft selection:text-ink pb-32">
+    <div className="min-h-screen text-ink selection:bg-accentsoft selection:text-ink">
       {/* Toast Feedback */}
       <AnimatePresence>
         {toast && (
@@ -649,13 +649,8 @@ export default function App() {
         </div>
       </main>
 
-      {/* 记一笔：右下墨色圆角块 */}
-      <div className="fixed bottom-6 right-6 sm:right-8 z-40">
-        <button onClick={() => handleOpenRecord('meal')} className="btn-primary">
-          <Plus className="w-4 h-4 shrink-0 stroke-[2.5]" />
-          <span>记一笔</span>
-        </button>
-      </div>
+      {/* 录入入口全部就地：体征·录新体重 / 今日之练·另择动作 / 营养·别录一品，
+          各开录事弹层预选本域之签；全局记账 FAB 已撤，入口不聚一处 */}
 
       {/* Quick Record Bottom Sheet */}
       <RecordSheet

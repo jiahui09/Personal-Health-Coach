@@ -160,8 +160,10 @@ assert(read(resolve(root, 'README.md')).includes('术语与口径'), 'README 承
 
 // --- 9. 刊头/入口不留冗余（第 17 条） ------------------------------------------
 const header = comp('HeaderGreeting.tsx');
-assert(!header.includes('<button'), '刊头不放动作按钮（录一笔只在右下 FAB 一处）');
+assert(!header.includes('<button'), '刊头不放动作按钮（录入入口分归各节就地按钮：录新体重/另择动作/别录一品）');
 assert(!copyOf(header).includes('日省吾身'), '刊头不写副题式自我说明');
+assert(!app.includes('记一笔'), '全局 FAB「记一笔」已撤：录入入口分归各节就地按钮（录新体重/另择动作/别录一品）');
+assert(!app.includes('pb-32'), '页面不再为 FAB 预留底部让位');
 assert(!existsSync(resolve(compDir, 'EvidenceModal.tsx')), '稽核弹窗已删除（无入口的组件不留死代码）');
 for (const f of componentFiles) {
   assert(!comp(f).includes('EvidenceModal'), `${f} 不得再引用已删除的稽核弹窗`);

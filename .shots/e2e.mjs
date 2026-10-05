@@ -141,7 +141,7 @@ console.log('立档后出现每日目标与抗阻:', profiled.includes('每日�
 console.log('立档后下一膳给建议:', !profiled.includes('未建档：先录身高'));
 
 // --- 3. 进食：填数入账 ---------------------------------------------------
-await ev(clickText('记一笔'));
+await ev(clickText('别录一品')); // 入口已就地：营养·别录一品 → 进食页
 await waitFor(`!!document.querySelector('form')`);
 await ev(setInput(`[...document.querySelectorAll('form input[type=text]')][0]`, '测试餐 · 三文鱼'));
 await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][0]`, '520'));
@@ -157,7 +157,7 @@ console.log(
 );
 
 // --- 3b. 进食：库选折算入账（搜 → 选 → 合计回填 → 随账入册） -------------
-await ev(clickText('记一笔'));
+await ev(clickText('别录一品')); // 同上（库选折算流程）
 await waitFor(`!!document.querySelector('form')`);
 await ev(setInput(`[...document.querySelectorAll('form input[type=text]')][0]`, '鸡胸'));
 await sleep(250);
@@ -186,7 +186,7 @@ console.log(
 );
 
 // --- 4. 体征：时刻推时长 + 异常体重二次确认 ------------------------------
-await ev(clickText('记一笔'));
+await ev(clickText('录新体重')); // 入口已就地：体征·录新体重 → 体征页
 await waitFor(`!!document.querySelector('form')`);
 await ev(clickExact('体征'));
 await waitFor(`document.querySelector('form').innerText.includes('昨夜之眠')`);
