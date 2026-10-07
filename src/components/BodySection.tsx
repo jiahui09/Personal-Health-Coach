@@ -103,35 +103,50 @@ export const BodySection: React.FC<BodySectionProps> = ({
           格内 lg:pr-9 让两列行值右缘与上下两栏逐像素对齐 */}
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1.45fr_auto_1fr] lg:gap-x-8">
         <div className="lg:col-start-1 lg:row-start-1 lg:pr-9">
+          {/* 静动两组：随日而变之数在上、常量于档在下，组题分隔不混排 */}
+          {body.complete && (
+            <div className="mb-1.5">
+              <span className="group-head">今日之录</span>
+            </div>
+          )}
           <Row label="今之体重">
             <span className="font-semibold">{weight.latest ?? '—'}</span> 公斤
           </Row>
 
-          {body.complete && (
-            <>
-              <Row label="身高 · 性别">
-                {body.heightCm} · {body.sex ? SEX_CN[body.sex] : '—'} · {body.ageYears ?? '—'} 岁
-              </Row>
-              <Row label="活动水平">
-                <span title={activity?.hint}>
-                  {activity ? activity.label : '—'}
-                  <span className="hidden sm:inline"> · PAL {body.pal}</span>
-                </span>
-              </Row>
-              <Row label="腰围">
-                {body.waist ? (
-                  body.waist.elevated ? (
-                    <span className="text-danger font-semibold">
-                      {body.waistCm} 公分 · 越线
-                    </span>
-                  ) : (
-                    <span className="text-ink3">{body.waistCm} 公分 · 未越线</span>
-                  )
+          {/* 腰围随录随更（会变之数）：有值即显；越线判定需性别，未建档只显裸值 */}
+          {(body.complete || body.waistCm !== null) && (
+            <Row label="腰围">
+              {body.waist ? (
+                body.waist.elevated ? (
+                  <span className="text-danger font-semibold">
+                    {body.waistCm} 公分 · 越线
+                  </span>
                 ) : (
-                  <span className="text-ink3">未录</span>
-                )}
-              </Row>
-            </>
+                  <span className="text-ink3">{body.waistCm} 公分 · 未越线</span>
+                )
+              ) : body.waistCm !== null ? (
+                <span className="text-ink3">{body.waistCm} 公分</span>
+              ) : (
+                <span className="text-ink3">未录</span>
+              )}
+            </Row>
+          )}
+
+          {body.complete && (
+            <div className="pt-3.5 mt-1 border-t border-dotted border-linehover">
+              <span className="group-head">档案所录</span>
+              <div className="mt-1">
+                <Row label="身高 · 性别">
+                  {body.heightCm} · {body.sex ? SEX_CN[body.sex] : '—'} · {body.ageYears ?? '—'} 岁
+                </Row>
+                <Row label="活动水平">
+                  <span title={activity?.hint}>
+                    {activity ? activity.label : '—'}
+                    <span className="hidden sm:inline"> · PAL {body.pal}</span>
+                  </span>
+                </Row>
+              </div>
+            </div>
           )}
         </div>
 

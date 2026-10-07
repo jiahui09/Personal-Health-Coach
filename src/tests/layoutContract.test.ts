@@ -109,7 +109,7 @@ assert(comp('NutritionSection.tsx').includes('RuleMeter'), '营养摄入 carries
 // --- 6. 御批 copy layer ----------------------------------------------------------
 assert(app.includes('知道了 · '), 'success toasts are acknowledged with 知道了 ·');
 assert(comp('NextMealCard.tsx').includes('照准'), 'meal confirmation is 照准');
-assert(comp('RecordSheet.tsx').includes('照准'), 'sheet confirmation is 照准');
+assert(comp('SheetShell.tsx').includes('照准'), 'sheet confirmation is 照准');
 assert(comp('TodayTasks.tsx').includes('掷还'), 'destructive action is 掷还');
 assert(comp('StatsSection.tsx').includes('合议'), '履行合议 reads 合议 / 未合议（统计节）');
 
@@ -169,5 +169,20 @@ for (const f of componentFiles) {
   assert(!comp(f).includes('EvidenceModal'), `${f} 不得再引用已删除的稽核弹窗`);
 }
 assert(!css.includes('.btn-ghost'), '无使用者的 .btn-ghost 已清除（动作两级）');
+
+// --- 10. 表单静动分离 · 无用选择不复辟 ---------------------------------------
+assert(
+  !copyOf(comp('ProfileSheet.tsx')).includes('腰围'),
+  '档案表只收常量：会变之数不得混入立档/改档表'
+);
+assert(comp('BodySheet.tsx').includes('腰围'), '会变之数（腰围）归体征表，与常量分表');
+assert(
+  !copyOf(comp('MealSheet.tsx')).includes('餐别'),
+  '餐别选择已撤（其值由保存时刻的时钟判定），不得复辟为用户选择'
+);
+assert(!copyOf(comp('MealSheet.tsx')).includes('录一笔'), '三表各有其题（录一膳/录一练/录体征），不共用旧总题');
+for (const f of ['MealSheet.tsx', 'WorkoutSheet.tsx', 'BodySheet.tsx']) {
+  assert(comp(f).includes('SheetShell'), `${f} 共用同一壳（版框/题头/照准脚注单源）`);
+}
 
 console.log('ALL LAYOUT CONTRACT TESTS PASSED.');

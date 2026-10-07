@@ -123,9 +123,9 @@ console.log('立档点击:', await ev(clickText('立档')));
 await waitFor(`!!document.querySelector('form')`);
 console.log('档案表单已开:', await ev(`document.querySelector('form').innerText.includes('出生年')`));
 await ev(clickExact('男'));
-await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][0]`, '1990'));
-await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][1]`, '175'));
-await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][2]`, '84'));
+console.log('立档表不收会变之数（无腰围）:', await ev(`!document.querySelector('form').innerText.includes('腰围')`));
+await ev(setInput(`document.getElementById('ps-birth-year')`, '1990'));
+await ev(setInput(`document.getElementById('ps-height')`, '175'));
 await ev(clickText('轻'));
 await sleep(200);
 console.log('表单可提交:', !(await ev(`document.querySelector('form button[type=submit]').disabled`)));
@@ -141,8 +141,11 @@ console.log('立档后出现每日目标与抗阻:', profiled.includes('每日�
 console.log('立档后下一膳给建议:', !profiled.includes('未建档：先录身高'));
 
 // --- 3. 进食：填数入账 ---------------------------------------------------
-await ev(clickText('别录一品')); // 入口已就地：营养·别录一品 → 进食页
+await ev(clickText('别录一品')); // 入口已就地：营养·别录一品 → 进食表
 await waitFor(`!!document.querySelector('form')`);
+console.log('进食表题头为录一膳:', await ev(`document.querySelector('form').closest('[role=dialog]').innerText.includes('录一膳')`));
+console.log('进食表无餐别选择（时钟判定）:', await ev(`!document.querySelector('form').innerText.includes('餐别')`));
+console.log('进食表一屏放下（无表内下拉）:', await ev(`(() => { const f = document.querySelector('form'); return f.scrollHeight <= f.clientHeight + 4; })()`));
 await ev(setInput(`[...document.querySelectorAll('form input[type=text]')][0]`, '测试餐 · 三文鱼'));
 await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][0]`, '520'));
 await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][1]`, '38'));
@@ -154,6 +157,15 @@ console.log(
   await ev(
     `[...document.querySelectorAll('span')].map(s=>s.textContent).find(t=>t&&t.includes('已录于册'))||'none'`
   )
+);
+await sleep(600);
+console.log(
+  '膳别由保存时刻的时钟判定（非用户选择）:',
+  await ev(`(() => {
+    const rows = JSON.parse(localStorage.getItem('phc_meals_v3') || '[]');
+    const last = rows[rows.length - 1];
+    return ['breakfast', 'lunch', 'dinner', 'snack'].includes(last && last.category);
+  })()`)
 );
 
 // --- 3b. 进食：库选折算入账（搜 → 选 → 合计回填 → 随账入册） -------------
@@ -185,10 +197,21 @@ console.log(
   })()`)
 );
 
-// --- 4. 体征：时刻推时长 + 异常体重二次确认 ------------------------------
-await ev(clickText('录新体重')); // 入口已就地：体征·录新体重 → 体征页
+// --- 3c. 习练：另择动作直开独立表（无页签，一屏放下） ----------------------
+await ev(clickText('另择动作'));
 await waitFor(`!!document.querySelector('form')`);
-await ev(clickExact('体征'));
+console.log('习练表题头为录一练:', await ev(`document.querySelector('form').closest('[role=dialog]').innerText.includes('录一练')`));
+console.log('习练表带实际计时:', await ev(`document.querySelector('form').innerText.includes('实际计时')`));
+console.log('习练表一屏放下（无表内下拉）:', await ev(`(() => { const f = document.querySelector('form'); return f.scrollHeight <= f.clientHeight + 4; })()`));
+await ev(`document.querySelector('form button[type=submit]').click()`);
+await waitFor(`!document.querySelector('form')`, 5000);
+await sleep(600);
+
+// --- 4. 体征：时刻推时长 + 异常体重二次确认 ------------------------------
+await ev(clickText('录新体重')); // 入口已就地：体征·录新体重 → 直开体征表（无页签）
+await waitFor(`!!document.querySelector('form')`);
+console.log('体征表题头为录体征:', await ev(`document.querySelector('form').closest('[role=dialog]').innerText.includes('录体征')`));
+console.log('体征表一屏放下（无表内下拉）:', await ev(`(() => { const f = document.querySelector('form'); return f.scrollHeight <= f.clientHeight + 4; })()`));
 await waitFor(`document.querySelector('form').innerText.includes('昨夜之眠')`);
 await ev(setInput(`[...document.querySelectorAll('form input[type=time]')][0]`, '00:55'));
 await ev(setInput(`[...document.querySelectorAll('form input[type=time]')][1]`, '08:15'));
@@ -198,6 +221,8 @@ console.log(
   await ev(`document.querySelector('form').innerText.includes('7h20m')`)
 );
 
+// 腰围是会变之数：在体征表录（不入档案表），随保存写入档中最新值
+await ev(setInput(`document.getElementById('rs-waist')`, '84'));
 await ev(setInput(`[...document.querySelectorAll('form input[type=number]')][0]`, '57'));
 await sleep(300);
 const firstLabel = await ev(`document.querySelector('form button[type=submit]').textContent.trim()`);
@@ -214,6 +239,11 @@ await sleep(800);
 const bodyText = await ev(`document.body.innerText`);
 console.log('weight kept verbatim (57) and flagged:', bodyText.includes('待核') && bodyText.includes('57'));
 console.log('sleep shown as 7h20m:', bodyText.includes('7h20m'));
+console.log(
+  '腰围随体征录入（体征节出行、档中落盘）:',
+  bodyText.includes('84 公分') &&
+    (await ev(`(localStorage.getItem('phc_profile_v3')||'').includes('waistCm')`))
+);
 
 // 页面不得出现方法学说明（口径归 README）
 const BANNED = ['非首末', '不予修改', '仅标记', '仅指', '非健康度', '非承诺', '做线性回归', '原始记录'];

@@ -2,15 +2,15 @@
 
 ## Source of truth
 - Status: **Active**
-- Last refreshed: 2026-10-05（八点重构：食物营养档案库 + 摄入依个人数据计算 + 训练计划智能搭配 + IA 重构，原五节解散归位；随后依用户三点意见修订——印章改繁体「記」、营养摄入与统计并为第二处配对行、撤「其一/其二」章序题头；此前：五项优化与三域改造）
+- Last refreshed: 2026-10-07（全面验收批：critique 28/40 → 五项优先级问题全修——Tab 焦点圈定 + 背景 `inert`、toast `aria-live`、占位符 5.47:1、遮罩拦稿 + sessionStorage 残稿回填、归膳明示；audit 16/20（dark-glow 证伪）；polish 收尾与 15/15 验收闸 `.shots/accept-check.mjs`。此前：2026-10-05 八点重构与用户三点意见修订）
 - Primary product surfaces:
   - 单页主应用 `src/App.tsx`（刊头 → 配对行一（今日之事 ↔ 今日之练，折缝分栏） → 通栏体征 → 配对行二（营养摄入 ↔ 统计，情景外推收于其末） → 页脚，版框内单页流）
-  - 建档弹层 `src/components/ProfileSheet.tsx`（立档 / 改档：性别·出生年·身高·活动水平·腰围·目标·每日训练时间预算）
-  - 录事弹层 `src/components/RecordSheet.tsx`（三签：进食 / 习练 / 体征；进食页内嵌食物营养档案库搜选，库不上主页）
+  - 建档弹层 `src/components/ProfileSheet.tsx`（立档 / 改档：只收常量——性别·出生年·身高·活动水平·目标·每日训练时间预算；随日而变之数归体征表）
+  - 录事三表 `src/components/MealSheet.tsx` / `WorkoutSheet.tsx` / `BodySheet.tsx`（共用壳 `SheetShell.tsx`；录一膳 / 录一练 / 体征，各自独立、按本域内容定宽，无页签无「录一笔」；体征表另收腰围，进食表内嵌食物营养档案库搜选，库不上主页；餐别由保存时刻时钟判定，表内无此选择）
   - 比选稿 `docs/palette-options.html`（五版色组，当前选中其五）
-  - 成稿截图 `.shots/v2-desktop.png`（1440 全页）、`.shots/v2-mobile.png`（390 全页）、`.shots/b4-*.png`（上一版）、`.shots/za-mobile-*.png`（历史局部）
+  - 成稿截图 `.shots/v6-desktop.png`（1440 全页）、`.shots/v6-mobile.png`（390 全页）、`.shots/v6-form-meal.png`（归入行）、`.shots/v6-guard.png`（遮罩拦稿告知句）、`.shots/v6-workout-390.png`（390 录一练一屏）、`.shots/v5-*.png`（上一版三表开启态）、`.shots/v4-*.png` / `.shots/v3-*.png`（更早）、`.shots/za-mobile-*.png`（历史局部）
 - Evidence reviewed:
-  - `README.md`（§2 功能表、§字体与视觉约定、变更清单 1–21 条、仍待补齐）
+  - `README.md`（§2 功能表、§字体与视觉约定、变更清单 1–25 条、仍待补齐）
   - `src/index.css` `@theme` 令牌与 `@layer components`（btn 三级、`.section-actions`、`.leader`）
   - 全部 `src/components/*.tsx`；`.omx/artifacts/visual-ralph/editorial-journal/`（参考稿 html + 双端截图，已批准基线）
   - 实测几何：`.shots/layout-probe.mjs` @1440/1023/768/640/390（本轮改版后全量 `--check`）
@@ -31,12 +31,12 @@
 
 ## Personas and jobs
 - Primary personas: 唯一用户——记录自己健康账目的中文使用者，桌面查、手机记。
-- User jobs: ① 今日要做什么、练什么（今日之事 ↔ 今日之练同一配对行，先看裁决再看清单）② 体征如何（体征通栏：睡眠、体感、今之体重、档案所录）③ 该吃多少、吃了多少（营养摄入：与统计同行，今日之标、两笔账、下一膳、所食账）④ 是否在正轨（统计：与营养摄入同行，派生数、趋势、合议、情景外推）⑤ 记录就地落笔（入口分归各节：体征·录新体重 / 今日之练·另择动作 / 营养·别录一品；无全局 FAB，表单收敛于同一录事弹层）。
+- User jobs: ① 今日要做什么、练什么（今日之事 ↔ 今日之练同一配对行，先看裁决再看清单）② 体征如何（体征通栏分两组——「今日之录」今之体重 + 腰围、「档案所录」身高·性别 + 活动水平；右栏睡眠、体感）③ 该吃多少、吃了多少（营养摄入：与统计同行，今日之标、两笔账、下一膳、所食账）④ 是否在正轨（统计：与营养摄入同行，派生数、趋势、合议、情景外推）⑤ 记录就地落笔（入口分归各节：体征·录新体重 / 今日之练·另择动作 / 营养·别录一品；无全局 FAB；三表各开各域独立之表单、共用 `SheetShell` 一壳，餐别不再问用户）。
 - Key contexts of use: 桌面 1440 浏览全页；手机 390 单手速记；两者都要求扫读时先看到「裁决」再看到细节。
 
 ## Information architecture
-- Primary navigation: 无路由；单页纵向流 + 录事弹层。
-- Core routes/screens: 刊头（繁体「記」印章 + 时段问候 + 干支日期）→ 配对行一（今日之事/今日之练）→ 通栏体征 → 配对行二（营养摄入/统计）→ 页脚（复其初）；录事靠右下 FAB 单入口。
+- Primary navigation: 无路由；单页纵向流 + 就地三录事表（Meal / Workout / Body 共用壳）。
+- Core routes/screens: 刊头（繁体「記」印章 + 时段问候 + 干支日期）→ 配对行一（今日之事/今日之练）→ 通栏体征 → 配对行二（营养摄入/统计）→ 页脚（复其初）；录事入口分归各节就地按钮（无全局 FAB）。
 - Content hierarchy:
   - **行动类**（配对行一）：今日之事、今日之练——目录式清单 + 章末动作脚注行。
   - **体征通栏**：只收原始事实——今之体重、档案所录（身高/性别/岁/活动/腰围）、夜眠与近七夜、精力·酸痛 1–5 圆点、数据待核朱批；未建档只显缺项。
@@ -47,7 +47,7 @@
     | --- | --- | --- | --- |
     | 一 | 今日之事 | 1px | 今日之练 |
     | 二 | 营养摄入 | 1px | 统计 |
-  - 体征为唯一通栏节，夹于两行之间；各节 `lg:pr-9` 留 36px 旁批槽。体征**内部同网格两栏**（`1.45fr | auto | 1fr` + 中缝，与两处配对行同 x 同轴）；**三处折缝均自章节头墨线起、不越黑线**（探针断言）。
+  - 体征为唯一通栏节，夹于两行之间；各节 `lg:pr-9` 留 36px 旁批槽。体征**内部同网格两栏**（`1.45fr | auto | 1fr` + 中缝，与两处配对行同 x 同轴）；左栏**静动两组**——「今日之录」（今之体重 + 腰围，随日而变）与「档案所录」（身高·性别 + 活动水平，建档常量，点线分隔），右栏（夜眠/体感）不设组；**三处折缝均自章节头墨线起、不越黑线**（探针断言）。
   - 移动端单栏次序（README §1 已同步）：今日之事 → 今日之练 → 体征 → 营养摄入 → 统计。
 
 ## Data semantics（数据语义，先于视觉）
@@ -88,7 +88,7 @@
 - Imagery/iconography: `lucide-react` 单色图标 13–16px；全页唯一图表为 30 日体重折线（手绘 SVG，朱线 + 朱 10% 填充）；纸面为两层内联 SVG 噪点（纤维 6% + 斑驳 7%）。
 
 ## Components
-- Existing components to reuse: `SectionHead`、`RuleMeter`、`.btn-primary` / `.btn-link`、`.section-actions`、`.leader`、`WeightTrendChart`、`RecordSheet`、`BodySection` / `NutritionSection` / `StatsSection`（本轮新设的三通栏）、`ProfileSheet`。
+- Existing components to reuse: `SectionHead`、`RuleMeter`、`.btn-primary` / `.btn-link`、`.section-actions`、`.leader`、`WeightTrendChart`、`SheetShell`（三录事表共用壳）、`MealSheet` / `WorkoutSheet` / `BodySheet`、`BodySection` / `NutritionSection` / `StatsSection`、`ProfileSheet`。
 - New/changed components:
   - `src/components/SectionHead.tsx`（新）：眉行（右注）→ 题行 → 2px 墨线 + 竖排朱批旁注；全页 5 处章节头（两处配对行 + 体征通栏）唯一出口，章序已撤。
   - `src/components/RuleMeter.tsx`（新）：`label | 3px 条 | 分子/分母/百分比`；`tone: ink | accent | danger`；`max<=0` 时渲染 `—`。
@@ -100,10 +100,10 @@
 
 ## Accessibility
 - Target standard: WCAG 2.1 AA；文本 ≥4.5:1、控件边框 ≥3:1（`contrast.test.ts` 回归锁定）。
-- Keyboard/focus behavior: 全局 `:focus-visible` 2px 墨环；所有可点行都是 `<button>` 并带 `aria-pressed`；点击目标 ≥24px（复选框 24 热区 + 18 可视，点阵 `w-6 h-6`）。
-- Contrast/readability: 字号地板 12px、交互文字 13px；朱对纸 5.66、绛对纸 8.82、褐对纸 5.55。
-- Screen-reader semantics: 朱批旁注是真实文本；计量条本体 `aria-hidden`，语义由可见的「63/110 g · 57%」承载；名录式动作行（动作勾选、膳行掷还）带 `aria-label`；体重图 `aria-label` 带真值单位。
-- Reduced motion and sensory considerations: 无自动动画、无计量条动画；Toast 只做 160ms 位移淡入。
+- Keyboard/focus behavior: 全局 `:focus-visible` 2px 墨环；弹层开时 **Tab 焦点圈定于面板**（首尾循环）且**遮罩外宿主 `inert`**（回执 toast 除外）——`aria-modal` 名副其实；有稿时点遮罩不阖（告知句引路 Esc/阖之）；所有可点行都是 `<button>` 并带 `aria-pressed`；点击目标 ≥24px（复选框 24 热区 + 18 可视，点阵 `w-6 h-6`，「拟时长」钮 `py-1` 补足 24 高）。
+- Contrast/readability: 字号地板 12px、交互文字 13px；朱对纸 5.66、绛对纸 8.82、褐对纸 5.55；`::placeholder` 取 `ink3`（**5.47:1** ≥ 4.5，`opacity:1` 免 UA 淡化）。
+- Screen-reader semantics: 朱批旁注是真实文本；计量条本体 `aria-hidden`，语义由可见的「63/110 g · 57%」承载；名录式动作行（动作勾选、膳行掷还）带 `aria-label`；体重图 `aria-label` 带真值单位；回执 Toast `role="status" aria-live="polite"`。
+- Reduced motion and sensory considerations: 无自动动画、无计量条动画；Toast 只做 160ms 位移淡入；`MotionConfig reducedMotion="user"` 全局尊重系统减弱动效之选。
 
 ## Responsive behavior
 - Supported breakpoints/devices: 1440 / 1024 / 768（单栏分界）/ 390。
@@ -114,8 +114,9 @@
 - Loading: 「手记启卷…」+ 6px 朱点（居中纸面）。
 - Empty: 无待办 → 朱批「今日无事」；未入账 → 「今日尚未入账一膳 · 由「别录一品」录之」，计量条渲染 `—`；无动作 → 不渲染空脚注行。
 - Error: `runMutation` 失败 Toast **不冠**「知道了 ·」，格式「膳食之录未成（code）」；加载失败整页重试态。
-- Success: Toast「知道了 · <事实>」+ 朱亮色勾；完成态徽标 `bg-accentsoft / border-accentline / text-accent`。
-- Disabled: 提交按钮随表单校验禁用（e2e 锁定进食页「所食为空不可提交」、训练页不提交空动作）。
+- Success: Toast「知道了 · <事实>」+ 朱亮色勾（录膳回执附归宿「膳食已录于册 · 归午膳」）；完成态徽标 `bg-accentsoft / border-accentline / text-accent`；表内 700ms「已录于册」后自动阖表。
+- Guard/draft: 表中有稿时点遮罩不阖 → 「表中已有录文——点遮罩不阖；按 Esc 或右上角「阖之」离表，残稿留于本机」；残稿 sessionStorage 随录随存，开表回填并示「已回填上次残稿；照准存上即焚」+「弃此残稿」钮；照准存上即焚。
+- Disabled/loading: 提交中按钮禁用示「存中…」防重复照准；空录/越界不靠原生气泡（表单 `novalidate`），走 `hint` 朱字留表（空食 / 空练名 / 负数 / 腰围 40–200 / 眠时 0–1440）。
 - Offline/slow network: 本机 mock 仓库即时；云库走同一 `runMutation` 错误通道。
 
 ## Content voice
@@ -127,8 +128,8 @@
 - Microcopy rules（御批词表，`layoutContract.test.ts` 锁定关键项）:
   | 场合 | 用词 |
   | --- | --- |
-  | 成功回执 | 「知道了 · 膳食已录于册」（一律冠前缀；失败**不**冠） |
-  | 主确认 | 「照准」（今日之练记账、录事弹层提交） |
+  | 成功回执 | 「知道了 · 膳食已录于册 · 归午膳」（一律冠前缀；失败**不**冠；归宿依保存时刻） |
+  | 主确认 | 「照准」（今日之练记账、三录事表提交；异常体重首击作「仍要录之」） |
   | 危险/删除 | 「掷还」（今日之事删条 title） |
   | 达标 | 「合议 · 每周两日抗阻」「合议 · 七时之基 AASM 2015」 |
   | 未达标 | 「未合议 · 尚差 N 日」「未合议 · 不及七时之基 AASM 2015」 |
@@ -140,9 +141,9 @@
 - 分层约束：业务算术与阈值只能出现在 `src/domain/`（`policy.ts` 是唯一常量表）；`services/scientificRules.ts` 只保留证据规则并消费 policy；仓库实现只做「读存储 → 迁移 → 调 domain → 组装 TodayData」。
 - 数据契约：`TodayData` = 今日原始切片 + 派生指标 + 决策结果；`DailyState.sleep` 为判别联合（区间/手录眠时），字段可缺席表示「未录」。
 - Design-token constraints: 颜色只写令牌类；组件源码禁裸 hex；单档 8px 圆角；不引入新依赖、不新增令牌（除非先改 `contrast.test.ts` 并说明对比度）。
-- Performance constraints: 单包 503 KB（gzip 159 KB）不回退；无新增网络请求、无图表库。
+- Performance constraints: 单包 542 KB（gzip 171 KB）不回退；无新增网络请求、无图表库。
 - Compatibility constraints: 仅现代 evergreen 浏览器；`writing-mode` 降级在 ≤1024 走横排。
-- Test/screenshot expectations: 改动前后必跑 `npm test`（9 套）、`npm run lint`、`npm run build`、`.shots/e2e.mjs`、`.shots/qa-states.mjs`；版式用 `.shots/layout-probe.mjs <url> <width> --check` 断言配对横线同 y、标题左缘、同轴三列全等、章节行数上限、`overflow=0`（@1440/1023/768/640/390）；截图 `.shots/shot.mjs <url> <width> <out.png>` 并人工复核。
+- Test/screenshot expectations: 改动前后必跑 `npm test`（9 套）、`npm run lint`、`npm run build`、`.shots/e2e.mjs`、`.shots/qa-states.mjs`、`.shots/accept-check.mjs`（弹层行为 15 断言：焦点圈定 / inert / 遮罩拦稿 / 残稿 / 归膳 / 390 一屏 / 占位对比度）；版式用 `.shots/layout-probe.mjs <url> <width> --check` 断言配对横线同 y、标题左缘、同轴三列全等、章节行数上限、`overflow=0`（@1440/1023/768/640/390）；截图 `.shots/shot.mjs <url> <width> <out.png>` 并人工复核。
 
 ## Open questions
 - [x] **云端数据路径已实作**（零依赖 fetch 直连；表结构与 RLS 见 `supabase/schema.sql`，逐步启用见 `docs/deploy.md`）。遗留：本机 localStorage → 云端的一次性导入尚未提供。Owner: 实现 / 影响: 老数据迁移。

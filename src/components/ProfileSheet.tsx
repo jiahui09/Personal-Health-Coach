@@ -6,6 +6,7 @@ import type { ActivityLevel, FitnessGoal, UserProfile } from '../types/health';
 import { ACTIVITY_CN, DIRECTION_CN } from '../services/decisionCopy';
 import { useSheetBehavior } from '../hooks/useSheetBehavior';
 import { TRAINING_POLICY } from '../domain/policy';
+import { chipClass } from './SheetShell';
 
 interface ProfileSheetProps {
   isOpen: boolean;
@@ -27,7 +28,7 @@ const GOAL_SHORT: Record<FitnessGoal, string> = {
   'general fitness': '强身',
 };
 
-/** 建档 / 改档：只收原始事实（性别、出生年、身高、活动水平、腰围、目标）。 */
+/** 建档 / 改档：只收常量（性别、出生年、身高、活动水平、目标、训练预算）；随日而变之数归体征表。 */
 export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   isOpen,
   profile,
@@ -41,7 +42,6 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const [birthYear, setBirthYear] = useState<number | ''>('');
   const [heightCm, setHeightCm] = useState<number | ''>('');
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>('light');
-  const [waistCm, setWaistCm] = useState<number | ''>('');
   const [goal, setGoal] = useState<FitnessGoal>('fat loss');
   const [trainingMinutes, setTrainingMinutes] = useState<number | ''>(TRAINING_POLICY.planner.budgetDefaultMinutes);
   const [isSaving, setIsSaving] = useState(false);
@@ -63,7 +63,6 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
     setBirthYear(p.birthYear ?? '');
     setHeightCm(p.heightCm ?? '');
     setActivityLevel(p.activityLevel ?? 'light');
-    setWaistCm(p.waistCm ?? '');
     setGoal(p.goal ?? 'fat loss');
     setTrainingMinutes(p.trainingMinutesBudget ?? TRAINING_POLICY.planner.budgetDefaultMinutes);
     setSaved(false);
@@ -77,10 +76,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
   const heightInvalid = typeof heightCm !== 'number' || heightCm < 100 || heightCm > 250;
   const valid = !birthInvalid && !heightInvalid;
 
-  const chip = (active: boolean) =>
-    `py-1.5 rounded-lg border text-center transition-colors cursor-pointer ${
-      active ? 'bg-ink text-white border-ink' : 'bg-surface border-control text-ink2'
-    }`;
+  const chip = chipClass;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,7 +87,6 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
       birthYear: Number(birthYear),
       heightCm: Number(heightCm),
       activityLevel,
-      waistCm: typeof waistCm === 'number' && waistCm > 0 ? Number(waistCm) : undefined,
       goal,
       goalSource: 'user',
       trainingMinutesBudget: trainingMinutes === '' ? undefined : trainingMinutes,
@@ -186,17 +181,22 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
               />
             </div>
             <div>
-              <label htmlFor="ps-waist" className="block text-ink3 mb-1">腰围 (cm，可无)</label>
+              <label htmlFor="ps-train-budget" className="block text-ink3 mb-1">
+                每日训练时间预算（分钟，排课按此装箱）
+              </label>
               <input
-                id="ps-waist"
+                id="ps-train-budget"
                 type="number"
-                min="40"
-                max="200"
-                value={waistCm}
-                onChange={(e) => setWaistCm(e.target.value === '' ? '' : Number(e.target.value))}
-                placeholder="未录"
+                min={TRAINING_POLICY.planner.budgetMinMinutes}
+                max={TRAINING_POLICY.planner.budgetMaxMinutes}
+                value={trainingMinutes}
+                onChange={(e) => setTrainingMinutes(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="30"
                 className="w-full bg-surface border border-control rounded-lg px-3 py-2 tabular-nums text-[16px] text-ink focus:border-accent"
               />
+              <p className="mt-1 text-[12px] text-ink3">
+                未填按 {TRAINING_POLICY.planner.budgetDefaultMinutes} 分计；允许 {TRAINING_POLICY.planner.budgetMinMinutes}–{TRAINING_POLICY.planner.budgetMaxMinutes} 分。
+              </p>
             </div>
           </div>
 
@@ -237,25 +237,6 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
             <p className="mt-1 text-[12px] text-ink3">
               应用建议：{DIRECTION_CN[advisedDirection]}
               {adviseConflicting && ' —— 与你的选择不同，仍按你的选择计'}
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="ps-train-budget" className="block text-ink3 mb-1">
-              每日训练时间预算（分钟，排课按此装箱）
-            </label>
-            <input
-              id="ps-train-budget"
-              type="number"
-              min={TRAINING_POLICY.planner.budgetMinMinutes}
-              max={TRAINING_POLICY.planner.budgetMaxMinutes}
-              value={trainingMinutes}
-              onChange={(e) => setTrainingMinutes(e.target.value === '' ? '' : Number(e.target.value))}
-              placeholder="30"
-              className="w-full bg-surface border border-control rounded-lg px-3 py-2 tabular-nums text-[16px] text-ink focus:border-accent"
-            />
-            <p className="mt-1 text-[12px] text-ink3">
-              未填按 {TRAINING_POLICY.planner.budgetDefaultMinutes} 分计；允许 {TRAINING_POLICY.planner.budgetMinMinutes}–{TRAINING_POLICY.planner.budgetMaxMinutes} 分。
             </p>
           </div>
 

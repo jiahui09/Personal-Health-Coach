@@ -69,6 +69,13 @@
     outline: 2px solid var(--color-ink);
     outline-offset: 2px;
   }
+
+  /* 占位符达 AA:浏览器默认淡灰在纸上仅 3.5:1;以 ink3（4.89）代之,
+     opacity 置 1 免得 UA 再乘一道。占位符非标签——每格自有 label。 */
+  ::placeholder {
+    color: var(--color-ink3);
+    opacity: 1;
+  }
 }
 
 @layer components {

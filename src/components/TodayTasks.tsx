@@ -79,7 +79,7 @@ export const TodayTasks: React.FC<TodayTasksProps> = ({
                   className="w-6 h-6 -m-[3px] shrink-0 grid place-items-center cursor-pointer"
                 >
                   <span
-                    className={`w-[18px] h-[18px] grid place-items-center rounded-sm border transition-colors duration-150 ${
+                    className={`w-[18px] h-[18px] grid place-items-center rounded-lg border transition-colors duration-150 ${
                       todo.status === 'done'
                         ? 'bg-accent border-accent text-white'
                         : 'border-control hover:border-ink bg-surface'
@@ -108,7 +108,7 @@ export const TodayTasks: React.FC<TodayTasksProps> = ({
                     setEditTarget(todo.id);
                     setEditMinutes(todo.estimatedMinutes ? String(todo.estimatedMinutes) : '');
                   }}
-                  className="text-xs text-ink3 tabular-nums hover:text-ink transition-colors cursor-pointer"
+                  className="text-xs text-ink3 tabular-nums hover:text-ink transition-colors cursor-pointer py-1 -my-1"
                   title="改拟时长"
                 >
                   {todo.estimatedMinutes ? `拟 ${todo.estimatedMinutes} 分` : '拟时长 —'}

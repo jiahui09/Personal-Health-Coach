@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { Check, RotateCcw, X } from 'lucide-react';
 import { HeaderGreeting } from './components/HeaderGreeting';
 import { TodayTasks } from './components/TodayTasks';
@@ -18,9 +18,12 @@ import { NutritionSection } from './components/NutritionSection';
 import { StatsSection } from './components/StatsSection';
 import { NextMealCard } from './components/NextMealCard';
 import { NextWorkoutCard } from './components/NextWorkoutCard';
-import { RecordSheet, RecordDefaults, RecordTab } from './components/RecordSheet';
+import { RecordDefaults, RecordTab } from './components/SheetShell';
+import { MealSheet } from './components/MealSheet';
+import { WorkoutSheet } from './components/WorkoutSheet';
+import { BodySheet } from './components/BodySheet';
 import { ProfileSheet } from './components/ProfileSheet';
-import { formatAbs } from './domain/format';
+import { formatAbs, round1 } from './domain/format';
 import { normalizeEstimateMinutes } from './domain/tasks';
 import { validateWeightMeasurement } from './domain/weight';
 import { normalizeTrainingMinutesBudget } from './domain/training';
@@ -47,6 +50,7 @@ const SLOT_CN: Record<string, string> = {
   breakfast: '早膳',
   lunch: '午膳',
   dinner: '晚膳',
+  snack: '加餐',
 };
 
 export default function App() {
@@ -226,6 +230,8 @@ export default function App() {
       energy: todayData.state.energy,
       soreness: todayData.state.soreness,
       note: todayData.state.notes,
+      // 腰围：会变之数预填档中所存（未改动即不重写）
+      waistCm: todayData.profile.waistCm ?? undefined,
       // 习练页依今日之荐预填（休整之日无荐 → 记录页回默认课表）
       workoutTitle: todayData.nextWorkout.exercises.length > 0 ? todayData.nextWorkout.title : undefined,
       workoutExercises: todayData.nextWorkout.exercises.length > 0 ? todayData.nextWorkout.exercises : undefined,
@@ -304,7 +310,8 @@ export default function App() {
     runMutation(async () => {
       await healthRepository.addMeal(input);
       await loadData();
-      showToast('膳食已录于册');
+      // 归膳回执：既由时钟判定，就把去处一并说清（14:59 与 15:01 归宿不同，当场可核）
+      showToast(`膳食已录于册 · 归${SLOT_CN[input.category] ?? '今日'}`);
     }, '膳食之录未成');
 
   const handleQuickLogSuggestedMeal = () => {
@@ -351,8 +358,12 @@ export default function App() {
     }, '体征档之录未成');
 
   // Actions: Body & State
-  const handleSaveDailyState = (input: CreateDailyStateInput) =>
+  const handleSaveBody = (input: CreateDailyStateInput, waistCm?: number) =>
     runMutation(async () => {
+      // 腰围是会变之数，存于档中（最新值覆盖）：填了且与档中不同才重写，留空不改档
+      if (typeof waistCm === 'number' && waistCm > 0 && waistCm !== todayData?.profile.waistCm) {
+        await healthRepository.updateProfile({ waistCm });
+      }
       await healthRepository.saveDailyState(input);
       await loadData();
       showToast('体征状态已录');
@@ -381,6 +392,7 @@ export default function App() {
     runMutation(async () => {
       await healthRepository.toggleTodo(id);
       await loadData();
+      showToast('此事已勾');
     }, '此事勾选未成', `toggle-todo:${id}`);
 
   const handleAddTodo = (title: string, estimatedMinutes: string) =>
@@ -404,6 +416,7 @@ export default function App() {
     runMutation(async () => {
       await healthRepository.deleteTodo(id);
       await loadData();
+      showToast('此事已掷还');
     }, '去事未成', `delete-todo:${id}`);
 
   const handleResetData = () => {
@@ -429,6 +442,7 @@ export default function App() {
 
   if (authStage === 'setup') {
     return (
+      <MotionConfig reducedMotion="user">
       <div className="min-h-screen text-ink selection:bg-accentsoft selection:text-ink">
         <AnimatePresence>
           {toast && (
@@ -436,6 +450,8 @@ export default function App() {
               initial={{ opacity: 0, y: -16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -16 }}
+              role="status"
+              aria-live="polite"
               className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-ink text-white text-xs font-medium flex items-center gap-1.5"
             >
               {toast.ack ? (
@@ -453,6 +469,7 @@ export default function App() {
           onSendLink={handleSendLoginLink}
         />
       </div>
+      </MotionConfig>
     );
   }
 
@@ -502,6 +519,7 @@ export default function App() {
   };
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="min-h-screen text-ink selection:bg-accentsoft selection:text-ink">
       {/* Toast Feedback */}
       <AnimatePresence>
@@ -510,6 +528,8 @@ export default function App() {
             initial={{ opacity: 0, y: -16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -16 }}
+            role="status"
+            aria-live="polite"
             className="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-ink text-white text-xs font-medium flex items-center gap-1.5"
           >
             {toast.ack ? (
@@ -650,21 +670,31 @@ export default function App() {
       </main>
 
       {/* 录入入口全部就地：体征·录新体重 / 今日之练·另择动作 / 营养·别录一品，
-          各开录事弹层预选本域之签；全局记账 FAB 已撤，入口不聚一处 */}
+          各开本域独立之表；全局记账 FAB 已撤，入口不聚一处 */}
 
-      {/* Quick Record Bottom Sheet */}
-      <RecordSheet
-        isOpen={recordSheetOpen}
-        initialTab={recordTab}
+      {/* 录事三表各自独立（共用 SheetShell 之壳），无页签互跳 */}
+      <MealSheet
+        isOpen={recordSheetOpen && recordTab === 'meal'}
         onClose={() => setRecordSheetOpen(false)}
-        onSaveMeal={handleSaveMeal}
-        onSaveWorkout={handleSaveWorkout}
-        onSaveDailyState={handleSaveDailyState}
+        onSave={handleSaveMeal}
+        mealSlot={todayData.mealSlot}
         todayIntake={{
           mealCount: todayData.nutrition.mealCount,
-          caloriesKcal: todayData.nutrition.calories.consumed,
-          proteinG: todayData.nutrition.protein.consumed,
+          // 上屏先取整：浮点尾巴（233.79999999999998）绝不进表头
+          caloriesKcal: round1(todayData.nutrition.calories.consumed),
+          proteinG: round1(todayData.nutrition.protein.consumed),
         }}
+      />
+      <WorkoutSheet
+        isOpen={recordSheetOpen && recordTab === 'workout'}
+        onClose={() => setRecordSheetOpen(false)}
+        onSave={handleSaveWorkout}
+        defaults={recordDefaults}
+      />
+      <BodySheet
+        isOpen={recordSheetOpen && recordTab === 'body'}
+        onClose={() => setRecordSheetOpen(false)}
+        onSave={handleSaveBody}
         defaults={recordDefaults}
         weightWarningFor={weightWarningFor}
       />
@@ -688,5 +718,6 @@ export default function App() {
         onSave={handleSaveProfile}
       />
     </div>
+    </MotionConfig>
   );
 }

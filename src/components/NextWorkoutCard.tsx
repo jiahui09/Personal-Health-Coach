@@ -107,7 +107,7 @@ export const NextWorkoutCard: React.FC<NextWorkoutCardProps> = ({
                   className={`inklist-row inklist-dotted w-full text-left cursor-pointer transition-colors duration-150`}
                 >
                   <span
-                    className={`w-[18px] h-[18px] shrink-0 grid place-items-center rounded-sm border transition-colors duration-150 ${
+                    className={`w-[18px] h-[18px] shrink-0 grid place-items-center rounded-lg border transition-colors duration-150 ${
                       isChecked ? 'bg-accent border-accent text-white' : 'border-control bg-surface'
                     }`}
                   >

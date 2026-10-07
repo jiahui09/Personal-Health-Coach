@@ -35,7 +35,10 @@ const presentationFiles: [string, string][] = [
   ['ProfileSheet.tsx', comp('ProfileSheet.tsx')],
   ['NextMealCard.tsx', comp('NextMealCard.tsx')],
   ['NextWorkoutCard.tsx', comp('NextWorkoutCard.tsx')],
-  ['RecordSheet.tsx', comp('RecordSheet.tsx')],
+  ['SheetShell.tsx', comp('SheetShell.tsx')],
+  ['MealSheet.tsx', comp('MealSheet.tsx')],
+  ['WorkoutSheet.tsx', comp('WorkoutSheet.tsx')],
+  ['BodySheet.tsx', comp('BodySheet.tsx')],
   ['SyncSheet.tsx', comp('SyncSheet.tsx')],
   ['AuthGate.tsx', comp('AuthGate.tsx')],
   ['DotScale.tsx', comp('DotScale.tsx')],
@@ -125,7 +128,7 @@ assert(comp('StatsSection.tsx').includes('modelVersion'), '预测必须展示模
 
 // --- 6. 御批词表与关键措辞 ----------------------------------------------
 assert(app.includes('知道了 · '), '成功回执冠「知道了 ·」');
-assert(comp('RecordSheet.tsx').includes('照准'), '主确认作「照准」');
+assert(comp('SheetShell.tsx').includes('照准'), '主确认作「照准」');
 assert(comp('TodayTasks.tsx').includes('掷还'), '删条作「掷还」');
 assert(comp('NutritionSection.tsx').includes('掷还'), '误录之膳可掷还');
 assert(comp('NutritionSection.tsx').includes('已超'), '超额必须显示「已超」而非「尚余 0」');
@@ -133,7 +136,7 @@ assert(comp('NutritionSection.tsx').includes('尚余'), '未达目标显示「�
 assert(comp('StatsSection.tsx').includes('未合议'), '未达标写作「未合议」');
 assert(comp('StatsSection.tsx').includes('数据不足'), '样本不足时显示「数据不足」');
 assert(comp('TodayTasks.tsx').includes('拟 '), '任务用时标为「拟」（计划，非实际）');
-assert(comp('RecordSheet.tsx').includes('实际计时'), '训练时长来源必须可选实际/估算');
+assert(comp('WorkoutSheet.tsx').includes('实际计时'), '训练时长来源必须可选实际/估算');
 
 // --- 7. 假兜底不得复活 --------------------------------------------------
 assert(!src('src/services/scientificRules.ts').includes('rollingAverage7d: 68.4'), '不得用硬编码体重冒充统计');
