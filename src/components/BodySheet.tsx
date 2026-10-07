@@ -1,12 +1,12 @@
 // 体征表：录体征。录事三表之一（另有 MealSheet / WorkoutSheet），壳与组题由 SheetShell 共出。
-// 只收会变之数（体重、腰围、眠、体感、随笔）；常量（身高、出生年等）归立档表，两处不得混收。
+// 只收会变之数（体重、腰围、眠、随笔）；常量（身高、出生年等）归立档表，两处不得混收。
+// 体感（精力/酸痛）不在本表重复录入——首页「今日体感」点按即调，同源同词表。
 // deslop-ignore-file 07 22 28
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type { CreateDailyStateInput, SleepEntry } from '../types/health';
 import { intervalMinutes } from '../domain/sleep';
 import { formatNightDuration } from '../domain/format';
-import { DotScale, energyWord, sorenessWord } from './DotScale';
 import { Group, INPUT, RecordDefaults, SheetShell } from './SheetShell';
 
 interface BodySheetProps {
@@ -31,9 +31,6 @@ export const BodySheet: React.FC<BodySheetProps> = ({ isOpen, onClose, onSave, d
   const [sleepStart, setSleepStart] = useState('');
   const [wakeTime, setWakeTime] = useState('');
   const [sleepMinutes, setSleepMinutes] = useState<number | ''>('');
-  // 体感两点：与首页「今日体感」同控件同词表
-  const [energy, setEnergy] = useState<number | null>(null);
-  const [soreness, setSoreness] = useState<number | null>(null);
   const [stateNotes, setStateNotes] = useState('');
   /** 空录之戒：一无所有时给一句提示,不发空请求。 */
   const [hint, setHint] = useState<string | null>(null);
@@ -54,8 +51,6 @@ export const BodySheet: React.FC<BodySheetProps> = ({ isOpen, onClose, onSave, d
     setWakeTime(d?.wakeTime ?? '');
     setSleepMinutes(d?.sleepMinutes ?? '');
     setSleepMode(d?.sleepStart && d?.wakeTime ? 'interval' : d?.sleepMinutes ? 'duration' : 'interval');
-    setEnergy(d?.energy ?? null);
-    setSoreness(d?.soreness ?? null);
     setStateNotes(d?.note ?? '');
     setHint(null);
   };
@@ -105,8 +100,6 @@ export const BodySheet: React.FC<BodySheetProps> = ({ isOpen, onClose, onSave, d
       (typeof waistCm === 'number' && waistCm > 0) ||
       sleepIntervalValid ||
       (sleepMode === 'duration' && typeof sleepMinutes === 'number' && sleepMinutes > 0) ||
-      energy !== null ||
-      soreness !== null ||
       stateNotes.trim() !== '';
     if (!hasAny) {
       setHint('此页尚无一录可入——填得一项再照准。');
@@ -123,11 +116,9 @@ export const BodySheet: React.FC<BodySheetProps> = ({ isOpen, onClose, onSave, d
 
     const saved = await onSave(
       {
-        // 未填则不写：不把默认值当记录
+        // 未填则不写：不把默认值当记录。体感（精力/酸痛）不在本表——不传即保首页所点之值
         weight: typeof weight === 'number' && weight > 0 ? weight : undefined,
         sleep,
-        energy: energy ?? undefined,
-        soreness: soreness ?? undefined,
         notes: stateNotes,
       },
       typeof waistCm === 'number' && waistCm > 0 ? waistCm : undefined
@@ -147,7 +138,7 @@ export const BodySheet: React.FC<BodySheetProps> = ({ isOpen, onClose, onSave, d
       hint={hint}
       submitLabel={weightNeedsAck ? '仍要录之' : '照准'}
       draftKey="phc_draft_body"
-      getDraft={() => ({ weight, waistCm, sleepMode, sleepStart, wakeTime, sleepMinutes, energy, soreness, stateNotes })}
+      getDraft={() => ({ weight, waistCm, sleepMode, sleepStart, wakeTime, sleepMinutes, stateNotes })}
       applyDraft={(d) => {
         setWeight(typeof d.weight === 'number' ? d.weight : '');
         setWaistCm(typeof d.waistCm === 'number' ? d.waistCm : '');
@@ -155,8 +146,6 @@ export const BodySheet: React.FC<BodySheetProps> = ({ isOpen, onClose, onSave, d
         if (typeof d.sleepStart === 'string') setSleepStart(d.sleepStart);
         if (typeof d.wakeTime === 'string') setWakeTime(d.wakeTime);
         setSleepMinutes(typeof d.sleepMinutes === 'number' ? d.sleepMinutes : '');
-        setEnergy(typeof d.energy === 'number' ? d.energy : null);
-        setSoreness(typeof d.soreness === 'number' ? d.soreness : null);
         if (typeof d.stateNotes === 'string') setStateNotes(d.stateNotes);
         setWeightAck(false);
         setHint(null);
@@ -282,26 +271,7 @@ export const BodySheet: React.FC<BodySheetProps> = ({ isOpen, onClose, onSave, d
           </div>
         </div>
 
-        {/* 体感两点：与首页「今日体感」同控件同词表 */}
-        <div className="pt-3.5 mt-1 border-t border-dotted border-linehover">
-          <span className="group-head">体感</span>
-          <div className="mt-2.5 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <label className="text-ink3">
-                精力（1=惫，5=甚充沛）
-                {energy === null ? '：未录' : `：${energy}/5 ${energyWord(energy)}`}
-              </label>
-              <DotScale value={energy} onChange={setEnergy} label="精力" />
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <label className="text-ink3">
-                酸痛（1=无恙，5=沉痛）
-                {soreness === null ? '：未录' : `：${soreness}/5 ${sorenessWord(soreness)}`}
-              </label>
-              <DotScale value={soreness} onChange={setSoreness} label="酸痛" />
-            </div>
-          </div>
-        </div>
+        {/* 体感（精力/酸痛）不在此录——首页「今日体感」点按即调，表单不重复收 */}
 
         <div className="pt-3.5 mt-1 border-t border-dotted border-linehover">
           <label htmlFor="rs-notes" className="group-head">随笔（可无）</label>

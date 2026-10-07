@@ -227,8 +227,7 @@ export default function App() {
       wakeTime: todayData.sleep.today?.wakeTime,
       sleepMinutes:
         todayData.sleep.today?.source === 'duration' ? todayData.sleep.today.minutes : undefined,
-      energy: todayData.state.energy,
-      soreness: todayData.state.soreness,
+      // 体感（精力/酸痛）不进表单：首页点按即调，表不重复收、亦不回填
       note: todayData.state.notes,
       // 腰围：会变之数预填档中所存（未改动即不重写）
       waistCm: todayData.profile.waistCm ?? undefined,
@@ -669,7 +668,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* 录入入口全部就地：体征·录新体重 / 今日之练·另择动作 / 营养·别录一品，
+      {/* 录入入口全部就地：体征·录体征 / 今日之练·另择动作 / 营养·别录一品，
           各开本域独立之表；全局记账 FAB 已撤，入口不聚一处 */}
 
       {/* 录事三表各自独立（共用 SheetShell 之壳），无页签互跳 */}

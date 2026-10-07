@@ -160,9 +160,9 @@ assert(read(resolve(root, 'README.md')).includes('术语与口径'), 'README 承
 
 // --- 9. 刊头/入口不留冗余（第 17 条） ------------------------------------------
 const header = comp('HeaderGreeting.tsx');
-assert(!header.includes('<button'), '刊头不放动作按钮（录入入口分归各节就地按钮：录新体重/另择动作/别录一品）');
+assert(!header.includes('<button'), '刊头不放动作按钮（录入入口分归各节就地按钮：录体征/另择动作/别录一品）');
 assert(!copyOf(header).includes('日省吾身'), '刊头不写副题式自我说明');
-assert(!app.includes('记一笔'), '全局 FAB「记一笔」已撤：录入入口分归各节就地按钮（录新体重/另择动作/别录一品）');
+assert(!app.includes('记一笔'), '全局 FAB「记一笔」已撤：录入入口分归各节就地按钮（录体征/另择动作/别录一品）');
 assert(!app.includes('pb-32'), '页面不再为 FAB 预留底部让位');
 assert(!existsSync(resolve(compDir, 'EvidenceModal.tsx')), '稽核弹窗已删除（无入口的组件不留死代码）');
 for (const f of componentFiles) {
@@ -176,6 +176,19 @@ assert(
   '档案表只收常量：会变之数不得混入立档/改档表'
 );
 assert(comp('BodySheet.tsx').includes('腰围'), '会变之数（腰围）归体征表，与常量分表');
+assert(
+  !copyOf(comp('BodySheet.tsx')).includes('精力') && !copyOf(comp('BodySheet.tsx')).includes('酸痛'),
+  '体感不重复录入：精力/酸痛首页点按即调，体征表不收'
+);
+assert(
+  copyOf(comp('BodySection.tsx')).includes('录体征') && !copyOf(comp('BodySection.tsx')).includes('录新体重'),
+  '入口与表题相配：体征入口作「录体征」（表内是体重/腰围/眠，非单录体重）'
+);
+const bodyNote = /note=\{([\s\S]*?)\n\s{8,}\}/.exec(comp('BodySection.tsx'))?.[1] ?? '';
+assert(
+  bodyNote.includes('录体征') && !bodyNote.includes('立档') && !bodyNote.includes('改档'),
+  '眉行只留录入入口；立档随未建档警示、改档随「档案所录」，不与录体征并列挤于一处'
+);
 assert(
   !copyOf(comp('MealSheet.tsx')).includes('餐别'),
   '餐别选择已撤（其值由保存时刻的时钟判定），不得复辟为用户选择'

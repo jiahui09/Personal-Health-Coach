@@ -15,8 +15,6 @@ export interface RecordDefaults {
   sleepStart?: string;
   wakeTime?: string;
   sleepMinutes?: number;
-  energy?: number;
-  soreness?: number;
   /** 今日已有的随笔（有则预填，不被空提交抹掉）。 */
   note?: string;
   /** 档中现有腰围（预填显示；未改动即不重写档）。 */

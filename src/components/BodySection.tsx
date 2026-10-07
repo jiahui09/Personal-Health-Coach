@@ -59,11 +59,6 @@ export const BodySection: React.FC<BodySectionProps> = ({
 }) => {
   const night = sleep.today;
   const activity = body.activityLevel ? ACTIVITY_CN[body.activityLevel] : null;
-  const editButton = (
-    <button onClick={onEditProfile} className="btn-link">
-      {body.complete ? '改档' : '立档'}
-    </button>
-  );
 
   return (
     <section className="pt-10">
@@ -75,10 +70,10 @@ export const BodySection: React.FC<BodySectionProps> = ({
           note={
             <span className="flex items-center gap-3 text-[12px] text-ink3">
               {goal && <span>目标 {GOAL_CN[goal] ?? goal}</span>}
+              {/* 入口与表题相配：开的是「录体征」（体重/腰围/眠/随笔），非单录体重 */}
               <button onClick={onEditWeight} className="btn-link">
-                录新体重
+                录体征
               </button>
-              {editButton}
             </span>
           }
         />
@@ -93,6 +88,12 @@ export const BodySection: React.FC<BodySectionProps> = ({
             </p>
             <p className="mt-1 text-[12px] text-ink3">
               身高、性别、出生年与活动水平决定代谢与每日目标；未齐备前不显示人体数字。
+            </p>
+            {/* 立档贴未建档之告（常量入口随常量之缺），不与「录体征」并列挤于眉行 */}
+            <p className="mt-1.5">
+              <button onClick={onEditProfile} className="btn-link text-[12px]">
+                立档
+              </button>
             </p>
           </div>
         )}
@@ -134,7 +135,13 @@ export const BodySection: React.FC<BodySectionProps> = ({
 
           {body.complete && (
             <div className="pt-3.5 mt-1 border-t border-dotted border-linehover">
-              <span className="group-head">档案所录</span>
+              {/* 改档贴「档案所录」常量组（动数入口在上、常量入口随常量，互不并列） */}
+              <div className="flex items-baseline justify-between">
+                <span className="group-head">档案所录</span>
+                <button onClick={onEditProfile} className="btn-link text-[12px]">
+                  改档
+                </button>
+              </div>
               <div className="mt-1">
                 <Row label="身高 · 性别">
                   {body.heightCm} · {body.sex ? SEX_CN[body.sex] : '—'} · {body.ageYears ?? '—'} 岁

@@ -208,7 +208,7 @@ await waitFor(`!document.querySelector('form')`, 5000);
 await sleep(600);
 
 // --- 4. 体征：时刻推时长 + 异常体重二次确认 ------------------------------
-await ev(clickText('录新体重')); // 入口已就地：体征·录新体重 → 直开体征表（无页签）
+await ev(clickText('录体征')); // 入口与表题相配：体征·录体征 → 直开体征表（无页签；体感不入表，首页点按即调）
 await waitFor(`!!document.querySelector('form')`);
 console.log('体征表题头为录体征:', await ev(`document.querySelector('form').closest('[role=dialog]').innerText.includes('录体征')`));
 console.log('体征表一屏放下（无表内下拉）:', await ev(`(() => { const f = document.querySelector('form'); return f.scrollHeight <= f.clientHeight + 4; })()`));
