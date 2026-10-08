@@ -25,6 +25,11 @@ export interface SupabaseSession {
   email: string | null;
 }
 
+/** 注册结果：关闭「Confirm email」时当场拿到会话；否则只建立用户、等确认邮件。 */
+export type SignUpResult =
+  | { status: 'signed_in'; session: SupabaseSession }
+  | { status: 'confirmation_required' };
+
 export interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -39,6 +44,8 @@ export type SupabaseErrorKind =
   | 'rate_limited'
   /** 服务端能力未开启（如匿名登录被关掉） */
   | 'not_implemented'
+  /** 注册用的邮箱已存在（422 user_already_registered） */
+  | 'email_taken'
   | 'unknown';
 
 export class SupabaseError extends Error {
@@ -175,6 +182,34 @@ export class SupabaseRest {
 
   // ---------------- 认证（magic link） ----------------
 
+  /** 认证端点的会话载荷 → SupabaseSession；缺 access/refresh/user.id 即视为「没有会话」。 */
+  private toSession(payload: unknown): SupabaseSession | null {
+    const data = payload as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      user?: { id: string; email?: string | null };
+    } | null;
+    if (!data?.access_token || !data.refresh_token || !data.user?.id) return null;
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      // Supabase 总会返回 expires_in；缺失时按 1 小时处理（保守,到期会再刷新）
+      expiresAt: this.now() + (data.expires_in ?? 3600) * 1000,
+      userId: data.user.id,
+      email: data.user.email ?? null,
+    };
+  }
+
+  private parseJsonSafe(text: string): unknown {
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  }
+
   /** 发送登录邮件；链接会跳回 redirectTo 并在 hash 里带回令牌。 */
   async sendMagicLink(email: string, redirectTo: string): Promise<void> {
     const response = await this.request('/auth/v1/otp', {
@@ -219,24 +254,39 @@ export class SupabaseRest {
       }
       throw mapStatus(response.status, text);
     }
-    const data = (text ? JSON.parse(text) : null) as {
-      access_token?: string;
-      refresh_token?: string;
-      expires_in?: number;
-      user?: { id: string; email?: string | null };
-    } | null;
-    if (!data?.access_token || !data.refresh_token || !data.user?.id) {
-      throw new SupabaseError('unknown', '密码登录未返回会话');
-    }
-    const session: SupabaseSession = {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresAt: this.now() + (data.expires_in ?? 3600) * 1000,
-      userId: data.user.id,
-      email: data.user.email ?? null,
-    };
+    const session = this.toSession(this.parseJsonSafe(text));
+    if (!session) throw new SupabaseError('unknown', '密码登录未返回会话');
     this.writeSession(session);
     return session;
+  }
+
+  /**
+   * 邮箱 + 密码注册：POST /auth/v1/signup。
+   * 两种结果都由后台的邮箱确认设置决定：
+   *   - 已关闭 Confirm email（或用户已 Auto Confirm）→ 直接返回会话，当场可写数据；
+   *   - 仍需确认 → 只返回用户、不给会话，调用方按「查收确认邮件」提示。
+   * 邮箱已存在（422）单独映射成 email_taken，好让页面给出「改用登录」的指引。
+   */
+  async signUpWithPassword(email: string, password: string): Promise<SignUpResult> {
+    const response = await this.request('/auth/v1/signup', {
+      method: 'POST',
+      auth: false,
+      body: { email, password, data: {}, gotrue_meta_security: {} },
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      if (/already (registered|exists)|user_already_exists|email_exists/i.test(text)) {
+        throw new SupabaseError('email_taken', '该邮箱已注册', response.status);
+      }
+      if (/password.*(short|weak)|should be at least/i.test(text)) {
+        throw new SupabaseError('auth', '密码太短：至少 6 位', response.status);
+      }
+      throw mapStatus(response.status, text);
+    }
+    const session = this.toSession(this.parseJsonSafe(text));
+    if (!session) return { status: 'confirmation_required' };
+    this.writeSession(session);
+    return { status: 'signed_in', session };
   }
 
   /**
@@ -261,22 +311,8 @@ export class SupabaseRest {
       }
       throw mapStatus(response.status, text);
     }
-    const data = (text ? JSON.parse(text) : null) as {
-      access_token?: string;
-      refresh_token?: string;
-      expires_in?: number;
-      user?: { id: string; email?: string | null };
-    } | null;
-    if (!data?.access_token || !data.refresh_token || !data.user?.id) {
-      throw new SupabaseError('unknown', '匿名登录未返回会话');
-    }
-    const session: SupabaseSession = {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresAt: this.now() + (data.expires_in ?? 3600) * 1000,
-      userId: data.user.id,
-      email: data.user.email ?? null,
-    };
+    const session = this.toSession(this.parseJsonSafe(text));
+    if (!session) throw new SupabaseError('unknown', '匿名登录未返回会话');
     this.writeSession(session);
     return session;
   }
@@ -424,6 +460,16 @@ export class SupabaseRest {
     return this.rowsRequest<T>(`/rest/v1/${table}`, {
       method: 'POST',
       body: row,
+      headers: { Prefer: 'return=representation' },
+    });
+  }
+
+  /** 批量插入（数组体）：合并本机记录时一次写入,少往返；空数组不发请求。 */
+  insertMany<T>(table: string, rows: Record<string, unknown>[]): Promise<T[]> {
+    if (rows.length === 0) return Promise.resolve([]);
+    return this.rowsRequest<T>(`/rest/v1/${table}`, {
+      method: 'POST',
+      body: rows,
       headers: { Prefer: 'return=representation' },
     });
   }

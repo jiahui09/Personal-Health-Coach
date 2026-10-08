@@ -39,6 +39,7 @@ export type RepositoryErrorCode =
   | 'conflict' // concurrent write, unique constraint violated
   | 'not_found' // row missing or owned by someone else
   | 'not_implemented' // backend stub not wired yet
+  | 'email_taken' // sign-up with an address that already has an account
   | 'unknown';
 
 /** Single error vocabulary so the UI can map a failure to a message and a retry. */

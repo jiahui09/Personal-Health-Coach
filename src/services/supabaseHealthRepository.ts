@@ -48,6 +48,18 @@ import {
   workoutToRow,
 } from './supabaseMappers';
 import { makeDayContext } from '../domain';
+import {
+  captureLocalSnapshot,
+  clearPending,
+  hasPending,
+  loadPending,
+  runPendingMerge,
+  snapshotCounts,
+  stashPending,
+  type LocalSnapshot,
+  type MergeCounts,
+  type MergeSummary,
+} from './accountMerge';
 
 type Row = Record<string, unknown>;
 
@@ -66,6 +78,8 @@ function toRepositoryError(err: unknown): RepositoryError {
         ? 'rate_limited'
         : err.kind === 'not_implemented'
         ? 'not_implemented'
+        : err.kind === 'email_taken'
+        ? 'email_taken'
         : err.kind === 'conflict'
         ? 'conflict'
         : err.kind === 'not_found'
@@ -150,8 +164,17 @@ export class SupabaseHealthRepository implements HealthRepository {
     return { id: 'pending', email, isDemo: false };
   }
 
+  /**
+   * 注册：邮箱+密码建号（POST /auth/v1/signup）。
+   * 后台关闭 Confirm email（或 Auto Confirm）→ 当场建会话返回身份；
+   * 仍需确认 → 返回待确认身份（id='pending'），由页面提示查收确认邮件。
+   */
   async signUp(email: string, password: string): Promise<AuthUser> {
-    return this.signIn(email, password);
+    const result = await guard(() => this.rest.signUpWithPassword(email, password));
+    if (result.status === 'confirmation_required') return { id: 'pending', email, isDemo: false };
+    this.cachedProfile = null;
+    this.emitAuth(result.session);
+    return { id: result.session.userId, email: result.session.email, isDemo: false };
   }
 
   hasSession(): boolean {
@@ -535,6 +558,42 @@ export class SupabaseHealthRepository implements HealthRepository {
   async deleteTodo(id: string): Promise<void> {
     const userId = await this.requireUserId();
     await guard(() => this.rest.remove('todos', `id=eq.${id}&user_id=eq.${userId}`));
+  }
+
+  // ================= 本机 → 账号 合并（多端同步） =================
+
+  /**
+   * 登录前抓取本机（当前匿名身份）名下的记录快照。
+   * 必须在换身份**之前**调用：一旦登录,RLS 就再也读不到匿名身份的行。
+   * 读取失败必须让调用方中止登录——否则会话被覆盖后这些记录永久不可达。
+   */
+  async captureLocalSnapshot(): Promise<LocalSnapshot | null> {
+    return guard(() => captureLocalSnapshot(this.rest));
+  }
+
+  /** 登录成功后立即持久化快照（防刷新丢失），页脚据此显示「继续上次合并」。 */
+  stashPendingMerge(snapshot: LocalSnapshot): void {
+    // 记下目标账号：这份快照只准并进当前登录的这个账号
+    stashPending({ ...snapshot, targetUserId: this.rest.getSession()?.userId ?? snapshot.targetUserId });
+  }
+
+  discardPendingMerge(): void {
+    clearPending();
+  }
+
+  hasPendingMerge(): boolean {
+    return hasPending();
+  }
+
+  /** 待合并快照的各表条数；无待办返回 null。 */
+  pendingMergeCounts(): MergeCounts | null {
+    const snapshot = loadPending();
+    return snapshot ? snapshotCounts(snapshot) : null;
+  }
+
+  /** 执行待合并快照：全部成功 → 清除并返回摘要；任一表失败 → 抛错且保留（可重试）。 */
+  async runPendingMerge(): Promise<MergeSummary | null> {
+    return guard(() => runPendingMerge(this.rest));
   }
 
   // ================= Demo data =================

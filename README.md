@@ -73,6 +73,10 @@ src/
 │   ├── todayAssembly.ts          # ★ 唯一组装点：原始记录 → TodayData（本地/云端共用）
 │   ├── mockHealthRepository.ts   # 本地实现：localStorage 持久化 → assembleToday
 │   ├── supabaseHealthRepository.ts # 云端实现：会话（magic link/密码/匿名）+ PostgREST 读写
+│   ├── supabaseRest.ts           # 零依赖传输层：注册/登录/匿名、令牌续期、批量写、错误映射
+│   ├── supabaseMappers.ts        # 6 表行 ↔ 域模型（numeric 字符串、HH:MM:SS、jsonb）
+│   ├── accountMerge.ts           # 本机 → 账号 合并：自然键去重、剥 id 换 user_id、快照续跑
+│   ├── refreshPolicy.ts          # 切回页面自动重取的判定（可见 + 空闲 + 15 秒节流）
 │   ├── scientificDecisionEngine.ts# 引擎门面：evaluateFullDecision / verifyDeterminism
 │   ├── scientificRules.ts         # ★ 全部纯函数规则（核心）
 │   ├── scientificEvidence.ts      # 证据登记表（10 条，含 claim / limitations）
@@ -80,7 +84,7 @@ src/
 ├── data/                      # mockData（30 天体重等演示数据）、foods（食物库+餐食模板）
 ├── types/health.ts            # 全部领域模型与审计类型（单一类型来源）
 ├── vite-env.d.ts              # VITE_SUPABASE_* 环境变量类型
-└── tests/                    # 9 套契约与审计测试（scientificAudit / journalContract / …）
+└── tests/                    # 11 套契约与审计测试（scientificAudit / mergePlan / refreshPolicy / …）
 ```
 
 **分层**：`UI (React 19) → HealthRepository (接口) → repository.ts (工厂) → Mock / Supabase 实现 → ScientificDecisionEngine (纯函数)`。换后端只改工厂这一处。
@@ -95,7 +99,7 @@ src/
 | --- | --- | --- |
 | **身份** | `getCurrentUser / signIn / signUp / signOut / onAuthChange`，`AuthUser.id` 即每行数据的 `user_id` | 没有 `user_id` 就没有 RLS，健康数据不能裸奔 |
 | **时间窗** | `getMeals/getWorkouts/getWeightHistory/getTodos/getDailyStates(since?)` | 不再全量拉历史；Supabase 上等价于 `where date >= since` |
-| **类型化错误** | `RepositoryError{code: network\|auth\|rate_limited\|conflict\|not_found\|not_implemented\|unknown}` + `toRepositoryError()` | App 用 `runMutation()` 统一兜底：失败弹出带 code 的 toast；初次加载失败显示重试页 |
+| **类型化错误** | `RepositoryError{code: network\|auth\|email_taken\|rate_limited\|conflict\|not_found\|not_implemented\|unknown}` + `toRepositoryError()` | App 用 `runMutation()` 统一兜底：失败弹出带 code 的 toast（`email_taken` → 「改用登录」）；初次加载失败显示重试页 |
 | **可复现时钟** | `HealthContext.now: Date`——引擎只从它读时间 | 同一 `x` 必得同一 `y`，服务端重算与客户端一致（测试 9 覆盖）；ID 也统一为 `crypto.randomUUID()` |
 
 另外两条语义约定：`resetToDefault()` **仅限演示**（后端实现禁止用它删真实数据）；`saveDailyState`/`addWeight` 各自包含两处写入，落到 Postgres 必须是事务或 rpc。
@@ -186,25 +190,31 @@ npm run build
 > **静态版**（零配置、本机 localStorage）与 **云端同步版**（Supabase 邮箱 magic link + PostgREST），
 > 后者为**零新增依赖**实现（`src/services/supabaseRest.ts` 用 fetch 直连），两条路径共用同一段
 > 派生逻辑 `src/services/todayAssembly.ts`，跨路径一致性由 `src/tests/supabaseContract.test.ts` 锁定。
+>
+> 云端版账号与同步的入口都在页内：**注册/登录（邮箱+密码，不发邮件不受发信限额）**、
+> 登录前先抓本机记录再**询问后并入账号**、页脚显示当前账号邮箱与「退出」、
+> 切回页面/回到前台**自动重取**（15 秒节流，无轮询、无 Realtime）。详见 `docs/deploy.md` §4c。
 
 **已定方案**：静态托管 Pages + 数据/鉴权 Supabase 免费档，**不引入任何服务端应用层**。
 
 | 环节 | 结论 | 说明 |
 | --- | --- | --- |
 | **Cloudflare Pages** | 采用 | 托管 `dist/` 静态产物；build command `npm run build`、output `dist`；项目无路由，不需要 SPA fallback |
-| **Supabase Free** | 采用 | 浏览器直连 PostgREST（不经 Worker），8 张表全是个人手记量级；anon key 是公开键，安全边界在 RLS |
+| **Supabase Free** | 采用 | 浏览器直连 PostgREST（不经 Worker），6 张表全是个人手记量级；anon key 是公开键，安全边界在 RLS |
 | **Cloudflare Workflows** | 不采用 | ① **没有服务端工作负载**：28 个 repository 方法全是请求/响应 CRUD，确定性引擎在浏览器里算，没有队列、没有需要持久化的多步骤流程；② **免费前提存疑**：Workflows 挂在 Workers 上，据信需 Workers Paid（约 $5/月）——接入前请核对 `developers.cloudflare.com/workflows/pricing`，若属实会直接打破"免费" |
 
 **将来真需要后台任务时**（夜间周报聚合、Apple Health 批量导入、备份到 R2）：先用免费的 Supabase 侧方案——`pg_cron` + SQL 函数，或 Supabase Edge Functions；只有当工作负载确实需要跨步骤持久状态、且核验 Workflows 免费可用时再考虑它。
 
 **上线前必须核对三处官方额度（本文所有"据信/待核验"数字均以当时官方页面为准）**：Cloudflare Pages 免费额度、Cloudflare Workflows 计费、Supabase Free 当前限额（数据库容量 / 流量 / 项目数 / Auth 用户数）。本环境无法联网，相关定价页未做实时核验。
 
-### 真正接 Supabase 时的落地待办
+### 接 Supabase 的落地状态（哪些已做、哪些明确不做）
 
-1. **SQL migration**：8 张表（对应 `STORAGE_KEYS` 的 8 个 key）+ `user_id uuid` + 每表 RLS 策略 + `(user_id, date)` 唯一约束 + `today_snapshot` 视图（让 `getToday()` 一次取回，而不是 8 次往返）。
-2. **实现 `SupabaseHealthRepository`**：先打通读路径 `getToday()`，再补写路径；`saveDailyState`（连带体重）与 `addWeight`（连带 profile）用事务/rpc，`toggleTodo` 用 `set completed = not completed returning *`，`completeTodayWorkout` 用部分唯一索引 + `on conflict do nothing`。
-3. **Pages 项目配置**：仓库连接、build/output 如上，在 Pages 后台注入 `VITE_SUPABASE_*`（或用 `.env` 构建）。
-4. **保持引擎在客户端**：`getToday()` 拉回原始记录后由浏览器跑 `ScientificDecisionEngine`——这是本方案不需要任何 Worker/Workflow 的根本原因。
+1. **SQL migration（已做）**：`supabase/schema.sql` 建 6 张表（对应当前 `STORAGE_KEYS`）+ `user_id uuid` + 每表 RLS 策略（`auth.uid() = user_id`）+ 索引 + 越权自测；**未建** `today_snapshot` 视图（`getToday()` 按表取回，个人量级下 6 次往返可接受，留作将来优化）。
+2. **`SupabaseHealthRepository`（已做）**：28 个方法全部落地；同日体重走 PATCH、档案 upsert、删除同时限定 `id` 与 `user_id`、云端拒绝 `resetToDefault`；**未用**事务/rpc 与 `on conflict`——同日唯一性由读取比对保证，免费档下省掉 RPC 面。
+3. **账号与同步（已做）**：页内邮箱密码注册/登录、退出、登录前抓本机快照 + 询问后合并、切回页面自动重取（详见 `docs/deploy.md` §4c）。
+4. **Pages 项目配置（待上线时做）**：仓库连接、build/output 如上，在 Pages 后台注入 `VITE_SUPABASE_*`（或用 `.env` 构建）；`node scripts/verify-supabase.mjs` 上线前自检。
+5. **保持引擎在客户端（始终如此）**：`getToday()` 拉回原始记录后由浏览器跑 `ScientificDecisionEngine`——这是本方案不需要任何 Worker/Workflow 的根本原因。
+6. **明确不做（本轮及可预见的将来）**：JSON 导出/备份、页内密码重置与账号删除、Realtime/轮询、Edge Functions/RPC/新表、引入任何新依赖。
 
 ---
 
@@ -359,13 +369,21 @@ npm run build
     - **体验三针**：斜率针（期末 `−0.19 公斤/周` 与变化同号）、加餐针（21:45 表头与回执皆「归加餐」、19:50 仍「归晚膳」）、文辞针（390 警示框行数不增、溢出 0）全中；帧对照 `.shots/sim-d7-full-before.png` → `.shots/sim-d7-full.png`。
     - **验证**：9 套测试 + `tsc` + `build` + e2e + accept-check 15/15 + 六档探针 + qa-states 全 PASS；`impeccable detect` URL 扫 5 条 report-only，与基线持平（exit 2）。
 
+29. **账号与数据存储方案：页内自助注册 + 询问后合并 + 多端同步**（本轮，用户批准的方案）：
+    - **页内注册与账号管理**：新增 `signUpWithPassword`（`POST /auth/v1/signup`，零邮件、不受发信限额；需确认邮件时回 `confirmation_required`，不假装已登录）与错误码 `email_taken`（页面据此提示「改用登录」）；同步弹层改**登录 / 注册新账号**两式，页脚常驻**账号邮箱 + 「退出」**，退出只清会话、不动数据；提示页另给「已有账号 · 登录同步」出口（退出后够得着账号）。
+    - **询问后合并（本机 → 账号）**：新增 `src/services/accountMerge.ts` —— 自然键去重（体重=测量日、体征=日期、膳=日|时|类|名|热量、练=日|时|题|时长、待办=日|题、档案恒一），**账号为准、本机只补缺**；写入前剥 `id`（交给 `gen_random_uuid()`）并把 `user_id` 换成账号 uid；登录**之前**先抓本机快照（抓不到就中止登录，绝不换掉身份），登录成功即把快照持久化到 sessionStorage（刷新可续），页脚「继续上次合并」随时可重跑；**匿名行永不删除**（留作兜底副本）。
+    - **失败可续、幂等重试**：合并逐表 `Promise.allSettled` + `insertMany`（数组体一次一张表），任一表失败则快照保留、下次按自然键跳过已写入的行；待合并快照带 `targetUserId`，只准并回当初认准的那个账号。
+    - **多端同步的时效**：新增 `src/services/refreshPolicy.ts`（纯函数 `shouldAutoRefresh`），**切回页面 / 窗口重获焦点自动重取**，15 秒节流 + 三个不打断条件（页面不可见 / 弹层开着或写入未落定 / 首屏载入中）——不轮询、不接 Realtime。
+    - **验证**：新增 `mergePlan.test.ts`（自然键、合并计划、快照持久化、抓快照 IO）与 `refreshPolicy.test.ts`，`supabaseContract.test.ts` 扩至 26 项（注册三分支、`insertMany`、合并全链路读→计划→换 uid 写）；测试增至 **11 套**；`tsc` + `build` 全绿，另加浏览器冒烟 `.shots/account-smoke.mjs`（本机模式不出现同步入口；云端不可达时 AuthGate → 账号面板 → 注册 → 网络失败回执不崩且输入不丢）。
+    - **边界（如实说明）**：本轮不做 JSON 导出/备份、不做密码重置与账号删除、不加 Edge Functions/RPC/新表/依赖；mock（静态）模式不参与多端同步，页脚仍是「复其初」。
+
 ### 仍待补齐（真实项目的下一步）
 
 1. **工程配套**：无 ESLint/格式化、无 CI；端到端为自建脚本 `.shots/e2e.mjs`（未引入测试框架）。
-2. **数据持久化**：本地模式的数据只在 localStorage，换设备即丢失，也没有导出/备份入口（云端模式已接通 Supabase：会话 + PostgREST 读写 + RLS，多端同步见页脚「同步到我的账号」）。
-3. **体积**：单包 542 KB（gzip 171 KB），未做代码分割。
+2. **数据持久化**：本地模式的数据只在 localStorage，换设备即丢失，也没有导出/备份入口（本轮**有意不做** JSON 导出）。云端模式已接通 Supabase：会话 + PostgREST 读写 + RLS + 账号（页内邮箱密码注册/登录）+ 登录时**询问后合并**本机记录 + 切回页面自动重取；见页脚「同步到我的账号」与 `docs/deploy.md` §4c。
+3. **体积**：单包 552 KB（gzip 174 KB），未做代码分割。
 4. **视觉回归**：本轮已具备截图级回归——headless chromium 对 `http://localhost:3000` 出 1440/430 两档截图与参考稿比对（`.shots/`），设计令牌对比度已有自动化阈值（`src/tests/contrast.test.ts`），版式现有 `src/tests/layoutContract.test.ts` 源码契约 + `.shots/layout-probe.mjs` 几何探针（章节横线同 y、标题左缘、溢出 0），但**像素级视觉回归仍靠人工看图**。
 
 ### 结论
 
-这是一个**架构清晰、方法论克制、且已经把演示成分剥掉的健康手记**：科学证据 vs 工程启发式的边界讲得清楚，数据与日期真实，审计弹窗与引擎输出一致，测试全绿；视觉上经三轮去模板化重做成编辑式手记风（中文古记事体、双栏手排、古书版框与仿真纸纹、单张体重折线），并把与参考稿的差异逐条写明。剩下的是常规工程化工作——Lint/CI/E2E、真实后端与数据同步、体积优化。
+这是一个**架构清晰、方法论克制、且已经把演示成分剥掉的健康手记**：科学证据 vs 工程启发式的边界讲得清楚，数据与日期真实，审计弹窗与引擎输出一致，测试全绿；视觉上经三轮去模板化重做成编辑式手记风（中文古记事体、双栏手排、古书版框与仿真纸纹、单张体重折线），并把与参考稿的差异逐条写明。剩下的是常规工程化工作——Lint/CI（端到端与探针已有自建脚本）、体积优化（代码分割）；账号、云存储与多端同步已于本轮落地。

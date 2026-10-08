@@ -10,7 +10,7 @@
   - 比选稿 `docs/palette-options.html`（五版色组，当前选中其五）
   - 成稿截图 `.shots/v6-desktop.png`（1440 全页）、`.shots/v6-mobile.png`（390 全页）、`.shots/v6-form-meal.png`（归入行）、`.shots/v6-guard.png`（遮罩拦稿告知句）、`.shots/v6-workout-390.png`（390 录一练一屏）、`.shots/v5-*.png`（上一版三表开启态）、`.shots/v4-*.png` / `.shots/v3-*.png`（更早）、`.shots/za-mobile-*.png`（历史局部）
 - Evidence reviewed:
-  - `README.md`（§2 功能表、§字体与视觉约定、变更清单 1–25 条、仍待补齐）
+  - `README.md`（§2 功能表、§字体与视觉约定、变更清单 1–29 条、仍待补齐）
   - `src/index.css` `@theme` 令牌与 `@layer components`（btn 三级、`.section-actions`、`.leader`）
   - 全部 `src/components/*.tsx`；`.omx/artifacts/visual-ralph/editorial-journal/`（参考稿 html + 双端截图，已批准基线）
   - 实测几何：`.shots/layout-probe.mjs` @1440/1023/768/640/390（本轮改版后全量 `--check`）

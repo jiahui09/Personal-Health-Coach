@@ -48,3 +48,11 @@ export const repositoryKind: RepositoryKind = resolveRepositoryKind();
 
 /** The singleton the UI talks to. */
 export const healthRepository: HealthRepository = createHealthRepository();
+
+/**
+ * 云端仓库单例（本机模式为 null）。
+ * 账号合并（本机身份 → 账号）只在云端有意义,这些能力不在 HealthRepository 接口上,
+ * 页面经它取用,免得把实现细节摊进通用接口。
+ */
+export const cloudHealthRepository: SupabaseHealthRepository | null =
+  repositoryKind === 'supabase' ? (healthRepository as SupabaseHealthRepository) : null;

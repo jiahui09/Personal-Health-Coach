@@ -10,6 +10,8 @@ interface AuthGateProps {
   onRetry: () => Promise<boolean>;
   /** 邮箱登录（仅在需要换设备/恢复数据时用）。 */
   onSendLink: (email: string) => Promise<boolean>;
+  /** 打开账号面板（邮箱+密码登录 / 注册）：退出后回到账号的正路。 */
+  onOpenSync: () => void;
 }
 
 /** 对症的处置建议：不同错误码的根因与修法完全不同。 */
@@ -28,7 +30,7 @@ const COOLDOWN_SECONDS = 60;
  * 只在「静默进入失败」时才会出现，不是常规登录页。
  * 自用场景下正常路径是一路直进：应用启动时自己建立本机身份，用户看不到这一步。
  */
-export const AuthGate: React.FC<AuthGateProps> = ({ reason, onRetry, onSendLink }) => {
+export const AuthGate: React.FC<AuthGateProps> = ({ reason, onRetry, onSendLink, onOpenSync }) => {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
@@ -99,6 +101,9 @@ export const AuthGate: React.FC<AuthGateProps> = ({ reason, onRetry, onSendLink 
               className="btn-link w-full justify-center py-1.5"
             >
               <span>改用邮箱登录</span>
+            </button>
+            <button type="button" onClick={onOpenSync} className="btn-link w-full justify-center py-1.5">
+              <span>已有账号 · 登录同步</span>
             </button>
             <p className="text-[12px] text-ink4 leading-relaxed">
               也可以彻底不要云端：删掉 Pages 里的 VITE_SUPABASE_URL 与 VITE_SUPABASE_ANON_KEY，

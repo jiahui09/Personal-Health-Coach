@@ -34,6 +34,7 @@ import {
   workoutToRow,
 } from '../services/supabaseMappers';
 import { SupabaseHealthRepository } from '../services/supabaseHealthRepository';
+import { mergeSnapshotIntoAccount } from '../services/accountMerge';
 import { createSeedData } from '../data/mockData';
 import { RepositoryError } from '../services/healthRepository';
 import type { UserProfile } from '../types/health';
@@ -576,6 +577,136 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
     assert(err instanceof RepositoryError && err.code === 'not_implemented', '云端「复其初」显式拒绝');
   }
   ok('写入语义：同日 PATCH、档案 upsert、删除限本人、拒绝清库');
+}
+
+// ---------------- 5. 注册与批量写入（账号与合并的传输层） ----------------
+
+// 注册：后台已关 Confirm email → 当场拿到会话
+{
+  const storage = memoryStorage();
+  const { fetchImpl, calls } = makeFetch([
+    { method: 'POST', match: (u) => u.includes('/auth/v1/signup'), body: sessionBody },
+  ]);
+  const rest = new SupabaseRest(cfg, { fetchImpl, storage });
+  const result = await rest.signUpWithPassword('me@example.com', 'secret123');
+  assert(result.status === 'signed_in', '带回会话的注册 → 当场 signed_in');
+  const call = calls[0];
+  assert(call.url === 'https://demo.supabase.co/auth/v1/signup', '注册打 signup 端点（不是 otp,不发邮件）');
+  assert((call.body as { email: string }).email === 'me@example.com', '载荷带邮箱');
+  assert((call.body as { password: string }).password === 'secret123', '载荷带密码（密码注册,非 magic link）');
+  assert(storage.dump()['phc_supabase_session_v1'] !== undefined, '会话写入本地存储');
+  ok('注册（自动确认）：signup 端点 + 密码载荷 + 会话落地');
+}
+
+// 注册：仍需确认邮件 → 只建用户、不给会话
+{
+  const storage = memoryStorage();
+  const { fetchImpl } = makeFetch([
+    { method: 'POST', match: (u) => u.includes('/auth/v1/signup'), body: { id: UID, confirmation_sent_at: '2026-09-25T12:00:00Z' } },
+  ]);
+  const rest = new SupabaseRest(cfg, { fetchImpl, storage });
+  const result = await rest.signUpWithPassword('me@example.com', 'secret123');
+  assert(result.status === 'confirmation_required', '无会话的注册 → confirmation_required');
+  assert(storage.dump()['phc_supabase_session_v1'] === undefined, '不写会话（还没确认,不能假装已登录）');
+  ok('注册（需确认邮件）：pending 态且不落会话');
+}
+
+// 注册：邮箱已存在 → email_taken（页面据此提示改用登录）
+{
+  const { fetchImpl } = makeFetch([
+    {
+      method: 'POST',
+      match: (u) => u.includes('/auth/v1/signup'),
+      status: 422,
+      body: { code: 422, error_code: 'user_already_exists', msg: 'User already registered' },
+    },
+  ]);
+  const rest = new SupabaseRest(cfg, { fetchImpl, storage: memoryStorage() });
+  try {
+    await rest.signUpWithPassword('me@example.com', 'secret123');
+    assert(false, '邮箱已注册应当抛错');
+  } catch (err) {
+    assert(err instanceof SupabaseError && err.kind === 'email_taken', '422 user_already_registered → email_taken');
+  }
+  ok('注册：邮箱已存在 → email_taken（不是笼统的 auth）');
+}
+
+// 批量插入：数组体 + return=representation（合并走它,一次一张表）
+{
+  const { fetchImpl, calls } = makeFetch([
+    { method: 'POST', match: (u) => u.includes('/rest/v1/meals'), body: [] },
+  ]);
+  const rest = new SupabaseRest(cfg, { fetchImpl, storage: authedStorage() });
+  const rows = [
+    { user_id: UID, eaten_on: '2026-09-25', name: '鸡腿饭' },
+    { user_id: UID, eaten_on: '2026-09-26', name: '燕麦粥' },
+  ];
+  await rest.insertMany('meals', rows);
+  const call = calls[0];
+  assert(Array.isArray(call.body), '批量写入发数组体（PostgREST 批量插入）');
+  assert((call.body as unknown[]).length === 2, '数组体逐行带过去');
+  assert(call.headers.Prefer === 'return=representation', '要回执行,便于核对写入结果');
+  await rest.insertMany('meals', []);
+  assert(calls.length === 1, '空数组不发请求（没有可并的行就别打网络）');
+  ok('insertMany：数组体 + 回执头 + 空数组短路');
+}
+
+// 合并全链路：匿名快照 → 账号行读取 → 去重计划 → 换 uid 批量写入
+{
+  const ACCOUNT_UID = 'account-uid';
+  const anonWeight = { id: 'w-anon', user_id: 'anon-uid', measured_on: '2026-09-24', weight_kg: '68.40' };
+  const accountWeight = { id: 'w-acct', user_id: ACCOUNT_UID, measured_on: '2026-09-25', weight_kg: '67.90' };
+  const TABLES = ['profiles', 'weight_records', 'daily_states', 'meals', 'workout_sessions', 'todos'];
+
+  const storage = memoryStorage();
+  storage.setItem(
+    'phc_supabase_session_v1',
+    JSON.stringify({
+      accessToken: 'at-account',
+      refreshToken: 'rt-account',
+      expiresAt: Date.now() + 3_600_000,
+      userId: ACCOUNT_UID,
+      email: 'me@example.com',
+    })
+  );
+
+  const { fetchImpl, calls } = makeFetch([
+    ...TABLES.map((table) => ({
+      method: 'GET',
+      match: (u: string) => u.includes(`/rest/v1/${table}`),
+      body: table === 'weight_records' ? [accountWeight] : [],
+    })),
+    ...TABLES.map((table) => ({
+      method: 'POST',
+      match: (u: string) => u.includes(`/rest/v1/${table}`),
+      body: [],
+    })),
+  ]);
+
+  const rest = new SupabaseRest(cfg, { fetchImpl, storage });
+  const summary = await mergeSnapshotIntoAccount(rest, {
+    anonUserId: 'anon-uid',
+    rows: {
+      profiles: [],
+      weight_records: [anonWeight, { ...anonWeight, id: 'w-anon-2' }],
+      daily_states: [],
+      meals: [],
+      workout_sessions: [],
+      todos: [],
+    },
+  });
+
+  const post = calls.find((c) => c.method === 'POST' && c.url.includes('/rest/v1/weight_records'));
+  assert(post !== undefined, '有可并的行才发 POST');
+  const posted = post!.body as Record<string, unknown>[];
+  assert(posted.length === 1, '账号已有的 2026-09-25 不写；本机的 2026-09-24 写一条（含快照内重复去重）');
+  assert(posted[0].user_id === ACCOUNT_UID, '写入行换成账号 uid');
+  assert(!('id' in posted[0]), '写入行不带库里的 id');
+  assert(summary.weight_records.inserted === 1, '摘要如实回报道入条数');
+  assert(summary.weight_records.skipped === 1, '摘要回报跳过条数（快照内重复）');
+  const authHeaders = calls.filter((c) => c.method === 'GET').map((c) => c.headers.Authorization);
+  assert(authHeaders.every((h) => h === 'Bearer at-account'), '读账号行用账号令牌（RLS 只认它）');
+  ok('合并链路：读账号行 → 去重 → 换 uid 批量写,摘要逐表如实');
 }
 
 console.log(`ALL SUPABASE CONTRACT TESTS PASSED. (${checks} checks)`);

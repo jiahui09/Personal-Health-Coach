@@ -27,10 +27,19 @@ import { formatAbs, round1 } from './domain/format';
 import { normalizeEstimateMinutes } from './domain/tasks';
 import { validateWeightMeasurement } from './domain/weight';
 import { normalizeTrainingMinutesBudget } from './domain/training';
-import { healthRepository, repositoryKind } from './services/repository';
+import { cloudHealthRepository, healthRepository, repositoryKind } from './services/repository';
 import { AuthGate } from './components/AuthGate';
-import { SyncSheet } from './components/SyncSheet';
-import { toRepositoryError } from './services/healthRepository';
+import { SyncSheet, type SyncMode } from './components/SyncSheet';
+import { toRepositoryError, type AuthUser } from './services/healthRepository';
+import {
+  combineSnapshots,
+  loadPending,
+  snapshotCounts,
+  summaryInserted,
+  type LocalSnapshot,
+  type MergeCounts,
+} from './services/accountMerge';
+import { shouldAutoRefresh, REFRESH_MIN_INTERVAL_MS } from './services/refreshPolicy';
 import {
   CreateDailyStateInput,
   CreateMealInput,
@@ -67,6 +76,14 @@ export default function App() {
   const [authStage, setAuthStage] = useState<'ready' | 'entering' | 'setup'>('ready');
   /** 静默进入失败的原因码：决定提示怎么修。 */
   const [authReason, setAuthReason] = useState<string | null>(null);
+  /** 当前身份（云端）：email 非空即账号身份,空即本机匿名身份。 */
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  /** 步骤二：本机身份名下的记录清单（非空即弹出「是否并入账号」询问）。 */
+  const [mergeAsk, setMergeAsk] = useState<{ counts: MergeCounts; requireDecision: boolean } | null>(
+    null
+  );
+  /** 未完成的待合并快照条数（页脚据此显示「继续上次合并」）。 */
+  const [pendingCounts, setPendingCounts] = useState<MergeCounts | null>(null);
 
   // Modals
   const [recordSheetOpen, setRecordSheetOpen] = useState(false);
@@ -130,12 +147,18 @@ export default function App() {
     }
   };
 
+  /** 上一次成功取数的时刻：聚焦自动重取按它节流（REFRESH_MIN_INTERVAL_MS）。 */
+  const lastRefreshAtRef = useRef(0);
+  /** 有不可打断的事在进行（弹层开着 / 写入未落定 / 首屏载入）→ 不自动重取。 */
+  const refreshBlockedRef = useRef(true);
+
   const loadData = useCallback(async () => {
     try {
       setLoadError(null);
       const today = await healthRepository.getToday();
       setTodayData(today);
       setAuthStage('ready');
+      lastRefreshAtRef.current = Date.now();
     } catch (err) {
       const error = toRepositoryError(err);
       console.error('Failed to load health diary:', error);
@@ -196,8 +219,24 @@ export default function App() {
     todayDataRef.current = todayData;
   }, [todayData]);
 
+  /** 待合并快照条数（页脚「继续上次合并」的依据）。 */
+  const refreshPendingCounts = useCallback(() => {
+    setPendingCounts(cloudHealthRepository?.pendingMergeCounts() ?? null);
+  }, []);
+
+  // 首次挂载：认领当前身份与未完成的合并（都只在云端模式有意义）
+  useEffect(() => {
+    if (repositoryKind !== 'supabase') return;
+    void healthRepository
+      .getCurrentUser()
+      .then((user) => setAuthUser(user))
+      .catch(() => undefined);
+    refreshPendingCounts();
+  }, [refreshPendingCounts]);
+
   useEffect(() => {
     const unsubscribe = healthRepository.onAuthChange((user) => {
+      setAuthUser(user);
       if (user) {
         // 只有「还没有数据」时才进全屏载入：令牌自动刷新时手记已有内容,
         // 不切载入页才不会把用户正开着的录事件与正在输入的内容一并掀掉。
@@ -209,6 +248,48 @@ export default function App() {
       }
     });
     return unsubscribe;
+  }, [loadData]);
+
+  // ---------------- 多端同步：切回页面时自动重取 ----------------
+  /** 自动重取前必须确认「没有正在录入的事」——状态走 ref,免得监听器随开关反复重订。 */
+  const sheetsOpenRef = useRef(false);
+  const isLoadingRef = useRef(true);
+  useEffect(() => {
+    sheetsOpenRef.current =
+      recordSheetOpen || profileSheetOpen || syncSheetOpen || mergeAsk !== null;
+  }, [recordSheetOpen, profileSheetOpen, syncSheetOpen, mergeAsk]);
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (repositoryKind !== 'supabase') return; // 本机模式没有别的设备可同步
+    const refresh = () => {
+      const blocked =
+        sheetsOpenRef.current ||
+        inflightRef.current.size > 0 ||
+        isLoadingRef.current ||
+        todayDataRef.current === null;
+      if (
+        !shouldAutoRefresh({
+          now: Date.now(),
+          lastAt: lastRefreshAtRef.current,
+          visible: document.visibilityState === 'visible',
+          blocked,
+          minIntervalMs: REFRESH_MIN_INTERVAL_MS,
+        })
+      ) {
+        return;
+      }
+      lastRefreshAtRef.current = Date.now(); // 先记账再取：取数失败也不立刻连打
+      void loadData();
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
   }, [loadData]);
 
   /**
@@ -282,20 +363,144 @@ export default function App() {
     }
   };
 
-  /** 多端同步：用邮箱+密码登录到同一账号（不发邮件、不受发信限额）。 */
-  const handleSyncToAccount = async (email: string, password: string): Promise<boolean> => {
+  /** 同步失败的文案：按错误码给可执行的说法,未知码兜底。 */
+  const syncErrorCopy = (code: string): string => {
+    if (code === 'email_taken') return '该邮箱已注册 · 改用「登录」';
+    if (code === 'auth') return '邮箱或密码不正确';
+    if (code === 'network') return '连不上 Supabase · 检查网络后重试';
+    return `同步未成（${code}）`;
+  };
+
+  /**
+   * 多端同步：登录或注册同一个账号（不发邮件、不受发信限额）。三段式：
+   *   ① 登录**之前**抓本机（匿名身份）记录快照 —— 读不到就中止,否则换身份后记录永久失联；
+   *   ② 密码登录 / 注册；
+   *   ③ 快照非空 → 弹「是否并入账号」询问（询问后合并）；空 → 直接载入账号数据。
+   */
+  const handleSyncToAccount = async (
+    email: string,
+    password: string,
+    mode: SyncMode
+  ): Promise<boolean> => {
+    const cloud = cloudHealthRepository;
+
+    // ① 换身份之前先抓本机记录
+    let fresh: LocalSnapshot | null = null;
+    if (cloud) {
+      try {
+        fresh = await cloud.captureLocalSnapshot();
+      } catch (err) {
+        const error = toRepositoryError(err);
+        console.error('[App] 本机记录快照未成:', error);
+        showToast(`本机记录读取未成（${error.code}）· 尚未登录,请重试`, false);
+        return false;
+      }
+    }
+
+    // ② 登录 / 注册
     try {
-      // 不切全屏载入:同步弹层自己显示「登录中…」,失败时弹层不塌、已输之邮箱密码不丢。
-      await healthRepository.signIn(email, password);
-      await loadData();
-      showToast('已同步到你的账号');
-      return true;
+      const user =
+        mode === 'signup'
+          ? await healthRepository.signUp(email, password)
+          : await healthRepository.signIn(email, password);
+      if (user.id === 'pending') {
+        // 需确认邮件：会话未建立,本机记录仍读得到,不入待合并
+        showToast('确认邮件已发出 · 点开邮件即完成注册');
+        setSyncSheetOpen(false);
+        return true;
+      }
     } catch (err) {
       const error = toRepositoryError(err);
       console.error('[App] 同步未成:', error);
-      showToast(error.code === 'auth' ? '邮箱或密码不正确' : `同步未成（${error.code}）`, false);
+      showToast(syncErrorCopy(error.code), false);
       return false;
     }
+
+    // ③ 询问后合并：待合并快照（上次未竟 + 本次新抓）并作一份,登录成功即持久化
+    if (cloud) {
+      const snapshot = combineSnapshots(loadPending(), fresh);
+      if (snapshot) {
+        cloud.stashPendingMerge(snapshot);
+        refreshPendingCounts();
+        setMergeAsk({ counts: snapshotCounts(snapshot), requireDecision: true });
+        return true; // 弹层留在步骤二等用户二选一；表单不再自关
+      }
+    }
+
+    await loadData();
+    showToast('已同步到你的账号');
+    setSyncSheetOpen(false);
+    return true;
+  };
+
+  /**
+   * 合并决策：并入 → 逐表去重写入账号（失败留在本步可重试,快照不丢）；
+   * 不并入 → 丢弃快照,按账号数据载入。
+   */
+  const handleMergeDecision = async (doMerge: boolean): Promise<boolean> => {
+    const cloud = cloudHealthRepository;
+    if (!cloud) return false;
+    if (!doMerge) {
+      cloud.discardPendingMerge();
+      refreshPendingCounts();
+      setMergeAsk(null);
+      setSyncSheetOpen(false);
+      await loadData();
+      showToast('已按账号数据载入');
+      return true;
+    }
+    try {
+      const summary = await cloud.runPendingMerge();
+      refreshPendingCounts();
+      setMergeAsk(null);
+      setSyncSheetOpen(false);
+      await loadData();
+      showToast(summary ? `已并入账号 · 新增 ${summaryInserted(summary)} 条` : '已同步到你的账号');
+      return true;
+    } catch (err) {
+      const error = toRepositoryError(err);
+      console.error('[App] 并入未成:', error);
+      showToast(
+        error.code === 'auth'
+          ? '并入未成：未登录或账号不符 · 重新登录后可继续'
+          : `并入未成（${error.code}）· 记录仍在本机身份下,可再试`,
+        false
+      );
+      return false;
+    }
+  };
+
+  /** 退出账号：会话清空后回落到一键进入页；本机与云端数据都不动。 */
+  const handleSignOut = async (): Promise<void> => {
+    try {
+      await healthRepository.signOut();
+      // 待合并快照是「换身份」这一步的中间产物：退出即作废,免得下次误并到别的身份名下
+      cloudHealthRepository?.discardPendingMerge();
+      setMergeAsk(null);
+      setSyncSheetOpen(false);
+      refreshPendingCounts();
+      showToast('已退出账号');
+    } catch (err) {
+      const error = toRepositoryError(err);
+      console.error('[App] 退出未成:', error);
+      showToast(`退出未成（${error.code}）`, false);
+    }
+  };
+
+  // 页脚「继续上次合并」：异常中断后续跑
+  const handleResumeMerge = (): void => {
+    const counts = cloudHealthRepository?.pendingMergeCounts();
+    if (!counts) {
+      refreshPendingCounts();
+      return;
+    }
+    setMergeAsk({ counts, requireDecision: false });
+    setSyncSheetOpen(true);
+  };
+
+  const closeSyncSheet = (): void => {
+    setSyncSheetOpen(false);
+    setMergeAsk(null);
   };
 
   // Open Quick Record
@@ -466,6 +671,16 @@ export default function App() {
           reason={authReason}
           onRetry={handleAnonymousSignIn}
           onSendLink={handleSendLoginLink}
+          onOpenSync={() => setSyncSheetOpen(true)}
+        />
+        {/* 账号面板也在本分支渲染：退出后先落此页,登录/注册必须够得着 */}
+        <SyncSheet
+          isOpen={syncSheetOpen}
+          merge={mergeAsk}
+          onMerge={handleMergeDecision}
+          anonymous={healthRepository.hasSession() && !authUser?.email}
+          onSync={handleSyncToAccount}
+          onClose={closeSyncSheet}
         />
       </div>
       </MotionConfig>
@@ -648,9 +863,27 @@ export default function App() {
 
           <div className="flex items-center gap-4">
             {repositoryKind === 'supabase' && (
-              <button onClick={() => setSyncSheetOpen(true)} className="btn-link">
-                <span>同步到我的账号</span>
-              </button>
+              <>
+                {pendingCounts && authUser?.email && (
+                  <button onClick={handleResumeMerge} className="btn-link">
+                    <span>继续上次合并</span>
+                  </button>
+                )}
+                {authUser?.email ? (
+                  <>
+                    <span className="text-ink3 max-w-[16ch] truncate" title={authUser.email}>
+                      {authUser.email}
+                    </span>
+                    <button onClick={() => void handleSignOut()} className="btn-link">
+                      <span>退出</span>
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => setSyncSheetOpen(true)} className="btn-link">
+                    <span>同步到我的账号</span>
+                  </button>
+                )}
+              </>
             )}
             {repositoryKind === 'mock' && (
               <button
@@ -698,12 +931,14 @@ export default function App() {
         weightWarningFor={weightWarningFor}
       />
 
-      {/* 多端同步：登录到我的账号 */}
+      {/* 多端同步：登录 / 注册我的账号，及其后的本机记录并入询问 */}
       <SyncSheet
         isOpen={syncSheetOpen}
-        anonymous={repositoryKind === 'supabase' && healthRepository.hasSession()}
+        merge={mergeAsk}
+        onMerge={handleMergeDecision}
+        anonymous={healthRepository.hasSession() && !authUser?.email}
         onSync={handleSyncToAccount}
-        onClose={() => setSyncSheetOpen(false)}
+        onClose={closeSyncSheet}
       />
 
       {/* 体征档：建档 / 改档 */}
