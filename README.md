@@ -33,7 +33,7 @@
 
 ### 术语与口径
 
-页面只写事实，解释性口径集中在这里；完整定义见 `docs/data-semantics.md`。
+页面只写事实，解释性口径集中在这里；完整定义见 [docs/data-semantics.md](docs/data-semantics.md)。
 
 - **待核（needs_review）**：只标记，绝不改数；被标记的记录原样保留，可逐条「掷还」。
 - **尚余 / 已超**：由同一函数给出（余 = 目标 − 已录、超 = 已录 − 目标），不会用「尚余 0」掩盖超额。
@@ -55,13 +55,13 @@ npm test           # 契约与审计测试
 npm run build      # 生产构建
 ```
 
-环境变量见 `.env.example`，只有两项：`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`。**两项都留空即本地模式**，数据保存在浏览器 localStorage，零配置即可运行。
+环境变量见 [.env.example](.env.example)，只有两项：`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`。**两项都留空即本地模式**，数据保存在浏览器 localStorage，零配置即可运行。
 
 ## 数据存哪里
 
 - **本地模式（默认）**：数据只在本机浏览器；页脚「复其初」一键恢复演示数据。
 - **云端同步模式**：填上两项环境变量后改走 Supabase——页内邮箱密码注册/登录，登录时**询问后**再把本机记录并入账号，切回页面自动重取；6 张表全部启用行级安全（RLS），每行数据只能被本人读写。
-- 部署到 Cloudflare Pages 的逐步操作见 `docs/deploy.md`，建表脚本见 `supabase/schema.sql`；上线前可运行 `node scripts/verify-supabase.mjs` 自检。
+- 部署到 Cloudflare Pages 的逐步操作见 [docs/deploy.md](docs/deploy.md)，建表脚本见 [supabase/schema.sql](supabase/schema.sql)；上线前可运行 [`node scripts/verify-supabase.mjs`](scripts/verify-supabase.mjs) 自检。
 
 ## 技术栈与结构
 
