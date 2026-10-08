@@ -1,6 +1,5 @@
 // 录事三表共用之壳：墨线版框、章节题式题头、照准提交脚注、亮勾阖之。
 // INPUT / Group / chipClass 与录事类型同源共出，三表不再各自持一份。
-// deslop-ignore-file 07 22 28
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Check } from 'lucide-react';

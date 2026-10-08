@@ -1,7 +1,6 @@
 // 体征表：录体征。录事三表之一（另有 MealSheet / WorkoutSheet），壳与组题由 SheetShell 共出。
 // 只收会变之数（体重、腰围、眠、随笔）；常量（身高、出生年等）归立档表，两处不得混收。
 // 体感（精力/酸痛）不在本表重复录入——首页「今日体感」点按即调，同源同词表。
-// deslop-ignore-file 07 22 28
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type { CreateDailyStateInput, SleepEntry } from '../types/health';

@@ -1,4 +1,4 @@
-// Serif chapter heading, sans tasks; strike = completed-task semantics. deslop-ignore-file 07 09
+// Serif chapter heading, sans tasks; strike = completed-task semantics.
 import React, { useState } from 'react';
 import { Check, Plus, Trash2 } from 'lucide-react';
 import { TodoItem } from '../types/health';

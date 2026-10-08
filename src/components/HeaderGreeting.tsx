@@ -1,11 +1,10 @@
-// Masthead (seal + wordmark) and the display greeting. deslop-ignore-file 07 08 33
+// Masthead (seal + wordmark) and the display greeting.
 import React from 'react';
 
 interface HeaderGreetingProps {
   displayDate: string;
   timeGreeting: string;
 }
-
 
 export const HeaderGreeting: React.FC<HeaderGreetingProps> = ({
   displayDate,

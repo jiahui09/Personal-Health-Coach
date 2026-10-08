@@ -636,7 +636,6 @@ export default function App() {
     return (
       <div className="min-h-screen bg-paper flex items-center justify-center text-ink3 font-sans text-xs">
         <div className="flex items-center gap-2">
-          {/* deslop-ignore-next-line 19 — literal 6px status dot */}
           <span className="w-1.5 h-1.5 rounded-full bg-accent" />
           <span>正在建立本机凭据…</span>
         </div>
@@ -710,7 +709,6 @@ export default function App() {
     return (
       <div className="min-h-screen bg-paper flex items-center justify-center text-ink3 font-sans text-xs">
         <div className="flex items-center gap-2">
-          {/* deslop-ignore-next-line 19 — literal 6px status dot */}
           <span className="w-1.5 h-1.5 rounded-full bg-accent" />
           <span>手记启卷…</span>
         </div>

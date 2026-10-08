@@ -1,4 +1,4 @@
-// Serif for the sheet title only. deslop-ignore-file 07 19 22 28
+// Serif for the sheet title only.
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Check } from 'lucide-react';

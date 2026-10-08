@@ -1,5 +1,5 @@
 // 统计通栏：一切算出来的数（指数、代谢、趋势、均值、履行合议与情景外推）集中于此。
-// Serif for the section head; measured numbers stay sans. deslop-ignore-file 07 28
+// Serif for the section head; measured numbers stay sans.
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { WeightForecast } from '../types/health';

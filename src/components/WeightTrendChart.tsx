@@ -1,4 +1,4 @@
-// Flat SVG trend line; the terminal dot is a data point, not an icon. deslop-ignore-file 24
+// Flat SVG trend line; the terminal dot is a data point, not an icon.
 import React from 'react';
 
 interface WeightTrendChartProps {

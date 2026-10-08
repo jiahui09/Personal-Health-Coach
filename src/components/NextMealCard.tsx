@@ -1,4 +1,4 @@
-// Serif for the chapter heading and the meal name; measured numbers stay sans. deslop-ignore-file 07
+// Serif for the chapter heading and the meal name; measured numbers stay sans.
 import React, { useState } from 'react';
 import { Check, Plus } from 'lucide-react';
 import { MealRecommendation } from '../types/health';

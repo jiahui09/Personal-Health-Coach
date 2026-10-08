@@ -1,6 +1,5 @@
 // 墨线计量条:三列共列网格(名 | 条 | 值),条只用令牌色填充。
 // 比例由真实文本承载,条 aria-hidden,只作余光线索;对齐由 .inkrow 结构保证。
-// deslop-ignore-file 07
 import React from 'react';
 
 type MeterTone = 'ink' | 'accent' | 'danger';

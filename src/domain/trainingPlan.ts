@@ -1,8 +1,6 @@
 /**
  * 训练规划器（离线排课）· 台账轮转 + 目标拆分 + 预算贪心 + 摄入就绪门
  *
- * deslop-ignore-file 07 19 22 28
- *
  * 定位：Decision 层纯函数。阈值全部出自 TRAINING_POLICY.planner，
  * 一律 engineering_heuristic（无临床处方含义）；规则 id 由 f_workout 注册进 DecisionTrace。
  *

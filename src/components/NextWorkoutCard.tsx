@@ -1,4 +1,4 @@
-// Serif for the chapter heading; instruction copy stays in the UI sans. deslop-ignore-file 07
+// Serif for the chapter heading; instruction copy stays in the UI sans.
 import React, { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
 import { WorkoutCategory, WorkoutRecommendation, WorkoutRecord } from '../types/health';

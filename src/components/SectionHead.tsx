@@ -1,6 +1,5 @@
 // 奏折式章节头:眉行(右注) → 题行(26px 衬线) → 全页唯一的 2px 墨线。
 // 朱批旁注竖排贴在章节右侧的旁批槽(lg:pr-9 预留 36px),窄屏降级为题下横排朱批。
-// deslop-ignore-file 07
 import React from 'react';
 
 interface SectionHeadProps {

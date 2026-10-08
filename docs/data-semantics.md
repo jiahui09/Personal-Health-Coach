@@ -174,13 +174,13 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 
 | 门槛 | 结果 |
 |---|---|
-| `npm test`（9 套） | scientificAudit / journalContract / contrast / **domain** / **body** / **migration** / **supabaseContract** / **presentationContract** / layoutContract 全通过 |
+| `npm test`（11 套） | scientificAudit / journalContract / contrast / domain / body / migration / supabaseContract(26) / mergePlan(7) / refreshPolicy / presentationContract / layoutContract 全通过 |
 | `npx tsc --noEmit` | 通过 |
-| `npm run build` | 通过（500 KB / gzip 158 KB） |
-| `.shots/e2e.mjs` | 未建档不出人体数字 → 立档后 BMI/代谢/目标出现 → 食物库搜选回填（明细克数与 `estimatedFatG` 落库）→ 体征由时刻推得 7h20m、异常体重二次确认后**原样保存**并标待核 → 页面无方法学文案、同轴计量列全等 |
-| `.shots/layout-probe.mjs --check` | 1440 / 1023 / 768 / 640 / 390 全 PASS（配对行横线同 y、诸头左缘一致、同轴三列全等、溢出 0） |
-| `.shots/qa-states.mjs` | 注入遗留异常态（57kg / 33 条建议膳 / 旧 `sleepHours`）后：页面出现「待核 · 已超 · 不出推演」，今之体重仍为 **57**（未被改写） |
-| `impeccable detect` | 9 项 report-only（既有遗留，未新增） |
+| `npm run build` | 通过（552 KB / gzip 174 KB） |
+| 浏览器端到端（收尾前最后跑） | 未建档不出人体数字 → 立档后 BMI/代谢/目标出现 → 食物库搜选回填（明细克数与 `estimatedFatG` 落库）→ 体征由时刻推得 7h20m、异常体重二次确认后**原样保存**并标待核 → 页面无方法学文案、同轴计量列全等 |
+| 版式几何探针 @1440/1023/768/640/390 | 全 PASS（配对行横线同 y、诸头左缘一致、同轴三列全等、溢出 0） |
+| 账号冒烟 13/13 | 本机模式不出同步入口；云端不可达时登录/注册流程不崩、输入不丢 |
+| 遗留态检查 | 注入遗留异常态（57kg / 33 条建议膳 / 旧 `sleepHours`）后：页面出现「待核 · 已超 · 不出推演」，今之体重仍为 **57**（未被改写） |
 
 ---
 
@@ -199,7 +199,7 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 - 页面只呈现**事实 + 一句短批**：方法学、阈值理由、模型出处一律不进正文（README「术语与口径」与「推演所据」面板承接）；刊头不重复「录一笔」、页脚不写「存于本机 / 不假模型」之类自我说明，决策痕迹留在数据层。
 - 所有统计行走 `.inkrow` 共列网格（名｜中列｜值），计量条与点线引导同列 → 全页同起同止；`.inklist-row` 只保证首尾对齐。
 - 线条三级：L1 2px 墨（章节题双线/刊头/页脚）、L2 1px 实线（分组、动作脚注）、L3 1px 点线（名录行、引导线）。
-- 可执行门槛：`.shots/layout-probe.mjs --check`（条 Δ=0、值列不折行、章节行数上限）与 `src/tests/layoutContract.test.ts`（禁方法学文案、禁 linesoft 骨架、双线章节题）。
+- 可执行门槛：`src/tests/layoutContract.test.ts`（禁方法学文案、禁 linesoft 骨架、双线章节题、配对行与章节行数上限）；几何探针与浏览器脚本已随收尾整理移出仓库。
 
 ## 12. 遗留与开放问题
 

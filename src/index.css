@@ -3,8 +3,7 @@
 /* Design tokens — the single source for palette, faces and radii.
    奏折制:墨 = 臣工所书(正文/数据/事实),朱 = 御批(裁决/状态/动作/旁注)。
    Paper (warm) vs surface (near-white) gives the page its contrast; the ink
-   ramp carries all reading; one functional accent (朱) carries every verdict.
-   deslop-ignore-file 07 33 34 35 */
+   ramp carries all reading; one functional accent (朱) carries every verdict. */
 
 @theme {
   /* surfaces */

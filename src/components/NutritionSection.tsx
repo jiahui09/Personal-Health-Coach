@@ -1,5 +1,5 @@
 // 营养摄入通栏：目标 → 两笔账 → 下一膳 → 所食账（计划与实测分列，一账读到底）。
-// Serif for the section head and the meal name; meters stay sans. deslop-ignore-file 07 28
+// Serif for the section head and the meal name; meters stay sans.
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { MealRecord } from '../types/health';

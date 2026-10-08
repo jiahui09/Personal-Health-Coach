@@ -1,4 +1,4 @@
-// Serif for the wordmark; the rest is one actionable line. deslop-ignore-file 07
+// Serif for the wordmark; the rest is one actionable line.
 import React, { useEffect, useState } from 'react';
 import { Mail, Check, AlertTriangle } from 'lucide-react';
 import { clearMagicLinkHash, readAuthErrorFromHash } from '../services/supabaseRest';

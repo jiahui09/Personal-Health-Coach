@@ -1,5 +1,5 @@
 // 体征通栏：只收原始事实（体感、睡眠、今之体重、档案所录），派生统计一律归「统计」节。
-// Serif for the section head; facts read as ruled journal rows. deslop-ignore-file 07
+// Serif for the section head; facts read as ruled journal rows.
 import React from 'react';
 import { DailyState } from '../types/health';
 import type { BodySummary, SleepSummary, WeightSummary, WeightGoalAdvice } from '../domain/types';

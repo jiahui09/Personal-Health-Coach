@@ -8,13 +8,13 @@
   - 建档弹层 `src/components/ProfileSheet.tsx`（立档 / 改档：只收常量——性别·出生年·身高·活动水平·目标·每日训练时间预算；随日而变之数归体征表。**入口随常量**：未建档作「立档」入体征警示框、已建档作「改档」随「档案所录」组题，不与「录体征」并列挤于眉行）
   - 录事三表 `src/components/MealSheet.tsx` / `WorkoutSheet.tsx` / `BodySheet.tsx`（共用壳 `SheetShell.tsx`；录一膳 / 录一练 / 体征，各自独立、按本域内容定宽，无页签无「录一笔」；体征表另收腰围，进食表内嵌食物营养档案库搜选，库不上主页；**体感（精力/酸痛）不入表**——首页点按即调是唯一录入点，表单不重复收亦不回填；餐别由保存时刻时钟判定，表内无此选择）
   - 比选稿 `docs/palette-options.html`（五版色组，当前选中其五）
-  - 成稿截图 `.shots/v6-desktop.png`（1440 全页）、`.shots/v6-mobile.png`（390 全页）、`.shots/v6-form-meal.png`（归入行）、`.shots/v6-guard.png`（遮罩拦稿告知句）、`.shots/v6-workout-390.png`（390 录一练一屏）、`.shots/v5-*.png`（上一版三表开启态）、`.shots/v4-*.png` / `.shots/v3-*.png`（更早）、`.shots/za-mobile-*.png`（历史局部）
+  - 成稿截图 `v6-desktop.png`（1440 全页）、`v6-mobile.png`（390 全页）、`v6-form-meal.png`（归入行）、`v6-guard.png`（遮罩拦稿告知句）、`v6-workout-390.png`（390 录一练一屏）、`v5-*.png`（上一版三表开启态）、`v4-*.png` / `v3-*.png`（更早）、`za-mobile-*.png`（历史局部）
 - Evidence reviewed:
   - `README.md`（§2 功能表、§字体与视觉约定、变更清单 1–29 条、仍待补齐）
   - `src/index.css` `@theme` 令牌与 `@layer components`（btn 三级、`.section-actions`、`.leader`）
-  - 全部 `src/components/*.tsx`；`.omx/artifacts/visual-ralph/editorial-journal/`（参考稿 html + 双端截图，已批准基线）
-  - 实测几何：`.shots/layout-probe.mjs` @1440/1023/768/640/390（本轮改版后全量 `--check`）
-  - **版式契约**：`src/tests/layoutContract.test.ts`（共列网格、三级横线、零方法学文案）＋ `.shots/layout-probe.mjs --check`（条同起同止、值列不折行、章节行数上限）
+  - 全部 `src/components/*.tsx`；编辑式手记参考稿（过程材料，已移出仓库）
+  - 实测几何：`layout-probe.mjs` @1440/1023/768/640/390（本轮改版后全量 `--check`）
+  - **版式契约**：`src/tests/layoutContract.test.ts`（共列网格、三级横线、零方法学文案）＋ `layout-probe.mjs --check`（条同起同止、值列不折行、章节行数上限）
   - **数据语义契约：`docs/data-semantics.md`**（Raw/Derived/Decision/Presentation 分层、窗口定义、公式表、迁移规则、审计结论）
   - 回归门槛：`src/tests/contrast.test.ts`、`journalContract.test.ts`、`scientificAudit.test.ts`、`domain.test.ts`、`migration.test.ts`、`presentationContract.test.ts`、`layoutContract.test.ts`
   - 用户已决（ask_user_question 记录）：墨线计量条、跨栏行配对＋统一章节头、朱为状态主色、竖排旁批、改御批文案
@@ -143,7 +143,7 @@
 - Design-token constraints: 颜色只写令牌类；组件源码禁裸 hex；单档 8px 圆角；不引入新依赖、不新增令牌（除非先改 `contrast.test.ts` 并说明对比度）。
 - Performance constraints: 单包 542 KB（gzip 171 KB）不回退；无新增网络请求、无图表库。
 - Compatibility constraints: 仅现代 evergreen 浏览器；`writing-mode` 降级在 ≤1024 走横排。
-- Test/screenshot expectations: 改动前后必跑 `npm test`（9 套）、`npm run lint`、`npm run build`、`.shots/e2e.mjs`、`.shots/qa-states.mjs`、`.shots/accept-check.mjs`（弹层行为 15 断言：焦点圈定 / inert / 遮罩拦稿 / 残稿 / 归膳 / 390 一屏 / 占位对比度）；版式用 `.shots/layout-probe.mjs <url> <width> --check` 断言配对横线同 y、标题左缘、同轴三列全等、章节行数上限、`overflow=0`（@1440/1023/768/640/390）；截图 `.shots/shot.mjs <url> <width> <out.png>` 并人工复核。
+- Test/screenshot expectations: 改动前后必跑 `npm test`（9 套）、`npm run lint`、`npm run build`、`e2e.mjs`、`qa-states.mjs`、`accept-check.mjs`（弹层行为 15 断言：焦点圈定 / inert / 遮罩拦稿 / 残稿 / 归膳 / 390 一屏 / 占位对比度）；版式用 `layout-probe.mjs <url> <width> --check` 断言配对横线同 y、标题左缘、同轴三列全等、章节行数上限、`overflow=0`（@1440/1023/768/640/390）；截图 `shot.mjs <url> <width> <out.png>` 并人工复核。
 
 ## Open questions
 - [x] **云端数据路径已实作**（零依赖 fetch 直连；表结构与 RLS 见 `supabase/schema.sql`，逐步启用见 `docs/deploy.md`）。遗留：本机 localStorage → 云端的一次性导入尚未提供。Owner: 实现 / 影响: 老数据迁移。

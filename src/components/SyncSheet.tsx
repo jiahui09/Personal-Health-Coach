@@ -1,5 +1,4 @@
 // Serif for the sheet title only; bottom sheet rounds only its top edge on mobile.
-// deslop-ignore-file 07 22
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Check, AlertTriangle, UserPlus, LogIn } from 'lucide-react';

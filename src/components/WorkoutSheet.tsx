@@ -1,6 +1,5 @@
 // 习练表：录一练。录事三表之一（另有 MealSheet / BodySheet），壳与组题由 SheetShell 共出。
 // 今日之荐在此可改可录；抗阻统计只认类别字段，不靠标题文字。
-// deslop-ignore-file 07 22 28
 import React, { useEffect, useRef, useState } from 'react';
 import type { BodyweightExercise, CreateWorkoutInput, WorkoutCategory } from '../types/health';
 import { hydrateExercise } from '../domain/trainingPlan';

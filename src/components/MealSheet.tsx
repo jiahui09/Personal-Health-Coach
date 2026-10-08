@@ -1,6 +1,5 @@
 // 进食表：录一膳。录事三表之一（另有 WorkoutSheet / BodySheet），壳与组题由 SheetShell 共出。
 // 餐别不再问用户——category 由保存时刻的时钟判定（App 传入 mealSlot，与建议之膳一键入账同源）。
-// deslop-ignore-file 07 22 28
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { CreateMealInput, MealCategory, MealItem } from '../types/health';
