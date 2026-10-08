@@ -8,9 +8,9 @@
  * 它检查四件事：
  *   1. 项目 URL 正确、API 网关在线（无 key 访问应被拒）
  *   2. 六张表都已建好（缺表 → 建表脚本没跑）
- *   3. RLS 生效：用 anon key（匿名身份）读六张表必须返回 0 行
+ *   3. RLS 生效：用 anon key（无会话）读六张表必须返回 0 行
  *      —— 若返回了数据,说明策略没生效,必须立刻停用并重跑 schema.sql 的 policy 段
- *   4. 匿名不可写：匿名 INSERT 必须被拒（401/403）
+ *   4. 未登录不可写：无会话的 INSERT 必须被拒（401/403）
  */
 
 const url = (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? '').replace(/\/+$/, '');
@@ -66,15 +66,15 @@ for (const table of TABLES) {
   }
   const rows = await res.json();
   if (Array.isArray(rows) && rows.length === 0) {
-    pass(`${table} 存在且 RLS 让匿名看不到任何行`, 'HTTP 200 · 0 行');
+    pass(`${table} 存在且 RLS 让未登录请求看不到任何行`, 'HTTP 200 · 0 行');
   } else if (Array.isArray(rows) && rows.length > 0) {
-    fail(`${table} RLS 未生效：匿名读到了 ${rows.length} 行`, '立即停用并重跑 schema.sql 的 policy 段');
+    fail(`${table} RLS 未生效：未登录读到了 ${rows.length} 行`, '立即停用并重跑 schema.sql 的 policy 段');
   } else {
     fail(`${table} 返回体异常`, JSON.stringify(rows).slice(0, 120));
   }
 }
 
-// 4. 匿名不可写
+// 4. 未登录不可写
 {
   const res = await fetch(`${url}/rest/v1/meals`, {
     method: 'POST',
@@ -89,9 +89,9 @@ for (const table of TABLES) {
     }),
   });
   if (res.status === 401 || res.status === 403 || res.status === 409) {
-    pass('匿名不可写入（RLS with check 生效）', `HTTP ${res.status}`);
+    pass('未登录不可写入（RLS with check 生效）', `HTTP ${res.status}`);
   } else if (res.status === 201 || res.status === 200) {
-    fail('匿名竟然写入成功', 'RLS 未生效，必须立即排查');
+    fail('未登录竟然写入成功', 'RLS 未生效，必须立即排查');
   } else {
     fail('写入探测返回意外状态', `HTTP ${res.status}`);
   }

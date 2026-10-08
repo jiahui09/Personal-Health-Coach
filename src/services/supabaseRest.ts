@@ -42,7 +42,7 @@ export type SupabaseErrorKind =
   | 'conflict'
   | 'not_found'
   | 'rate_limited'
-  /** 服务端能力未开启（如匿名登录被关掉） */
+  /** 服务端能力未开启（如邮箱注册被关掉） */
   | 'not_implemented'
   /** 注册用的邮箱已存在（422 user_already_registered） */
   | 'email_taken'
@@ -287,34 +287,6 @@ export class SupabaseRest {
     if (!session) return { status: 'confirmation_required' };
     this.writeSession(session);
     return { status: 'signed_in', session };
-  }
-
-  /**
-   * 匿名登录：POST /auth/v1/signup（不带邮箱与密码）→ GoTrue 建一个匿名用户并直接返回会话。
-   * 自用场景下比邮箱 magic link 少一步、且不受邮件限额影响。
-   * 前提：Supabase → Authentication 里打开 Allow anonymous sign-ins。
-   */
-  async signInAnonymously(): Promise<SupabaseSession> {
-    const response = await this.request('/auth/v1/signup', {
-      method: 'POST',
-      auth: false,
-      body: { data: {}, gotrue_meta_security: {} },
-    });
-    const text = await response.text();
-    if (!response.ok) {
-      if (/anonymous.*(disabled|not allowed)/i.test(text)) {
-        throw new SupabaseError(
-          'not_implemented',
-          '该 Supabase 项目未开启匿名登录（Authentication → Allow anonymous sign-ins）',
-          response.status
-        );
-      }
-      throw mapStatus(response.status, text);
-    }
-    const session = this.toSession(this.parseJsonSafe(text));
-    if (!session) throw new SupabaseError('unknown', '匿名登录未返回会话');
-    this.writeSession(session);
-    return session;
   }
 
   /** 解析 magic link 回跳地址中的 hash（隐式流）并保存会话。 */

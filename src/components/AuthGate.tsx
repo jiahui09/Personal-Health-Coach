@@ -1,170 +1,145 @@
-// Serif for the wordmark; the rest is one actionable line.
+// 账号门（云端模式的唯一入口）：新用户注册、老用户登录，进去才有数据。
+// 全屏单卡：报头 + 两式切换 + 邮箱密码表单；错误码对症成一句可执行的话。
 import React, { useEffect, useState } from 'react';
-import { Mail, Check, AlertTriangle } from 'lucide-react';
+import { Check, AlertTriangle } from 'lucide-react';
 import { clearMagicLinkHash, readAuthErrorFromHash } from '../services/supabaseRest';
 
+export type AuthMode = 'signin' | 'signup';
+
 interface AuthGateProps {
-  /** 静默进入失败的原因（仓库错误码），用于给出对症的提示。 */
+  /** 登录 / 注册（mode 决定走哪个端点）；false = 失败，错误码由 App 存进 reason。 */
+  onAuth: (email: string, password: string, mode: AuthMode) => Promise<boolean>;
+  /** 上次失败的仓库错误码；null = 无。 */
   reason: string | null;
-  /** 重试静默进入（匿名身份）。 */
-  onRetry: () => Promise<boolean>;
-  /** 邮箱登录（仅在需要换设备/恢复数据时用）。 */
-  onSendLink: (email: string) => Promise<boolean>;
-  /** 打开账号面板（邮箱+密码登录 / 注册）：退出后回到账号的正路。 */
-  onOpenSync: () => void;
 }
 
-/** 对症的处置建议：不同错误码的根因与修法完全不同。 */
-const REASON_HINT: Record<string, string> = {
-  not_implemented:
-    'Supabase 里这个开关没打开：Authentication → Sign In / Providers → Allow anonymous sign-ins。',
-  auth:
-    'Pages 里的 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 不正确（anon key 需从 Settings → API 复制）。',
-  network: '连不上 Supabase：检查网络，或核对 VITE_SUPABASE_URL 是否写成 https://xxx.supabase.co。',
-  rate_limited: '发信已达小时限额；改用上面的「重试」（匿名进入不消耗邮件额度）。',
+/** 对症文案：不同错误码的根因与处置完全不同，未知码兜底如实报码。 */
+const REASON_COPY: Record<string, string> = {
+  email_taken: '该邮箱已注册 · 改用上面的「登录」',
+  auth: '邮箱或密码不正确',
+  network: '连不上 Supabase · 检查网络后重试',
+  rate_limited: '注册确认邮件已达小时限额 · 约一小时后再试',
+  not_implemented: '后端未开通：核对 VITE_SUPABASE_*，或在 Supabase 打开邮箱注册（Email provider）',
 };
 
-const COOLDOWN_SECONDS = 60;
-
-/**
- * 只在「静默进入失败」时才会出现，不是常规登录页。
- * 自用场景下正常路径是一路直进：应用启动时自己建立本机身份，用户看不到这一步。
- */
-export const AuthGate: React.FC<AuthGateProps> = ({ reason, onRetry, onSendLink, onOpenSync }) => {
+export const AuthGate: React.FC<AuthGateProps> = ({ onAuth, reason }) => {
+  const [mode, setMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
-  const [sent, setSent] = useState(false);
-  const [showEmail, setShowEmail] = useState(false);
-  const [linkError, setLinkError] = useState<string | null>(null);
+  const [hashError, setHashError] = useState<string | null>(null);
 
+  // 登录链接回跳带出的错误（历史会话遗留）也如实展示
   useEffect(() => {
     const error = readAuthErrorFromHash();
     if (error) {
-      setLinkError(error);
+      setHashError(error);
       clearMagicLinkHash();
     }
   }, []);
 
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const timer = window.setInterval(() => setCooldown((s) => (s > 0 ? s - 1 : 0)), 1000);
-    return () => window.clearInterval(timer);
-  }, [cooldown]);
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) && password.length >= 6;
+  const errorCopy = reason ? (REASON_COPY[reason] ?? `未成（${reason}）`) : null;
 
-  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!valid || busy) return;
+    setBusy(true);
+    await onAuth(email.trim(), password, mode);
+    setBusy(false);
+  };
+
+  const tabClass = (active: boolean): string =>
+    active
+      ? 'px-3 py-2 rounded-md bg-ink text-white text-[13px] font-semibold'
+      : 'px-3 py-2 rounded-md text-ink2 text-[13px] hover:bg-surface2';
 
   return (
     <div className="min-h-screen bg-paper flex items-center justify-center px-6">
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-3.5 pb-4 border-b-2 border-ink">
           <span className="w-8 h-8 shrink-0 grid place-items-center rounded-lg bg-seal text-white font-serif text-lg font-bold select-none">
-            记
+            記
           </span>
           <div className="font-serif text-[17px] font-bold text-ink tracking-[0.08em]">
             个人健康手记
           </div>
         </div>
 
-        <p className="mt-5 flex items-start gap-1.5 text-[13px] text-ink leading-relaxed">
-          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-danger" />
-          <span>云端身份未建立：数据暂时无法保存。</span>
+        <p className="mt-5 text-[13px] text-ink leading-relaxed">
+          新用户先注册，老用户登录——记录存于你的账号，换设备也见得到。
         </p>
 
-        {linkError && (
-          <p className="mt-3 text-[12px] text-danger leading-relaxed">
-            登录链接无效或已过期（{linkError}）。
+        {errorCopy && (
+          <p role="alert" className="mt-3 text-[13px] text-danger leading-relaxed flex items-start gap-1.5">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-danger" />
+            <span>{errorCopy}</span>
+          </p>
+        )}
+        {hashError && (
+          <p role="alert" className="mt-3 text-[12px] text-danger leading-relaxed">
+            登录链接无效或已过期（{hashError}）。
           </p>
         )}
 
-        {!showEmail ? (
-          <div className="mt-4 space-y-3">
-            <p className="text-[12px] text-ink3 leading-relaxed">
-              {REASON_HINT[reason ?? ''] ??
-                '请检查 Pages 的环境变量与 Supabase 的匿名登录开关。'}
-            </p>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                await onRetry();
-                setBusy(false);
-              }}
-              className="btn-primary w-full disabled:opacity-50"
-            >
-              {busy ? <span>重试中…</span> : <span>重试</span>}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowEmail(true)}
-              className="btn-link w-full justify-center py-1.5"
-            >
-              <span>改用邮箱登录</span>
-            </button>
-            <button type="button" onClick={onOpenSync} className="btn-link w-full justify-center py-1.5">
-              <span>已有账号 · 登录同步</span>
-            </button>
-            <p className="text-[12px] text-ink4 leading-relaxed">
-              也可以彻底不要云端：删掉 Pages 里的 VITE_SUPABASE_URL 与 VITE_SUPABASE_ANON_KEY，
-              数据就存在本机浏览器里，无需任何身份。
-            </p>
-          </div>
-        ) : sent ? (
-          <p className="mt-4 text-[13px] text-ink leading-relaxed">
-            登录链接已发至 <span className="font-semibold">{email}</span>：在同一浏览器打开即可。
-          </p>
-        ) : (
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (!valid || cooldown > 0) return;
-              setBusy(true);
-              const ok = await onSendLink(email.trim());
-              setBusy(false);
-              if (ok) setSent(true);
-              setCooldown(COOLDOWN_SECONDS);
-            }}
-            className="mt-4 space-y-3"
+        <div className="mt-4 grid grid-cols-2 gap-1 p-1 border border-control rounded-lg">
+          <button type="button" aria-pressed={mode === 'signin'} onClick={() => setMode('signin')} className={tabClass(mode === 'signin')}>
+            登录
+          </button>
+          <button type="button" aria-pressed={mode === 'signup'} onClick={() => setMode('signup')} className={tabClass(mode === 'signup')}>
+            注册新账号
+          </button>
+        </div>
+
+        <form onSubmit={(e) => void submit(e)} className="mt-3 space-y-3">
+          <label className="block">
+            <span className="sr-only">邮箱</span>
+            <input
+              type="email"
+              required
+              aria-label="邮箱"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full bg-surface border border-control rounded-lg px-3 py-2 text-[16px] text-ink focus:border-accent"
+            />
+          </label>
+          <label className="block">
+            <span className="sr-only">密码</span>
+            <input
+              type="password"
+              required
+              aria-label="密码"
+              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="密码（至少 6 位）"
+              className="w-full bg-surface border border-control rounded-lg px-3 py-2 text-[16px] text-ink focus:border-accent"
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={!valid || busy}
+            className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <div className="flex items-center gap-2">
-              <Mail className="w-4 h-4 text-ink3 shrink-0" />
-              <input
-                type="email"
-                required
-                aria-label="邮箱"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="flex-1 bg-surface border border-control rounded-lg px-3 py-2 text-[16px] text-ink focus:border-accent"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={!valid || busy || cooldown > 0}
-              className="btn-primary w-full disabled:opacity-50"
-            >
-              {busy ? (
-                <span>发送中…</span>
-              ) : cooldown > 0 ? (
-                <span className="tabular-nums">{cooldown} 秒后可再发</span>
-              ) : (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span>发登录链接</span>
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowEmail(false)}
-              className="btn-link w-full justify-center py-1.5"
-            >
-              <span>返回</span>
-            </button>
-          </form>
-        )}
+            {busy ? (
+              <span>{mode === 'signin' ? '登录中…' : '创建中…'}</span>
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                <span>{mode === 'signin' ? '登录并开卷' : '注册并开卷'}</span>
+              </>
+            )}
+          </button>
+        </form>
+
+        <p className="mt-3 text-[12px] text-ink4 leading-relaxed">
+          {mode === 'signin'
+            ? '还没有账号？点上面的「注册新账号」。'
+            : '注册即开一份只属于你的手记；已在 Supabase 后台预建的账号直接用「登录」。'}
+        </p>
       </div>
     </div>
   );

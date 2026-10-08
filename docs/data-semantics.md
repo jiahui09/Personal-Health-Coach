@@ -174,12 +174,12 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 
 | 门槛 | 结果 |
 |---|---|
-| `npm test`（12 套） | scientificAudit / journalContract / contrast / domain / body / migration / supabaseContract(26) / mergePlan(7) / refreshPolicy / presentationContract / mobileNav / layoutContract 全通过 |
+| `npm test`（12 套） | scientificAudit / journalContract / contrast / domain / body / migration / supabaseContract(24) / refreshPolicy / presentationContract / authGate / mobileNav / layoutContract 全通过 |
 | `npx tsc --noEmit` | 通过 |
 | `npm run build` | 通过（552 KB / gzip 174 KB） |
 | 浏览器端到端（收尾前最后跑） | 未建档不出人体数字 → 立档后 BMI/代谢/目标出现 → 食物库搜选回填（明细克数与 `estimatedFatG` 落库）→ 体征由时刻推得 7h20m、异常体重二次确认后**原样保存**并标待核 → 页面无方法学文案、同轴计量列全等 |
 | 版式几何探针 @1440/1023/768/640/390 | 全 PASS（配对行横线同 y、诸头左缘一致、同轴三列全等、溢出 0） |
-| 账号冒烟 13/13 | 本机模式不出同步入口；云端不可达时登录/注册流程不崩、输入不丢 |
+| 账号门冒烟 15/15 | 云端无会话必落「登录 / 注册新账号」门：无「同步到我的账号 / 继续上次合并 / 匿名」、未登录不出正文；切「注册新账号」（aria-pressed）提交 → 假 URL 就地 `role=alert`「连不上 Supabase」，输入不丢、不放行；本机（mock）模式不出账号门 |
 | 遗留态检查 | 注入遗留异常态（57kg / 33 条建议膳 / 旧 `sleepHours`）后：页面出现「待核 · 已超 · 不出推演」，今之体重仍为 **57**（未被改写） |
 
 ---
@@ -189,9 +189,8 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 - 唯一组装点：`src/services/todayAssembly.ts` 的 `assembleToday(snapshot, now)` —— 输入是六种原始记录，输出是整个 `TodayData`。
 - 本地：`MockHealthRepository` 读 localStorage 后调用它；云端：`SupabaseHealthRepository` 取 PostgREST 行、经 `supabaseMappers` 映射为域模型后调用**同一个**函数。
 - 因此两条路径的统计口径不可能分叉；`src/tests/supabaseContract.test.ts` 用同一批记录分别走两条路径，断言产出逐字节相同。
-- 云端会话：邮箱 magic link、**邮箱+密码（页内注册/登录）**、静默匿名三条路都通向同一个会话对象；令牌存本机并在到期前 60 秒自动续期；未登录时数据方法抛 `auth`，页面显示登录页而不是空数据。刷新并发去重（多个请求同时到期只打一次端点）；只有 400/401（令牌确已失效）才注销会话，5xx / 429 / 空响应体等瞬时故障保留会话——网络抖动不得把用户静默登出。
-- 身份与归属：每行数据都有 `user_id`，RLS 只放行 `auth.uid() = user_id`；**换身份 = 换数据可见范围**，因此「登录」必须先于「换身份」把本机记录抓成快照，抓不到就中止登录（`src/services/accountMerge.ts` 的 `captureLocalSnapshot`）。
-- 询问后合并：登录成功后把快照（本机原身份 + 上次未竟）持久化到 sessionStorage，页面列出条数由用户二选一；合并计划 `planMerge(snapshot, accountRows, accountUserId)` 是**纯函数**——账号已有的自然键跳过（账号为准、本机只补缺）、快照内重复只留首条、缺自然键的坏行丢弃，写入前剥 `id`（`gen_random_uuid()` 重新生成）并把 `user_id` 换成账号 uid；**原身份的行永不删除**。失败则快照保留，重跑按自然键天然幂等，且 `targetUserId` 保证只并回当初那个账号。
+- 云端会话：**邮箱+密码（页内注册/登录）**建立（历史 magic link 回跳也能接住同一会话对象）；令牌存本机并在到期前 60 秒自动续期；未登录时数据方法抛 `auth`，页面停在账号门而不是空数据。匿名登录已按本轮决策移除。刷新并发去重（多个请求同时到期只打一次端点）；只有 400/401（令牌确已失效）才注销会话，5xx / 429 / 空响应体等瞬时故障保留会话——网络抖动不得把用户静默登出。
+- 身份与归属：每行数据都有 `user_id`，RLS 只放行 `auth.uid() = user_id`；**没有账号就没有归属**，所以云端无会话时只显示账号门（`src/components/AuthGate.tsx`），注册 / 登录之后才读写。
 - 多端同步的时效：切回页面/窗口重获焦点自动重取，判定在 `src/services/refreshPolicy.ts` 的纯函数 `shouldAutoRefresh` 里——页面可见、无阻塞（弹层、未落定的写入、首屏载入）、距上次超过 15 秒三者齐备才发请求；**没有轮询、没有 Realtime 订阅**。
 
 ## 11. 版面与文案纪律（与数据层的分工）
@@ -206,5 +205,5 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 - `UserProfile.currentWeight` 仍是「最近一次测量」的缓存（供引擎入参）；页面显示已全部改读 `WeightSummary.latest`，但字段本身尚未移除。
 - 预测尚未落库为 `WeightPrediction` 记录，因此「上周推演 vs 本周实测」的误差复验（spec §9）只做了纯函数与出处标注，未做持久化复盘。
 - 阈值目前全部是工程启发式（除 WHO/AASM 两项），`evidenceStatus` 已在决策结果中标注，尚未在页面上逐条展示证据等级。
-- 账号与同步的**本轮明确不做**：JSON 导出/备份、密码重置与账号删除的页内入口（走邮件链接或 Supabase 后台）、Realtime/轮询、静态（mock）模式的多端同步——静态模式只存本机 localStorage，页脚仍是「复其初」。
-- 合并是**行级搬运**：只换 `user_id` 与 `id`，不改任何数值、日期与派生口径；`profiles` 若账号已有则整行跳过（不做字段级合并）。
+- 账号与同步的**本轮明确不做**：JSON 导出/备份、密码重置与账号删除的页内入口（走 Supabase 后台）、Realtime/轮询、旧本机（匿名）记录的抓取与合并、静态（mock）模式的多端同步——静态模式只存本机 localStorage，页脚仍是「复其初」。
+- 本机存储选项与「登录时询问后合并」已删除：云端只认账号名下数据，不再抓取 / 搬运旧的本机记录（本轮决策「删掉」）。

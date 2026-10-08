@@ -34,7 +34,6 @@ import {
   workoutToRow,
 } from '../services/supabaseMappers';
 import { SupabaseHealthRepository } from '../services/supabaseHealthRepository';
-import { mergeSnapshotIntoAccount } from '../services/accountMerge';
 import { createSeedData } from '../data/mockData';
 import { RepositoryError } from '../services/healthRepository';
 import type { UserProfile } from '../types/health';
@@ -333,35 +332,6 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
   ok('错误映射：401/403→auth、404→not_found、409→conflict、5xx→unknown、断网→network');
 }
 
-// 匿名登录（一键进入）：无邮箱、无密码
-{
-  const storage = memoryStorage();
-  const { fetchImpl, calls } = makeFetch([
-    { method: 'POST', match: (u) => u.includes('/auth/v1/signup'), body: sessionBody },
-  ]);
-  const rest = new SupabaseRest(cfg, { fetchImpl, storage });
-  const session = await rest.signInAnonymously();
-  assert(session.userId === UID && session.accessToken === 'at-1', '匿名登录返回并保存会话');
-  assert(calls[0].url.endsWith('/auth/v1/signup'), '调用的是 signup 端点');
-  assert(!JSON.stringify(calls[0].body).includes('@'), '匿名登录载荷里没有邮箱');
-  assert(storage.dump()['phc_supabase_session_v1'] !== undefined, '匿名会话同样持久化');
-
-  // 服务端未开启匿名登录 → 明确告知怎么开
-  const disabled = makeFetch([
-    { method: 'POST', match: (u) => u.includes('/auth/v1/signup'), status: 422, body: { msg: 'Anonymous sign-ins are disabled' } },
-  ]);
-  try {
-    await new SupabaseRest(cfg, { fetchImpl: disabled.fetchImpl, storage: memoryStorage() }).signInAnonymously();
-    assert(false, '未开启匿名登录时应当抛出');
-  } catch (err) {
-    assert(
-      err instanceof SupabaseError && err.kind === 'not_implemented' && /anonymous/i.test(err.message),
-      '未开启匿名登录 → not_implemented 且提示开关位置'
-    );
-  }
-  ok('匿名登录：一键建立会话；未开启时提示去 Supabase 打开发开关');
-}
-
 // 邮箱+密码登录（多端同步）
 {
   const storage = memoryStorage();
@@ -415,13 +385,13 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
 // hasSession：区分「从未登录」与「有身份但失效」
 {
   const fresh = new SupabaseRest(cfg, { fetchImpl: makeFetch([]).fetchImpl, storage: memoryStorage() });
-  assert(fresh.hasSession() === false, '从未登录 → hasSession=false（可静默建立匿名身份）');
+  assert(fresh.hasSession() === false, '从未登录 → hasSession=false（先到账号门注册/登录）');
 
   const stored = new SupabaseRest(cfg, {
     fetchImpl: makeFetch([]).fetchImpl,
     storage: authedStorage(Date.now() - 10_000), // 已过期,但仍算「有身份」
   });
-  assert(stored.hasSession() === true, '有过身份（哪怕已过期）→ hasSession=true（不得静默换新身份）');
+  assert(stored.hasSession() === true, '有过身份（哪怕已过期）→ hasSession=true（不得静默换会话）');
 
   const repo = new SupabaseHealthRepository(cfg, { fetchImpl: makeFetch([]).fetchImpl, storage: memoryStorage() });
   assert(repo.hasSession() === false, '仓库透传 hasSession');
@@ -649,64 +619,6 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
   await rest.insertMany('meals', []);
   assert(calls.length === 1, '空数组不发请求（没有可并的行就别打网络）');
   ok('insertMany：数组体 + 回执头 + 空数组短路');
-}
-
-// 合并全链路：匿名快照 → 账号行读取 → 去重计划 → 换 uid 批量写入
-{
-  const ACCOUNT_UID = 'account-uid';
-  const anonWeight = { id: 'w-anon', user_id: 'anon-uid', measured_on: '2026-09-24', weight_kg: '68.40' };
-  const accountWeight = { id: 'w-acct', user_id: ACCOUNT_UID, measured_on: '2026-09-25', weight_kg: '67.90' };
-  const TABLES = ['profiles', 'weight_records', 'daily_states', 'meals', 'workout_sessions', 'todos'];
-
-  const storage = memoryStorage();
-  storage.setItem(
-    'phc_supabase_session_v1',
-    JSON.stringify({
-      accessToken: 'at-account',
-      refreshToken: 'rt-account',
-      expiresAt: Date.now() + 3_600_000,
-      userId: ACCOUNT_UID,
-      email: 'me@example.com',
-    })
-  );
-
-  const { fetchImpl, calls } = makeFetch([
-    ...TABLES.map((table) => ({
-      method: 'GET',
-      match: (u: string) => u.includes(`/rest/v1/${table}`),
-      body: table === 'weight_records' ? [accountWeight] : [],
-    })),
-    ...TABLES.map((table) => ({
-      method: 'POST',
-      match: (u: string) => u.includes(`/rest/v1/${table}`),
-      body: [],
-    })),
-  ]);
-
-  const rest = new SupabaseRest(cfg, { fetchImpl, storage });
-  const summary = await mergeSnapshotIntoAccount(rest, {
-    anonUserId: 'anon-uid',
-    rows: {
-      profiles: [],
-      weight_records: [anonWeight, { ...anonWeight, id: 'w-anon-2' }],
-      daily_states: [],
-      meals: [],
-      workout_sessions: [],
-      todos: [],
-    },
-  });
-
-  const post = calls.find((c) => c.method === 'POST' && c.url.includes('/rest/v1/weight_records'));
-  assert(post !== undefined, '有可并的行才发 POST');
-  const posted = post!.body as Record<string, unknown>[];
-  assert(posted.length === 1, '账号已有的 2026-09-25 不写；本机的 2026-09-24 写一条（含快照内重复去重）');
-  assert(posted[0].user_id === ACCOUNT_UID, '写入行换成账号 uid');
-  assert(!('id' in posted[0]), '写入行不带库里的 id');
-  assert(summary.weight_records.inserted === 1, '摘要如实回报道入条数');
-  assert(summary.weight_records.skipped === 1, '摘要回报跳过条数（快照内重复）');
-  const authHeaders = calls.filter((c) => c.method === 'GET').map((c) => c.headers.Authorization);
-  assert(authHeaders.every((h) => h === 'Bearer at-account'), '读账号行用账号令牌（RLS 只认它）');
-  ok('合并链路：读账号行 → 去重 → 换 uid 批量写,摘要逐表如实');
 }
 
 console.log(`ALL SUPABASE CONTRACT TESTS PASSED. (${checks} checks)`);

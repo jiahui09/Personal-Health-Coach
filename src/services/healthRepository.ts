@@ -76,12 +76,9 @@ export interface HealthRepository {
   /** 第三方登录（云端实现才有意义；本地实现直接拒绝）。 */
   signInWithProvider(provider: string): Promise<void>;
 
-  /** 匿名登录：一键进入,不需要邮箱（本地实现直接拒绝）。 */
-  signInAnonymously(): Promise<AuthUser>;
-
   /**
    * 本机是否已有云端身份。
-   * 真 → 会话只是过期,应刷新或提示登录；假 → 从未登录,可静默建立匿名身份。
+   * 真 → 有会话（过期自动续）；假 → 从未登录,先到账号门注册 / 登录。
    */
   hasSession(): boolean;
 

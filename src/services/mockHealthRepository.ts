@@ -177,10 +177,6 @@ export class MockHealthRepository implements HealthRepository {
     throw new RepositoryError('not_implemented', '本地模式无需登录（第三方登录仅云端可用）');
   }
 
-  async signInAnonymously(): Promise<AuthUser> {
-    throw new RepositoryError('not_implemented', '本地模式无需登录（数据直接存在本机）');
-  }
-
   /** 本地模式没有云端身份。 */
   hasSession(): boolean {
     return false;
