@@ -41,6 +41,7 @@ const presentationFiles: [string, string][] = [
   ['BodySheet.tsx', comp('BodySheet.tsx')],
   ['SyncSheet.tsx', comp('SyncSheet.tsx')],
   ['AuthGate.tsx', comp('AuthGate.tsx')],
+  ['SectionNav.tsx', comp('SectionNav.tsx')],
   ['DotScale.tsx', comp('DotScale.tsx')],
 ];
 

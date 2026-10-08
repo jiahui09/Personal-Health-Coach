@@ -30,6 +30,8 @@ import { normalizeTrainingMinutesBudget } from './domain/training';
 import { cloudHealthRepository, healthRepository, repositoryKind } from './services/repository';
 import { AuthGate } from './components/AuthGate';
 import { SyncSheet, type SyncMode } from './components/SyncSheet';
+import { SectionNav } from './components/SectionNav';
+import { PAGE_SECTIONS } from './data/pageSections';
 import { toRepositoryError, type AuthUser } from './services/healthRepository';
 import {
   combineSnapshots,
@@ -760,10 +762,12 @@ export default function App() {
         <div className="border-2 border-ink p-[3px]">
         <div className="border border-ink/55 px-5 sm:px-8">
         {/* 刊头与序（大字问候 + 干支日期;今日状况归「今日之事」,刊头不重复） */}
-        <HeaderGreeting
-          displayDate={todayData.displayDate}
-          timeGreeting={todayData.timeGreeting}
-        />
+        <div id="sec-head">
+          <HeaderGreeting
+            displayDate={todayData.displayDate}
+            timeGreeting={todayData.timeGreeting}
+          />
+        </div>
 
         {/* 今日之事 ↔ 今日之练同行：待办与今日之练排一行（折缝分栏;移动端纵向相随,
             桌面两格同高同顶,章节横线跨栏同 y） */}
@@ -775,7 +779,7 @@ export default function App() {
             className="hidden lg:block lg:self-stretch lg:mt-[115px] lg:col-start-2 lg:row-start-1 w-px bg-line"
           />
 
-          <div className="lg:col-start-1 lg:row-start-1">
+          <div id="sec-today" className="lg:col-start-1 lg:row-start-1">
             <TodayTasks
               todos={todayData.todos}
               tasks={todayData.tasks}
@@ -785,7 +789,7 @@ export default function App() {
               onDeleteTodo={handleDeleteTodo}
             />
           </div>
-          <div className="lg:col-start-3 lg:row-start-1">
+          <div id="sec-training" className="lg:col-start-3 lg:row-start-1">
             <NextWorkoutCard
               nextWorkout={todayData.nextWorkout}
               decision={todayData.training.decision}
@@ -798,19 +802,21 @@ export default function App() {
         </div>
 
         {/* 体征通栏：原始事实（体感、眠、今之体重、档案所录）与待核朱批集中一处 */}
-        <BodySection
-          weight={todayData.weight}
-          state={todayData.state}
-          sleep={todayData.sleep}
-          body={todayData.body}
-          goal={todayData.profile.goal}
-          goalAdvice={todayData.goalAdvice}
-          missingFields={todayData.missingProfileFields}
-          dataQuality={todayData.dataQuality}
-          onUpdateMetric={handleUpdateMetricQuick}
-          onEditWeight={() => handleOpenRecord('body')}
-          onEditProfile={() => setProfileSheetOpen(true)}
-        />
+        <div id="sec-body">
+          <BodySection
+            weight={todayData.weight}
+            state={todayData.state}
+            sleep={todayData.sleep}
+            body={todayData.body}
+            goal={todayData.profile.goal}
+            goalAdvice={todayData.goalAdvice}
+            missingFields={todayData.missingProfileFields}
+            dataQuality={todayData.dataQuality}
+            onUpdateMetric={handleUpdateMetricQuick}
+            onEditWeight={() => handleOpenRecord('body')}
+            onEditProfile={() => setProfileSheetOpen(true)}
+          />
+        </div>
 
         {/* 营养摄入 ↔ 统计同行：与第一处配对行同列格同折缝（移动端纵向相随,
             桌面两格同高同顶,列缘与上一行上下对齐） */}
@@ -821,7 +827,7 @@ export default function App() {
             className="hidden lg:block lg:self-stretch lg:mt-[115px] lg:col-start-2 lg:row-start-1 w-px bg-line"
           />
 
-          <div className="lg:col-start-1 lg:row-start-1">
+          <div id="sec-nutrition" className="lg:col-start-1 lg:row-start-1">
             {/* 营养摄入：今日之标、两笔账、下一膳与今日所食 */}
             <NutritionSection
               targets={todayData.targets}
@@ -840,7 +846,7 @@ export default function App() {
             />
           </div>
 
-          <div className="lg:col-start-3 lg:row-start-1">
+          <div id="sec-stats" className="lg:col-start-3 lg:row-start-1">
             {/* 统计：由此算出的数、趋势与均值、履行合议与情景外推 */}
             <StatsSection
               body={todayData.body}
@@ -898,6 +904,10 @@ export default function App() {
         </div>
         </div>
       </main>
+
+      {/* 移动端悬浮目录：窄屏单栏页面长，一枚固定小钮列各栏章名、点名即到；
+          桌面双栏页面短，不出此钮（lg:hidden） */}
+      <SectionNav sections={PAGE_SECTIONS} />
 
       {/* 录入入口全部就地：体征·录体征 / 今日之练·另择动作 / 营养·别录一品，
           各开本域独立之表；全局记账 FAB 已撤，入口不聚一处 */}

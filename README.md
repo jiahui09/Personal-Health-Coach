@@ -63,10 +63,11 @@
 ```
 src/
 ├── App.tsx                    # 单页编排：状态、Toast、弹窗、区块组合
-├── components/                # 19 个展示组件（HeaderGreeting / TodayTasks /
+├── components/                # 20 个展示组件（HeaderGreeting / TodayTasks /
 │                              #   BodySection / NutritionSection / StatsSection /
 │                              #   NextMealCard / NextWorkoutCard / SectionHead /
-│                              #   RuleMeter / DotScale / SheetShell·三录事表·Profile·Sync …）
+│                              #   RuleMeter / DotScale / SheetShell·三录事表·Profile·Sync /
+│                              #   SectionNav 移动端悬浮目录 …）
 ├── services/
 │   ├── repository.ts             # ★ 工厂：按 VITE_SUPABASE_* 选择实现，UI 只从这里拿单例
 │   ├── healthRepository.ts       # 数据访问接口 + AuthUser + RepositoryError（单一契约）
@@ -81,10 +82,11 @@ src/
 │   ├── scientificRules.ts         # ★ 全部纯函数规则（核心）
 │   ├── scientificEvidence.ts      # 证据登记表（10 条，含 claim / limitations）
 │   └── scientific/index.ts        # 统一导出
-├── data/                      # mockData（30 天体重等演示数据）、foods（食物库+餐食模板）
+├── data/                      # mockData（30 天体重等演示数据）、foods（食物库+餐食模板）、
+│   │                          #   pageSections（章节目录：id↔锚点的唯一数据源）
 ├── types/health.ts            # 全部领域模型与审计类型（单一类型来源）
 ├── vite-env.d.ts              # VITE_SUPABASE_* 环境变量类型
-└── tests/                    # 11 套契约与审计测试（scientificAudit / mergePlan / refreshPolicy / …）
+└── tests/                    # 12 套契约与审计测试（scientificAudit / mergePlan / refreshPolicy / mobileNav / …）
 ```
 
 **分层**：`UI (React 19) → HealthRepository (接口) → repository.ts (工厂) → Mock / Supabase 实现 → ScientificDecisionEngine (纯函数)`。换后端只改工厂这一处。
@@ -140,7 +142,7 @@ src/
 - **圆角只有一档 8px**（`rounded-lg`），只留表单控件与按钮；`rounded-full` 只留给真正的圆形（状态点、圆点单选）；没有 `backdrop-blur`、没有超大阴影，**页面栏目一律不用卡片容器**。
 - **仿真古书纸与版框**：`body` 以 `--color-paper` 为底，叠两层内联 SVG 噪点（纤维纹 6% + 陈化斑驳 7%，不用氛围渐变）做纸张质感；全页内容入「外粗内细」双线版框（`border-2` 外框 + `border/55` 内线），刊头、正文与页脚同框；区块只以墨色粗细线与点线分隔，数值一律入句。
 - **全页只留一张图表，其余数字入句**：唯一图表是 30 日体重折线（`TodayData.weightSeries`，手画 SVG，来自真实记录、不造序列）；摄入、趋势、预测区间都写成手记行文，精力与酸痛用两行对齐的 1–5 圆点点按——**没有 KPI 卡、没有瓦片墙、没有环形进度**；比例信息只用**墨线计量条**（`RuleMeter`：3px 直角细线，底轨 `--color-line`，填充墨＝进行中 / 朱＝达标 / 绛＝超录，无圆角阴影渐变动画），百分比与分子分母一律以真实文本入句（蛋白质 63/110 g · 57%、抗阻 2/2 · 100% · 合议、睡均 7.3/7 h）；睡眠只报达标与否、不给百分比。
-- **版式**：容器 1100px；**两处配对行**＝① 今日之事 ↔ 今日之练 ② 营养摄入 ↔ 统计（同为桌面 `lg:grid-cols-[1.45fr_auto_1fr]` 显式落位，各以一条 1px 折缝分栏，上下列缘对齐、两章横线跨栏同 y；两格同高，移动端纵排相随）；**体征为唯一通栏节**，夹于两行之间（`lg:pr-9` 留 36px 旁批槽；统计以「情景外推」组块收尾）。体征**内部改用配对行同网格**分两栏（`1.45fr | auto | 1fr` + 中缝，与上下行同 x 同轴，格内 `lg:pr-9` 使行值右缘与上下两栏逐像素对齐）；**左栏静动两组**——「今日之录」（今之体重 + 腰围，随日而变）与「档案所录」（身高·性别 + 活动水平，建档常量，点线分隔），右栏（夜眠/体感）不设组。**三处折缝均自章节头 2px 墨线起向下，不越黑线**（行折缝偏移 115px，体征折缝自墨线下的行区起；探针逐缝断言）。移动端单栏按 DOM 次序（今日之事 → 今日之练 → 体征 → 营养摄入 → 统计）。章节级动作统一收在章末「动作脚注行」（`.section-actions`），节内小标题用 `.group-head`。
+- **版式**：容器 1100px；**两处配对行**＝① 今日之事 ↔ 今日之练 ② 营养摄入 ↔ 统计（同为桌面 `lg:grid-cols-[1.45fr_auto_1fr]` 显式落位，各以一条 1px 折缝分栏，上下列缘对齐、两章横线跨栏同 y；两格同高，移动端纵排相随）；**体征为唯一通栏节**，夹于两行之间（`lg:pr-9` 留 36px 旁批槽；统计以「情景外推」组块收尾）。体征**内部改用配对行同网格**分两栏（`1.45fr | auto | 1fr` + 中缝，与上下行同 x 同轴，格内 `lg:pr-9` 使行值右缘与上下两栏逐像素对齐）；**左栏静动两组**——「今日之录」（今之体重 + 腰围，随日而变）与「档案所录」（身高·性别 + 活动水平，建档常量，点线分隔），右栏（夜眠/体感）不设组。**三处折缝均自章节头 2px 墨线起向下，不越黑线**（行折缝偏移 115px，体征折缝自墨线下的行区起；探针逐缝断言）。移动端单栏按 DOM 次序（今日之事 → 今日之练 → 体征 → 营养摄入 → 统计），页面长——右下设**悬浮章节目录**（`SectionNav`，仅 `lg` 以下出现）：点章名即滚到该栏。章节级动作统一收在章末「动作脚注行」（`.section-actions`），节内小标题用 `.group-head`。
 - **文案全取古风行文，不用现代白话**：时段问候作「朝安 / 昼安 / 夜安。」；章节作「下一膳 / 今日之练」，动作作「录之 / 罢 / 照准 / 毕此一练 / 览毕」，危险动作作「掷还」，报错作「膳食之录未成（code）」，反馈作「知道了 · 一事已列入今日之册」（成功回执一律冠「知道了 ·」，失败不冠），达标作「合议 / 未合议 · 尚差二日」，页脚只留报头与「复其初」；记录表单标签（所食之物 / 腰围 / 就寝 / 起身 …）同此体例。**保留不改的只有三类**：文献引文与 `claim`/`limitations`（`scientificEvidence.ts`，学术原貌即证据本身）、规则 ID 与 ASCII 单位符号（kcal / kg / AASM / RIR）、食物与练习的中文专名。
 - 少量「看着像模板」的元素是**刻意保留**的（衬线标题、圆形控件、已完成事项的删除线、规则 ID 的等宽字、图表端点圆点），在源码注释里逐条写明理由；它们不构成破坏性可访问性问题。
 
@@ -231,7 +233,7 @@ npm run build
 ### 本轮修复清单（去 AI 味 + 原型 → 工程化）
 
 > **收尾整理说明**：迭代截图、临时探针脚本与外部工具目录已全部移出仓库，设计思路材料归档在 `docs/archive/`；
-> 下面历史条目里提到的截图与脚本文件不再随仓库提供，仅作过程记录。可复跑的正式门禁只有三个：`npm run lint` · `npm test`（11 套）· `npm run build`。
+> 下面历史条目里提到的截图与脚本文件不再随仓库提供，仅作过程记录。可复跑的正式门禁只有三个：`npm run lint` · `npm test`（12 套）· `npm run build`。
 
 1. **证据渲染不再写死**（历史）：当时的稽核弹窗把 `trace`、`evidenceTraces`、`ruleId/ruleStatus` 等 props 完整呈现；该弹窗与「缘由」入口已在第 17 条移除，痕迹仍留在数据层。
 2. **假日期换成真时钟**：`TODAY_STR`、30 天体重序列、周窗口（最近 7 天）、月基线（最近 30 天）全部由 `new Date()` 推导，新记录会落到界面上的那一天。
@@ -380,9 +382,16 @@ npm run build
     - **验证**：新增 `mergePlan.test.ts`（自然键、合并计划、快照持久化、抓快照 IO）与 `refreshPolicy.test.ts`，`supabaseContract.test.ts` 扩至 26 项（注册三分支、`insertMany`、合并全链路读→计划→换 uid 写）；测试增至 **11 套**；`tsc` + `build` 全绿，另加浏览器冒烟 **13/13 PASS**（本机模式不出同步入口；云端不可达时 AuthGate → 账号面板 → 注册 → 网络失败回执不崩且输入不丢）。
     - **边界（如实说明）**：本轮不做 JSON 导出/备份、不做密码重置与账号删除、不加 Edge Functions/RPC/新表/依赖；mock（静态）模式不参与多端同步，页脚仍是「复其初」。
 
+30. **移动端悬浮目录：点章名即到该栏**（本轮，用户提「移动端太长不好定位」）：
+    - **只在窄屏出现**：新增 `src/components/SectionNav.tsx` —— `fixed right-4 bottom-6 z-40 lg:hidden`，一枚 44×44 触控钮贴右下（单栏版式页面长才需要目录；桌面双栏页面短，1440 实测 `display:none` 不出此钮）。
+    - **点开为版框式小面板**（外 2px 墨框 + 内细线，圆角仍全站唯一 8px 档），列**刊首 / 今日之事 / 今日之练 / 体征 / 营养摄入 / 统计**六项；点章名 `scrollIntoView` 平滑定位并自动收起，`prefers-reduced-motion` 时改瞬时定位；Esc 与点空白处亦收起；`aria-expanded` / `aria-controls` / 菜单题名齐备。
+    - **唯一数据源**：`src/data/pageSections.ts` 的 `PAGE_SECTIONS` —— `id` 与 App 各节锚点一一对应、`label` 取该节在场章节题，组件与页面都不另写一份。
+    - **只做定位、不添功能**：不新增记账入口，延续第 24 条「入口分归各节」。
+    - **验证**：新增 `mobileNav.test.ts`（锚点一一对应、唯一数据源、`lg:hidden`、章名取自在场章节题、展示纪律与已入 presentationContract 白名单），测试增至 **12 套**全过；`tsc` + `build` 全绿；浏览器冒烟 **14/14 PASS**（390 下钮在场/开合/六项/定位误差 ≤30px/回刊首/Esc/点空白/无横向溢出，1440 不出钮、无未捕获异常），既有 e2e、accept-check 与版式探针 @1440/@390 复跑全 PASS。
+
 ### 仍待补齐（真实项目的下一步）
 
-1. **工程配套**：无 ESLint/格式化、无 CI（未引入测试框架）；正式门禁是 `npm run lint` / `npm test`（11 套契约与审计）/ `npm run build`，端到端与浏览器冒烟在收尾前单独跑过（结果见第 29 条），脚本未纳入仓库。
+1. **工程配套**：无 ESLint/格式化、无 CI（未引入测试框架）；正式门禁是 `npm run lint` / `npm test`（12 套契约与审计）/ `npm run build`，端到端与浏览器冒烟在收尾前单独跑过（结果见第 29 条），脚本未纳入仓库。
 2. **数据持久化**：本地模式的数据只在 localStorage，换设备即丢失，也没有导出/备份入口（本轮**有意不做** JSON 导出）。云端模式已接通 Supabase：会话 + PostgREST 读写 + RLS + 账号（页内邮箱密码注册/登录）+ 登录时**询问后合并**本机记录 + 切回页面自动重取；见页脚「同步到我的账号」与 `docs/deploy.md` §4c。
 3. **体积**：单包 552 KB（gzip 174 KB），未做代码分割。
 4. **视觉回归**：版式由源码契约 `src/tests/layoutContract.test.ts` 与设计令牌对比度用例守住；像素级回归仍靠人工看图（截图与几何探针脚本已随收尾整理移出仓库）。

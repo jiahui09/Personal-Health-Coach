@@ -174,7 +174,7 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 
 | 门槛 | 结果 |
 |---|---|
-| `npm test`（11 套） | scientificAudit / journalContract / contrast / domain / body / migration / supabaseContract(26) / mergePlan(7) / refreshPolicy / presentationContract / layoutContract 全通过 |
+| `npm test`（12 套） | scientificAudit / journalContract / contrast / domain / body / migration / supabaseContract(26) / mergePlan(7) / refreshPolicy / presentationContract / mobileNav / layoutContract 全通过 |
 | `npx tsc --noEmit` | 通过 |
 | `npm run build` | 通过（552 KB / gzip 174 KB） |
 | 浏览器端到端（收尾前最后跑） | 未建档不出人体数字 → 立档后 BMI/代谢/目标出现 → 食物库搜选回填（明细克数与 `estimatedFatG` 落库）→ 体征由时刻推得 7h20m、异常体重二次确认后**原样保存**并标待核 → 页面无方法学文案、同轴计量列全等 |
