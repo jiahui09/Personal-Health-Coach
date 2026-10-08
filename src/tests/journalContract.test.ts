@@ -29,7 +29,9 @@ assert(f_meal_slot(9) === 'breakfast', 'hour 9 is breakfast');
 assert(f_meal_slot(10) === 'lunch', 'hour 10 is lunch');
 assert(f_meal_slot(14) === 'lunch', 'hour 14 is lunch');
 assert(f_meal_slot(15) === 'dinner', 'hour 15 is dinner');
-assert(f_meal_slot(23) === 'dinner', 'hour 23 is dinner');
+assert(f_meal_slot(20) === 'dinner', 'hour 20 is dinner');
+assert(f_meal_slot(21) === 'snack', 'hour 21 is snack');
+assert(f_meal_slot(23) === 'snack', 'hour 23 is snack');
 
 // --- 2. TodayData contract (fixed clock → deterministic seed windows) --------
 const CLOCK = (): Date => new Date(2026, 8, 25, 21, 30);
@@ -63,7 +65,7 @@ assert(stored.heightCm === 175, 'profile write lands');
 const today = await repository.getToday();
 
 assert(today.date === '2026-09-25', `date is the injected day (got ${today.date})`);
-assert(today.mealSlot === 'dinner', 'hour 21 → dinner slot');
+assert(today.mealSlot === 'snack', 'hour 21:30 → snack slot');
 assert(['朝安。', '昼安。', '夜安。'].includes(today.timeGreeting), 'timeGreeting in {朝安,昼安,夜安}');
 assert(today.displayDate.includes('年'), 'displayDate uses the Chinese calendar line');
 

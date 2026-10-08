@@ -66,7 +66,15 @@ export const StatsSection: React.FC<StatsSectionProps> = ({
   const { resistance } = training;
   const earliest = weight.firstInWindow;
   const latestPoint = weight.lastInWindow;
-  const trendSign = weight.direction === 'up' ? '+' : weight.direction === 'down' ? '−' : '';
+  // 号随斜率实值：方向（up/down/flat）是分类旁批，不能代数值定号——持平时负斜率亦须示「−」
+  const trendSign =
+    weight.trendKgPerWeek === null
+      ? ''
+      : weight.trendKgPerWeek > 0
+        ? '+'
+        : weight.trendKgPerWeek < 0
+          ? '−'
+          : '';
   const forecastPeriods = [
     { label: '四周', period: forecast.fourWeeks },
     { label: '八周', period: forecast.eightWeeks },

@@ -377,9 +377,9 @@ export function f_diet_quality(
 // Status: engineering_heuristic ranking over scientific constraints
 // ==========================================
 
-/** Time-of-day slot shared by the meal rules and the UI caption. */
-export function f_meal_slot(hour: number): 'breakfast' | 'lunch' | 'dinner' {
-  return hour < 10 ? 'breakfast' : hour < 15 ? 'lunch' : 'dinner';
+/** Time-of-day slot shared by the meal rules and the UI caption. 21 时后为加餐（夜宵不再归晚膳）。 */
+export function f_meal_slot(hour: number): 'breakfast' | 'lunch' | 'dinner' | 'snack' {
+  return hour < 10 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 21 ? 'dinner' : 'snack';
 }
 
 export function f_meal_candidates(
@@ -438,9 +438,7 @@ export function f_meal(context: HealthContext): MealRecommendation {
     age === null ||
     (profile.sex !== 'male' && profile.sex !== 'female' && profile.sex !== 'other')
   ) {
-    return unavailableMealRecommendation(
-      '未建档：先录身高、性别、出生年、活动水平与一次体重，方有目标可依'
-    );
+    return unavailableMealRecommendation('未建档：立档即有标有荐');
   }
 
   // Data completeness decides how much the recommendation may claim.

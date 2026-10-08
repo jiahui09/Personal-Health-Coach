@@ -378,7 +378,7 @@ export interface TodayData {
   timeGreeting: string; // "朝安。/昼安。/夜安。"
   profile: UserProfile;
   /** Which meal the current recommendation targets (same rule as f_meal). */
-  mealSlot: 'breakfast' | 'lunch' | 'dinner';
+  mealSlot: 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
   // ---- 原始记录（今日切片） ----
   todos: TodoItem[];

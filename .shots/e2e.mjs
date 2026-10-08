@@ -112,7 +112,7 @@ await ev(`localStorage.setItem('phc_profile_v3', '{}')`);
 await load();
 const noProfileText = await ev(`document.body.innerText`);
 console.log('未建档：体征档显示未建档:', noProfileText.includes('未建档'));
-console.log('未建档：下一膳不出建议:', noProfileText.includes('未建档：先录身高'));
+console.log('未建档：下一膳不出建议:', noProfileText.includes('未建档：立档即有标有荐'));
 const fakeLines = noProfileText
   .split('\n')
   .filter((l) => l.includes('体重指数') || l.includes('每日热量') || l.includes('每周抗阻'));

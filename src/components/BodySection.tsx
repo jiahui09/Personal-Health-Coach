@@ -87,7 +87,7 @@ export const BodySection: React.FC<BodySectionProps> = ({
               尚未建档：缺 {missingFields.map((f) => PROFILE_FIELD_CN[f] ?? f).join('、')}。
             </p>
             <p className="mt-1 text-[12px] text-ink3">
-              身高、性别、出生年与活动水平决定代谢与每日目标；未齐备前不显示人体数字。
+              立档后：热量蛋白有标、下一膳有荐；未齐备前不显示人体数字。
             </p>
             {/* 立档贴未建档之告（常量入口随常量之缺），不与「录体征」并列挤于眉行 */}
             <p className="mt-1.5">
