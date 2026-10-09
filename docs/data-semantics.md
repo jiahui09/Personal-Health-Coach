@@ -184,6 +184,7 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 | 首用立档与水墨按钮探针 19/19 | 未建档首屏即见「立档」之请（无须滚动、文案明示固定数据录一次随手记名长存,入口不止一处）→ 点「立档」落墨后档案表照常开 → 存毕首屏之请自去、人体数字出现；页内动作（照准/毕此一练/录之）= 纸底**无描边**轻按钮非实墨块;柔光随指针（--mx/--my）、墨迹自落点铺满按钮（offset 尺寸 ≥ 按钮、噪点滤镜、动画毕自除）、键盘激活同有落墨且不误触业务、控制台记「墨已落纸」 |
 | 遗留态检查 | 注入遗留异常态（57kg / 33 条建议膳 / 旧 `sleepHours`）后：页面出现「待核 · 已超 · 不出推演」，今之体重仍为 **57**（未被改写） |
 | 云端录入失败根因（本机 PostgreSQL 18 实证） | 老 `schema.sql` 双错：① 六表 `user_id` 外键引 `auth.users`——手记名标记不在其表,立档等一切写入撞 **23503**；② `alter table if not exists` 非法,`training_minutes_budget` / `meals.fat_g` / `meals.items` **从未建成**（立档再撞 400） | `schema.sql` 去外键 + 幂等补丁段（drop constraint if exists）+ 修正 ALTER：老库迁移与全新库重跑均 **0 ERROR**,立档 upsert 合并为 1 行、五条写入路径全绿；`verify-supabase.mjs` 新增「写入路径」探针（写进 → 读出 → 删净,失败即给出重跑全文的处置） |
+| 云端写路径端到端探针 16/16（PostgREST 仿真层,`cloud-mode vite + .shots/cloud-write.mjs`） | 账号门开册后读路径全带 `user_id=eq.<标记>`（12 条落账）→ 立档 upsert 齐 `on_conflict=user_id` + `merge-duplicates` + `application/json` + apikey/Bearer,回执行含生成 id 与 `training_minutes_budget` → 录之一事 insert 落库、回执「此事已列入今日之册」→ 注入老外键 409 → 失败 toast **对症**「添事未成 · 云库结构未更新 · 到 SQL Editor 全文重跑 supabase/schema.sql 后重试」,表不收、字不丢、未落库 → 恢复后重录即成;全程无未预期 console 错、仿真层零 5xx |
 
 ---
 

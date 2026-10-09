@@ -13,7 +13,7 @@ interface TodayTasksProps {
   tasks: TaskProgress;
   onToggleTodo: (id: string) => void;
   /** 录入拟时长：原始字符串交 domain 规范化，留空即无时长。 */
-  onAddTodo: (title: string, estimatedMinutes: string) => void;
+  onAddTodo: (title: string, estimatedMinutes: string) => Promise<boolean>;
   /** 改拟时长：null 即「取消时长」。 */
   onUpdateEstimate: (id: string, minutes: string | null) => void;
   onDeleteTodo: (id: string) => void;
@@ -34,13 +34,17 @@ export const TodayTasks: React.FC<TodayTasksProps> = ({
   const [editTarget, setEditTarget] = useState<string | null>(null);
   const [editMinutes, setEditMinutes] = useState('');
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
-    onAddTodo(newTitle.trim(), newMinutes);
-    setNewTitle('');
-    setNewMinutes('');
-    setIsAdding(false);
+    const title = newTitle.trim();
+    if (!title) return;
+    // 只有落册成功才收表清字——云写失败时留字在框,免得用户重打一遍
+    const landed = await onAddTodo(title, newMinutes);
+    if (landed) {
+      setNewTitle('');
+      setNewMinutes('');
+      setIsAdding(false);
+    }
   };
 
   return (
