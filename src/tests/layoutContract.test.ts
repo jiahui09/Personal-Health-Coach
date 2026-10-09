@@ -223,10 +223,10 @@ assert(
   '立档之请以未建档为条件（建档后入口自去,不再打扰）'
 );
 assert(app.includes('随手记名长存'), '立档文案明示：固定数据录一次即随手记名长存');
-// 页内动作（照准/毕此一练/录之/再试一次）一律描边轻按钮,注意力归内容;
+// 页内动作（照准/毕此一练/录之/再试一次）一律无描边轻按钮,注意力归内容;
 // 实墨主按钮只留弹层内的郑重确认。
 for (const f of ['NextMealCard.tsx', 'NextWorkoutCard.tsx', 'TodayTasks.tsx']) {
-  assert(comp(f).includes('btn-quiet'), `${f} 页内动作用描边轻按钮,不抢戏`);
+  assert(comp(f).includes('btn-quiet'), `${f} 页内动作用无描边轻按钮,不抢戏`);
   assert(!comp(f).includes('btn-primary'), `${f} 不复用实墨主按钮`);
 }
 for (const f of ['SheetShell.tsx', 'ProfileSheet.tsx', 'AccountGate.tsx']) {
@@ -242,6 +242,8 @@ assert(css.includes('animation: ink-spread'), '涟漪走 CSS animation（离主�
 assert(/@keyframes[\s\S]*?transform: translate\(-50%, -50%\)/.test(css), '涟漪只动 transform/opacity');
 assert(css.includes('prefers-reduced-motion'), '水墨交互带减弱动效档（留反馈,去位移）');
 assert(css.includes('@media (hover: none) and (pointer: coarse)'), '触屏不显跟随柔光（其余环境照常随指针）');
-assert(css.includes('.btn-quiet'), '描边轻按钮成级（与实墨主按钮同组度量）');
+assert(css.includes('.btn-quiet'), '轻按钮成级（与实墨主按钮同组度量）');
+const quietRule = css.match(/\.btn-quiet \{[^}]*\}/)?.[0] ?? '';
+assert(quietRule.includes('border: none') && !/border[^-]*:\s*1px/.test(quietRule), '轻按钮不描边（按钮取消描边）');
 
 console.log('ALL LAYOUT CONTRACT TESTS PASSED.');
