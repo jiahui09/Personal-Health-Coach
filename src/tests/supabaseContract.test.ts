@@ -7,7 +7,7 @@
  *   2. **跨路径一致性**：同一批原始记录，本地（直接给域模型）与云端（域模型→行→域模型）
  *      经 assembleToday 得到的 TodayData 必须逐字节相同 —— 这是「两条数据路径不会漂移」的证明；
  *   3. 身份与传输层：手记名 → 归属标记（确定性、可复算、不联网；账号只作标记,不设防）；
- *      无标记时一个网络请求都不发、错误码映射（401→auth / 409→conflict / 网络异常→network）；
+ *      无标记时一个网络请求都不发、错误码映射（401→auth / 409→conflict / 旧外键·缺列→schema / 网络异常→network）；
  *   4. 仓库层：无标记一律抛 auth（绝不静默返回空数据）、同日体重走 PATCH 而非新增、
  *      档案走 upsert、云端「复其初」显式拒绝（绝不清真实数据）。
  */
@@ -267,6 +267,40 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
       assert(err instanceof SupabaseError && err.kind === kind, `HTTP ${status} → ${kind}`);
     }
   }
+  // 云库结构落后于代码：旧外键（409）与缺列（400）对症归 schema,不与「记录已存在」混淆
+  const schemaCases: [number, unknown, string][] = [
+    [409, { code: '23503', message: 'insert or update on table "profiles" violates foreign key constraint "profiles_user_id_fkey"' }, '409+旧外键 → schema'],
+    [400, { code: 'PGRST204', message: 'Could not find the column in the schema cache' }, '400+缺列 → schema'],
+  ];
+  for (const [status, body, label] of schemaCases) {
+    const { fetchImpl } = makeFetch([{ method: 'GET', match: () => true, status, body }]);
+    const rest = new SupabaseRest(cfg, { fetchImpl, storage: accountStorage() });
+    try {
+      await rest.select('profiles', 'select=*');
+      assert(false, `${label} 应当抛出`);
+    } catch (err) {
+      assert(err instanceof SupabaseError && err.kind === 'schema', label);
+    }
+  }
+  // 立档等写动作同样归 schema → 页面据此出对症 toast（「全文重跑 schema.sql」）
+  {
+    const { fetchImpl } = makeFetch([
+      { method: 'GET', match: (u) => u.includes('/profiles'), status: 200, body: [] },
+      {
+        method: 'POST',
+        match: (u) => u.includes('/profiles'),
+        status: 409,
+        body: { code: '23503', message: 'violates foreign key constraint "profiles_user_id_fkey"' },
+      },
+    ]);
+    const repo = new SupabaseHealthRepository(cfg, { fetchImpl, storage: accountStorage() });
+    try {
+      await repo.updateProfile({ heightCm: 175 });
+      assert(false, '立档写入遇旧外键应当抛出');
+    } catch (err) {
+      assert(err instanceof RepositoryError && err.code === 'schema', '立档遇旧外键 → RepositoryError(schema) → 对症 toast');
+    }
+  }
   const throwing = (async () => {
     throw new TypeError('Failed to fetch');
   }) as unknown as typeof fetch;
@@ -278,7 +312,7 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
     assert(err instanceof SupabaseError && err.kind === 'network', '网络异常 → network');
   }
 
-  ok('错误映射：401/403→auth、404→not_found、409→conflict、5xx→unknown、断网→network');
+  ok('错误映射：401/403→auth、404→not_found、409→conflict、旧外键/缺列→schema、5xx→unknown、断网→network');
 }
 
 // hasAccount：账号只是标记,可区分「没打开过手记」与「已打开」

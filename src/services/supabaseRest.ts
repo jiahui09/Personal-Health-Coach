@@ -39,6 +39,8 @@ export type SupabaseErrorKind =
   | 'rate_limited'
   /** 服务端能力未开启 */
   | 'not_implemented'
+  /** 云库结构落后于代码：缺列 / 旧外键——重跑 supabase/schema.sql 全文 */
+  | 'schema'
   | 'unknown';
 
 export class SupabaseError extends Error {
@@ -63,6 +65,11 @@ function mapStatus(status: number, body: string): SupabaseError {
   if (status === 404) return new SupabaseError('not_found', `记录不存在（404）`, status);
   if (status === 429 || /rate limit|too many requests/i.test(body)) {
     return new SupabaseError('rate_limited', `请求过于频繁（${status}）：稍后重试`, status);
+  }
+  // 云库结构落后于代码：旧外键（409+23503）或缺列（400/409+PGRST204 等）。
+  // 与「记录已存在」的冲突完全两回事,对症处置是重跑 supabase/schema.sql 全文。
+  if (/foreign key|23503|does not exist|PGRST204|42703/i.test(body)) {
+    return new SupabaseError('schema', `云库结构未更新（${status}）：SQL Editor 全文重跑 supabase/schema.sql 后重试`, status);
   }
   if (status === 409 || /duplicate key|unique constraint/i.test(body)) {
     return new SupabaseError('conflict', `冲突：记录已存在（${status}）`, status);

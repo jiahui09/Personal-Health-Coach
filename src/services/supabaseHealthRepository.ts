@@ -56,21 +56,9 @@ const nowClock = (): string => new Date().toTimeString().slice(0, 5);
 function toRepositoryError(err: unknown): RepositoryError {
   if (err instanceof RepositoryError) return err;
   if (err instanceof SupabaseError) {
-    const code =
-      err.kind === 'auth'
-        ? 'auth'
-        : err.kind === 'network'
-        ? 'network'
-        : err.kind === 'rate_limited'
-        ? 'rate_limited'
-        : err.kind === 'not_implemented'
-        ? 'not_implemented'
-        : err.kind === 'conflict'
-        ? 'conflict'
-        : err.kind === 'not_found'
-        ? 'not_found'
-        : 'unknown';
-    return new RepositoryError(code, err.message, { cause: err });
+    // SupabaseErrorKind 与 RepositoryErrorCode 是同一组成员：直接透传,
+    // 两集合一旦分叉 tsc 即报错（不许错误码在层间静默走样）。
+    return new RepositoryError(err.kind, err.message, { cause: err });
   }
   return new RepositoryError('unknown', (err as Error)?.message ?? String(err), { cause: err });
 }

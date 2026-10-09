@@ -31,7 +31,7 @@ import { healthRepository, repositoryKind } from './services/repository';
 import { AccountGate } from './components/AccountGate';
 import { SectionNav } from './components/SectionNav';
 import { PAGE_SECTIONS } from './data/pageSections';
-import { toRepositoryError, type Account } from './services/healthRepository';
+import { toRepositoryError, type Account, type RepositoryErrorCode } from './services/healthRepository';
 import { shouldAutoRefresh, REFRESH_MIN_INTERVAL_MS } from './services/refreshPolicy';
 import { InkButton } from './components/InkButton';
 import {
@@ -54,6 +54,21 @@ const SLOT_CN: Record<string, string> = {
   lunch: '午膳',
   dinner: '晚膳',
   snack: '加餐',
+};
+
+/**
+ * 失败动作的对症处置（随失败 toast 落出）：错误码 →「下一步该做什么」的一句话。
+ * 穷尽 Record —— 日后新增错误码时 tsc 会强迫同时给出人话处置,不许只甩英文码。
+ */
+const FAIL_HINT: Record<RepositoryErrorCode, string> = {
+  network: '连不上云库 · 检查网络后重试',
+  auth: '标记未获放行 · 重跑 supabase/schema.sql 的策略段',
+  rate_limited: '请求过于频繁 · 稍后重试',
+  conflict: '此记录已存在 · 刷新后再录',
+  not_found: '记录不在本册 · 刷新重试',
+  not_implemented: '后端未开通 · 核对 VITE_SUPABASE_URL / ANON_KEY',
+  schema: '云库结构未更新 · 到 SQL Editor 全文重跑 supabase/schema.sql 后重试',
+  unknown: '未明之因 · 见部署文档排错表',
 };
 
 export default function App() {
@@ -124,7 +139,7 @@ export default function App() {
     } catch (err) {
       const error = toRepositoryError(err);
       console.error(`[App] ${failureMessage}:`, error);
-      showToast(`${failureMessage}（${error.code}）`, false);
+      showToast(`${failureMessage} · ${FAIL_HINT[error.code]}`, false);
       return false;
     } finally {
       if (singleFlightKey) inflightRef.current.delete(singleFlightKey);
@@ -160,7 +175,7 @@ export default function App() {
       setLoadError(
         error.code === 'not_implemented'
           ? '云库（Supabase）既配而后端之法未通：请去 .env 中 VITE_SUPABASE_* 之项，或补其实作。'
-          : `手记取阅未成（${error.code}）`
+          : `手记取阅未成 · ${FAIL_HINT[error.code]}`
       );
     } finally {
       setIsLoading(false);
@@ -309,7 +324,7 @@ export default function App() {
     } catch (err) {
       const error = toRepositoryError(err);
       console.error('[App] 退出未成:', error);
-      showToast(`退出未成（${error.code}）`, false);
+      showToast(`退出未成 · ${FAIL_HINT[error.code]}`, false);
     }
   };
 

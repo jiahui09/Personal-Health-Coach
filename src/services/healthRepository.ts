@@ -41,6 +41,7 @@ export type RepositoryErrorCode =
   | 'conflict' // concurrent write, unique constraint violated
   | 'not_found' // row missing or owned by someone else
   | 'not_implemented' // backend stub not wired yet
+  | 'schema' // 云库结构落后于代码（旧外键/缺列）:全文重跑 supabase/schema.sql
   | 'unknown';
 
 /** Single error vocabulary so the UI can map a failure to a message and a retry. */
