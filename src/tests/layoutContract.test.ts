@@ -214,4 +214,34 @@ assert(
 );
 assert(bodySheet.includes('零偏移'), '体征表以零偏移为契约（注释留痕）');
 
+// --- 12. 动作轻重与水墨交互（页内动作不抢戏;交互只动 transform/opacity,零偏移） ---
+// 首用立档：固定数据（身高/性别/出生年等）录一次、随手记名长存——
+// 入口必须在首屏且随「未建档」而生、建档即自去,不藏在体征节的警示里。
+assert(app.includes('first-run-profile'), '首用立档入口置于首屏（未建档才出现）');
+assert(
+  app.includes('!todayData.body.complete && ('),
+  '立档之请以未建档为条件（建档后入口自去,不再打扰）'
+);
+assert(app.includes('随手记名长存'), '立档文案明示：固定数据录一次即随手记名长存');
+// 页内动作（照准/毕此一练/录之/再试一次）一律描边轻按钮,注意力归内容;
+// 实墨主按钮只留弹层内的郑重确认。
+for (const f of ['NextMealCard.tsx', 'NextWorkoutCard.tsx', 'TodayTasks.tsx']) {
+  assert(comp(f).includes('btn-quiet'), `${f} 页内动作用描边轻按钮,不抢戏`);
+  assert(!comp(f).includes('btn-primary'), `${f} 不复用实墨主按钮`);
+}
+for (const f of ['SheetShell.tsx', 'ProfileSheet.tsx', 'AccountGate.tsx']) {
+  assert(comp(f).includes('<InkButton'), `${f} 的郑重确认走水墨按钮（光影/轻沉/落墨）`);
+}
+// 水墨交互层：墨迹生成于落点、半径铺满按钮;只动 transform/opacity 与绝对定位 → 零偏移。
+const inkBtn = comp('InkButton.tsx');
+assert(inkBtn.includes("className = 'ink-ripple'"), 'InkButton 落点生成墨迹层');
+assert(inkBtn.includes('spreadRadius'), '墨迹半径按落点算到最远角,保证铺满按钮');
+assert(inkBtn.includes('墨已落纸'), '松开落墨即业务接入点之记（逻辑仍在 click）');
+assert(css.includes('.ink-ripple') && css.includes('position: absolute'), '墨迹绝对定位内嵌按钮,不入版面流');
+assert(css.includes('animation: ink-spread'), '涟漪走 CSS animation（离主线程）');
+assert(/@keyframes[\s\S]*?transform: translate\(-50%, -50%\)/.test(css), '涟漪只动 transform/opacity');
+assert(css.includes('prefers-reduced-motion'), '水墨交互带减弱动效档（留反馈,去位移）');
+assert(css.includes('@media (hover: none) and (pointer: coarse)'), '触屏不显跟随柔光（其余环境照常随指针）');
+assert(css.includes('.btn-quiet'), '描边轻按钮成级（与实墨主按钮同组度量）');
+
 console.log('ALL LAYOUT CONTRACT TESTS PASSED.');

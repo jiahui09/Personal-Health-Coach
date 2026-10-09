@@ -38,6 +38,8 @@
     'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   --font-serif: 'Newsreader', 'Noto Serif SC', 'Songti SC', 'Source Han Serif SC',
     'Noto Serif CJK SC', Georgia, serif;
+  /* easing —— 强 ease-out:墨落即开、收放无迟滞;按钮与涟漪动画统一取此档 */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 @layer base {
@@ -78,8 +80,9 @@
 }
 
 @layer components {
-  /* 动作三级体系:墨实心主按钮 → 描边次按钮 → 文字链。
-     绿不作按钮底色(只表状态/达标/图表);圆角仍全站唯一 8px 档。 */
+  /* 动作三级体系:墨实心主按钮（弹层内的郑重确认） → 描边轻按钮（就地动作,不抢戏）
+     → 文字链。绿不作按钮底色(只表状态/达标/图表);圆角仍全站唯一 8px 档。
+     页内动作（毕此一练/照准/录之）一律用 .btn-quiet：注意力归内容,不归按钮。 */
   .btn-primary {
     display: inline-flex;
     align-items: center;
@@ -94,9 +97,119 @@
     border-radius: 8px;
     transition: background-color 150ms;
     cursor: pointer;
+    /* 水墨交互层:实墨底上,柔光与落墨取纸色系才可见 */
+    --ink-glow: color-mix(in srgb, var(--color-paper) 18%, transparent);
+    --ink-wash: color-mix(in srgb, var(--color-paper) 30%, transparent);
   }
   .btn-primary:hover {
     background-color: var(--color-ink2);
+  }
+
+  /* 描边轻按钮:与主按钮同组度量（同高同字）,只换轻重——纸底、1px 控制线,
+     hover 只压一层极淡墨晕,不加影不加色。 */
+  .btn-quiet {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.625rem 1.25rem;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--color-ink);
+    background-color: transparent;
+    border: 1px solid var(--color-control);
+    border-radius: 8px;
+    transition: background-color 150ms, border-color 150ms;
+    cursor: pointer;
+    --ink-glow: color-mix(in srgb, var(--color-ink) 12%, transparent);
+    --ink-wash: color-mix(in srgb, var(--color-ink) 20%, transparent);
+  }
+  .btn-quiet:hover {
+    background-color: var(--color-linesoft);
+    border-color: var(--color-ink3);
+  }
+
+  /* ---------- 水墨交互层（InkButton 自动挂 .ink-btn） ----------
+     光影跟随:悬停时一团柔光随指针(仅精细指针;150ms 极轻显隐)。
+     按下轻沉:1px 下沉,100ms。
+     落点起墨:.ink-ripple 由 InkButton 生成于落点,半径铺满按钮,噪点滤镜毛边,
+     240ms 落开即散。
+     全部只动 transform/opacity 与绝对定位 → 不改布局,零偏移;涟漪在按钮
+     overflow 之内,不越界。 */
+  .ink-btn {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    transition: transform 100ms var(--ease-out), background-color 150ms,
+      border-color 150ms;
+  }
+  .ink-btn:active {
+    transform: translateY(1px);
+  }
+  .ink-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: radial-gradient(
+      90px circle at var(--mx, 50%) var(--my, 50%),
+      var(--ink-glow, transparent),
+      transparent 70%
+    );
+    opacity: 0;
+    transition: opacity 150ms;
+    pointer-events: none;
+  }
+  .ink-btn:hover::before {
+    opacity: 1;
+  }
+  /* 触屏（无悬停 + 粗指针）不出柔光;桌面与无指向环境照常随指针 */
+  @media (hover: none) and (pointer: coarse) {
+    .ink-btn:hover::before {
+      opacity: 0;
+    }
+  }
+  .ink-ripple {
+    position: absolute;
+    z-index: -1;
+    border-radius: 50%;
+    background: var(--ink-wash, color-mix(in srgb, var(--color-ink) 20%, transparent));
+    filter: url(#ink-noise);
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.1);
+    animation: ink-spread 240ms var(--ease-out) forwards;
+  }
+  @keyframes ink-spread {
+    30% {
+      opacity: 0.9;
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 0;
+    }
+  }
+  /* 减弱动效:柔光不随指针走、按钮不下沉、墨迹只作短促隐没——留反馈,去位移 */
+  @media (prefers-reduced-motion: reduce) {
+    .ink-btn {
+      transition: background-color 150ms, border-color 150ms;
+    }
+    .ink-btn:active {
+      transform: none;
+    }
+    .ink-ripple {
+      transform: translate(-50%, -50%) scale(0.6);
+      animation: ink-fade 150ms linear forwards;
+    }
+    @keyframes ink-fade {
+      from {
+        opacity: 0.7;
+      }
+      to {
+        opacity: 0;
+      }
+    }
   }
 
   .btn-link {

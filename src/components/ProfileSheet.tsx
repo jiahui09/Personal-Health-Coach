@@ -7,6 +7,7 @@ import { ACTIVITY_CN, DIRECTION_CN } from '../services/decisionCopy';
 import { useSheetBehavior } from '../hooks/useSheetBehavior';
 import { TRAINING_POLICY } from '../domain/policy';
 import { chipClass } from './SheetShell';
+import { InkButton } from './InkButton';
 
 interface ProfileSheetProps {
   isOpen: boolean;
@@ -249,7 +250,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
           )}
 
           <div className="pt-2">
-            <button
+            <InkButton
               type="submit"
               disabled={!valid || isSaving}
               className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
@@ -262,7 +263,7 @@ export const ProfileSheet: React.FC<ProfileSheetProps> = ({
               ) : (
                 <span>照准</span>
               )}
-            </button>
+            </InkButton>
           </div>
         </form>
         </div>

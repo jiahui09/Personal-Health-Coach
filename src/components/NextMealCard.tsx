@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Check, Plus } from 'lucide-react';
 import { MealRecommendation } from '../types/health';
+import { InkButton } from './InkButton';
 
 interface NextMealCardProps {
   nextMeal: MealRecommendation;
@@ -112,14 +113,14 @@ export const NextMealCard: React.FC<NextMealCardProps> = ({
               <span>别录一品</span>
             </button>
             {!nextMeal.unavailable && (
-              <button
+              <InkButton
                 onClick={() => void handleQuickLog()}
                 disabled={logging}
-                className="btn-primary whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-quiet whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check className="w-4 h-4 shrink-0 stroke-[2.5]" />
                 <span>照准</span>
-              </button>
+              </InkButton>
             )}
           </div>
         </div>

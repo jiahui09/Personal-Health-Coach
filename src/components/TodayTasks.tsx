@@ -5,6 +5,7 @@ import { TodoItem } from '../types/health';
 import type { TaskProgress } from '../domain/types';
 import { SectionHead } from './SectionHead';
 import { cnCount } from '../utils/cnCount';
+import { InkButton } from './InkButton';
 
 interface TodayTasksProps {
   todos: TodoItem[];
@@ -156,9 +157,9 @@ export const TodayTasks: React.FC<TodayTasksProps> = ({
                   placeholder="留空即无"
                   className="w-24 text-[16px] bg-surface border border-control rounded-lg px-3 py-1.5 focus:border-accent text-ink tabular-nums"
                 />
-                <button type="submit" className="btn-primary px-3 py-1.5">
+                <InkButton type="submit" className="btn-quiet px-3 py-1.5">
                   录之
-                </button>
+                </InkButton>
                 <button
                   type="button"
                   onClick={() => {
@@ -213,9 +214,9 @@ export const TodayTasks: React.FC<TodayTasksProps> = ({
               title="拟时长（分）；留空即无时长"
               className="w-20 text-[16px] bg-surface border border-control rounded-lg px-2 py-1.5 focus:border-accent text-ink tabular-nums"
             />
-            <button type="submit" className="btn-primary px-3 py-1.5">
+            <InkButton type="submit" className="btn-quiet px-3 py-1.5">
               录之
-            </button>
+            </InkButton>
             <button
               type="button"
               onClick={() => setIsAdding(false)}

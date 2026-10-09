@@ -33,6 +33,7 @@ import { SectionNav } from './components/SectionNav';
 import { PAGE_SECTIONS } from './data/pageSections';
 import { toRepositoryError, type Account } from './services/healthRepository';
 import { shouldAutoRefresh, REFRESH_MIN_INTERVAL_MS } from './services/refreshPolicy';
+import { InkButton } from './components/InkButton';
 import {
   CreateDailyStateInput,
   CreateMealInput,
@@ -477,15 +478,15 @@ export default function App() {
         <div className="min-h-screen bg-paper flex items-center justify-center px-6">
           <div className="max-w-sm text-center space-y-3">
             <p className="text-sm text-ink2">{loadError}</p>
-            <button
+            <InkButton
               onClick={() => {
                 setIsLoading(true);
                 loadData();
               }}
-              className="btn-primary"
+              className="btn-quiet"
             >
               再试一次
-            </button>
+            </InkButton>
           </div>
         </div>
       );
@@ -551,6 +552,23 @@ export default function App() {
             timeGreeting={todayData.timeGreeting}
           />
         </div>
+
+        {/* 首用立档之请：随「未建档」而生、建档即自去——固定数据录一次,
+            随手记名长存。入口放首屏,免得只藏在体征节的警示里找不着 */}
+        {!todayData.body.complete && (
+          <div
+            id="first-run-profile"
+            className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-b border-line px-1 py-2.5"
+          >
+            <p className="text-[13px] text-ink2 leading-relaxed">
+              首次使用：先立一档——身高、性别、出生年、活动水平、目标皆是固定之数，
+              录一次即随手记名长存，此后不再追问。
+            </p>
+            <InkButton onClick={() => setProfileSheetOpen(true)} className="btn-quiet shrink-0">
+              立档
+            </InkButton>
+          </div>
+        )}
 
         {/* 今日之事 ↔ 今日之练同行：待办与今日之练排一行（折缝分栏;移动端纵向相随,
             桌面两格同高同顶,章节横线跨栏同 y） */}

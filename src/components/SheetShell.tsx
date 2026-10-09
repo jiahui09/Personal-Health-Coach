@@ -6,6 +6,7 @@ import { motion } from 'motion/react';
 import { X, Check } from 'lucide-react';
 import type { BodyweightExercise } from '../types/health';
 import { useSheetBehavior } from '../hooks/useSheetBehavior';
+import { InkButton } from './InkButton';
 
 /** 录事三域：入口在各节就地按钮，此处仅作 App 路由到表的判别。 */
 export type RecordTab = 'meal' | 'workout' | 'body';
@@ -243,7 +244,7 @@ export const SheetShell: React.FC<SheetShellProps> = ({
 
             {/* Action Button */}
             <div className="pt-2">
-              <button
+              <InkButton
                 type="submit"
                 disabled={isSubmitting}
                 className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
@@ -258,7 +259,7 @@ export const SheetShell: React.FC<SheetShellProps> = ({
                 ) : (
                   <span>{submitLabel}</span>
                 )}
-              </button>
+              </InkButton>
               {guardNotice && (
                 <p role="status" className="mt-2.5 text-[12px] text-ink2 leading-relaxed">
                   表中已有录文——点遮罩不阖；按 Esc 或右上角「阖之」离表，残稿留于本机。

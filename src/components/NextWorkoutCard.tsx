@@ -5,6 +5,7 @@ import { WorkoutCategory, WorkoutRecommendation, WorkoutRecord } from '../types/
 import type { WorkoutDecision } from '../domain/types';
 import { describeWorkoutDecision } from '../services/decisionCopy';
 import { SectionHead } from './SectionHead';
+import { InkButton } from './InkButton';
 
 /** 已录训练的类别:一律译作中文,不把英文原词漏给页面。 */
 const WORKOUT_CATEGORY_CN: Record<WorkoutCategory, string> = {
@@ -142,14 +143,14 @@ export const NextWorkoutCard: React.FC<NextWorkoutCardProps> = ({
               </div>
             ) : nextWorkout.exercises.length > 0 ? (
               /* 无课之日（休憩/恢复且无动作）不给勾销:点了会凭空记一笔与本页不符的训练 */
-              <button
+              <InkButton
                 onClick={() => void handleComplete()}
                 disabled={completing}
-                className="btn-primary whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-quiet whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check className="w-3.5 h-3.5 shrink-0 stroke-[2.5]" />
                 <span>毕此一练</span>
-              </button>
+              </InkButton>
             ) : null}
           </div>
         </div>

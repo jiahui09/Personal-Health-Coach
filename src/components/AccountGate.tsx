@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import { Check, AlertTriangle } from 'lucide-react';
 import { accountNameError } from '../services/accountMarker';
+import { InkButton } from './InkButton';
 
 interface AccountGateProps {
   /** 打开手记（写归属标记 + 取数）；失败时 App 把仓库错误码存进 reason,由本门对症提示。 */
@@ -81,7 +82,7 @@ export const AccountGate: React.FC<AccountGateProps> = ({ onEnter, reason }) => 
             />
           </label>
 
-          <button
+          <InkButton
             type="submit"
             disabled={busy}
             className="btn-primary w-full mt-3 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -94,7 +95,7 @@ export const AccountGate: React.FC<AccountGateProps> = ({ onEnter, reason }) => 
                 <span>打开手记</span>
               </>
             )}
-          </button>
+          </InkButton>
 
           {/* 提示与告警一律收在按钮之下：出现时上方组件纹丝不动（零偏移） */}
           <p className="mt-3 text-[12px] text-ink4 leading-relaxed">
