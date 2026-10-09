@@ -6,9 +6,9 @@
  *      time 'HH:MM:SS' 都能吃下；
  *   2. **跨路径一致性**：同一批原始记录，本地（直接给域模型）与云端（域模型→行→域模型）
  *      经 assembleToday 得到的 TodayData 必须逐字节相同 —— 这是「两条数据路径不会漂移」的证明；
- *   3. 传输层：magic link 发送、hash 换会话、过期刷新、错误码映射（401→auth / 409→conflict /
- *      网络异常→network）；
- *   4. 仓库层：未登录一律抛 auth（绝不静默返回空数据）、同日体重走 PATCH 而非新增、
+ *   3. 身份与传输层：手记名 → 归属标记（确定性、可复算、不联网；账号只作标记,不设防）；
+ *      无标记时一个网络请求都不发、错误码映射（401→auth / 409→conflict / 网络异常→network）；
+ *   4. 仓库层：无标记一律抛 auth（绝不静默返回空数据）、同日体重走 PATCH 而非新增、
  *      档案走 upsert、云端「复其初」显式拒绝（绝不清真实数据）。
  */
 
@@ -17,8 +17,8 @@ import {
   SupabaseError,
   SupabaseRest,
   type StorageLike,
-  type SupabaseSession,
 } from '../services/supabaseRest';
+import { markerUserId } from '../services/accountMarker';
 import {
   mealFromRow,
   mealToRow,
@@ -102,22 +102,12 @@ function memoryStorage(): StorageLike & { dump(): Record<string, string> } {
   };
 }
 
-/** 带有效会话的存储（多数数据请求需要先登录）。 */
-function authedStorage(expiresAt = Date.now() + 3_600_000): StorageLike {
+/** 带归属标记的存储（数据方法都要先「打开手记」）。 */
+function accountStorage(name = '手记甲'): StorageLike {
   const storage = memoryStorage();
-  storage.setItem(
-    'phc_supabase_session_v1',
-    JSON.stringify({ accessToken: 'at', refreshToken: 'rt', expiresAt, userId: UID, email: null })
-  );
+  storage.setItem('phc_account_v1', JSON.stringify({ userId: UID, name }));
   return storage;
 }
-
-const sessionBody = {
-  access_token: 'at-1',
-  refresh_token: 'rt-1',
-  expires_in: 3600,
-  user: { id: UID, email: 'me@example.com' },
-};
 
 // ---------------- 1. 映射：形状与容错 ----------------
 
@@ -210,51 +200,52 @@ ok('跨路径一致性：同一批记录 → 同一份 TodayData');
 
 const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
 
-// magic link 发送
+// 手记名 → 归属标记（确定性、可复算、不联网；没有 GoTrue/密码/邮件）
 {
-  const { fetchImpl, calls } = makeFetch([{ method: 'POST', match: (u) => u.includes('/auth/v1/otp'), body: {} }]);
+  const storage = memoryStorage();
+  const rest = new SupabaseRest(cfg, { fetchImpl: makeFetch([]).fetchImpl, storage });
+  assert(rest.hasAccount() === false, '从未打开 → hasAccount=false（先到账号门）');
+
+  const seen: (string | null)[] = [];
+  rest.onAccountChange((acct) => seen.push(acct?.userId ?? null));
+  const account = rest.enterByName('  My手记 ');
+  assert(account.name === 'My手记', '显示名只压空白、保留大小写');
+  assert(account.userId === markerUserId('my手记'), '归一后同名派生同一标记');
+  assert(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(account.userId),
+    '标记呈 UUID 形（落 uuid 列）'
+  );
+  assert(storage.dump()['phc_account_v1'] !== undefined, '标记落盘本机');
+  assert(seen.length === 1 && seen[0] === account.userId, '订阅者收到「打开手记」事件');
+
+  // 换设备（新实例、同一份本机存储）→ 同一个标记：同名即同库
+  const again = new SupabaseRest(cfg, { fetchImpl: makeFetch([]).fetchImpl, storage });
+  assert(again.getAccount()?.userId === account.userId, '重启读到同一标记（跨设备同名同库）');
+
+  rest.signOut();
+  assert(rest.hasAccount() === false, '退出后 hasAccount=false');
+  assert(storage.dump()['phc_account_v1'] === undefined, '退出只清本机标记（云端数据不动）');
+  assert(seen.at(-1) === null && seen.length === seen.filter((v) => v !== null).length + 1, '退出也通知订阅者');
+  ok('手记名：确定性标记、落盘、退出只清本机');
+}
+
+// 无标记：数据请求一个都不发,直接 auth（绝不静默返回空数据）；请求头恒为公开 anon key
+{
+  const { fetchImpl, calls } = makeFetch([{ method: 'GET', match: () => true, body: [] }]);
   const rest = new SupabaseRest(cfg, { fetchImpl, storage: memoryStorage() });
-  await rest.sendMagicLink('me@example.com', 'https://app.example.com');
-  const call = calls[0];
-  assert(call.headers.apikey === 'anon-key', '发送登录邮件带 apikey');
-  assert(call.url === 'https://demo.supabase.co/auth/v1/otp', 'OTP 端点正确');
-  assert(JSON.stringify(call.body).includes('me@example.com'), '载荷包含邮箱');
-  assert(JSON.stringify(call.body).includes('https://app.example.com'), '载荷包含回跳地址');
-  ok('magic link：发送端点、apikey、回跳地址正确');
-}
+  try {
+    await rest.select('meals', 'select=*');
+    assert(false, '无标记时读应当抛出');
+  } catch (err) {
+    assert(err instanceof SupabaseError && err.kind === 'auth', '无标记 → auth');
+  }
+  assert(calls.length === 0, '无标记时不发任何网络请求');
 
-// hash 换会话 + 会话持久化
-{
-  const storage = memoryStorage();
-  const { fetchImpl } = makeFetch([
-    { method: 'GET', match: (u) => u.includes('/auth/v1/user'), body: { id: UID, email: 'me@example.com' } },
-  ]);
-  const rest = new SupabaseRest(cfg, { fetchImpl, storage });
-  const session = await rest.completeMagicLink('#access_token=at-9&refresh_token=rt-9&expires_in=3600&token_type=bearer');
-  assert(session?.userId === UID && session.email === 'me@example.com', 'hash → 会话（含用户身份）');
-  assert(storage.dump()['phc_supabase_session_v1'] !== undefined, '会话写入本地存储（刷新后仍登录）');
-  assert(rest.getSession()?.accessToken === 'at-9', '内存会话可读');
-  ok('magic link 回跳：hash 换会话并持久化');
-}
-
-// 过期刷新 + 未登录
-{
-  const storage = memoryStorage();
-  let now = 1_000_000;
-  const { fetchImpl, calls } = makeFetch([
-    { method: 'GET', match: (u) => u.includes('/auth/v1/user'), body: { id: UID, email: 'me@example.com' } },
-    { method: 'POST', match: (u) => u.includes('grant_type=refresh_token'), body: { ...sessionBody, access_token: 'at-2' } },
-  ]);
-  const rest = new SupabaseRest(cfg, { fetchImpl, storage, now: () => now });
-  await rest.completeMagicLink('#access_token=at-1&refresh_token=rt-1&expires_in=60');
-  now += 30_000; // 距过期 30 秒 → 落在刷新余量内
-  const refreshed = await rest.ensureSession();
-  assert(refreshed?.accessToken === 'at-2', '临近过期自动刷新令牌');
-  assert(calls.some((c) => c.url.includes('grant_type=refresh_token')), '确实调用了刷新端点');
-
-  const bare = new SupabaseRest(cfg, { fetchImpl, storage: memoryStorage() });
-  assert(bare.getSession() === null && (await bare.ensureSession()) === null, '无会话时 ensureSession 返回 null');
-  ok('会话：临近过期刷新；未登录返回 null');
+  rest.enterByName('甲');
+  await rest.select('meals', 'select=*');
+  assert(calls[0].headers.apikey === 'anon-key', '请求带 apikey');
+  assert(calls[0].headers.Authorization === 'Bearer anon-key', '请求带 Bearer（公开 anon key,无会话令牌）');
+  ok('数据请求：无标记先到账号门；请求头恒为公开 anon key');
 }
 
 // 错误码映射
@@ -268,7 +259,7 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
   ];
   for (const [status, kind] of cases) {
     const { fetchImpl } = makeFetch([{ method: 'GET', match: () => true, status, body: { message: 'x' } }]);
-    const rest = new SupabaseRest(cfg, { fetchImpl, storage: authedStorage() });
+    const rest = new SupabaseRest(cfg, { fetchImpl, storage: accountStorage() });
     try {
       await rest.select('weight_records', 'select=*');
       assert(false, `HTTP ${status} 应当抛出`);
@@ -279,7 +270,7 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
   const throwing = (async () => {
     throw new TypeError('Failed to fetch');
   }) as unknown as typeof fetch;
-  const rest = new SupabaseRest(cfg, { fetchImpl: throwing, storage: authedStorage() });
+  const rest = new SupabaseRest(cfg, { fetchImpl: throwing, storage: accountStorage() });
   try {
     await rest.select('meals', 'select=*');
     assert(false, '网络异常应当抛出');
@@ -287,157 +278,36 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
     assert(err instanceof SupabaseError && err.kind === 'network', '网络异常 → network');
   }
 
-  // 瞬时故障（刷新响应空体 / 5xx）：不误登出——保留会话，真失效留给下游如实报 auth
-  {
-    const storage = authedStorage(Date.now() - 1000); // 已过期 → 触发刷新
-    const { fetchImpl } = makeFetch([
-      { method: 'POST', match: (u) => u.includes('grant_type=refresh_token'), status: 200, body: undefined },
-    ]);
-    const broken = new SupabaseRest(cfg, { fetchImpl, storage });
-    assert((await broken.ensureSession()) !== null, '刷新响应为空（网关瞬时异常）→ 保留会话,不误登出');
-    assert(broken.getSession() !== null, '会话仍在（后续请求若真失效会如实报 auth）');
-  }
-  {
-    const storage = authedStorage(Date.now() - 1000);
-    const { fetchImpl } = makeFetch([
-      { method: 'POST', match: (u) => u.includes('grant_type=refresh_token'), status: 500, body: { message: 'oops' } },
-    ]);
-    const flaky = new SupabaseRest(cfg, { fetchImpl, storage });
-    assert((await flaky.ensureSession()) !== null, '刷新遇 5xx（瞬时故障）→ 保留会话');
-  }
-  // 明确的令牌失效（401）：清会话、止住重试
-  {
-    const storage = authedStorage(Date.now() - 1000);
-    const { fetchImpl } = makeFetch([
-      { method: 'POST', match: (u) => u.includes('grant_type=refresh_token'), status: 401, body: { message: 'invalid refresh token' } },
-    ]);
-    const expired = new SupabaseRest(cfg, { fetchImpl, storage });
-    assert((await expired.ensureSession()) === null, '刷新 401 → 会话失效');
-    assert(expired.getSession() === null, '失效会话被清除');
-  }
-  // 并发刷新去重：同时到期的多个请求只打一次刷新端点
-  {
-    const storage = authedStorage(Date.now() - 1000);
-    const { fetchImpl, calls } = makeFetch([
-      { method: 'POST', match: (u) => u.includes('grant_type=refresh_token'), status: 200, body: { ...sessionBody, access_token: 'at-x' } },
-    ]);
-    const concurrent = new SupabaseRest(cfg, { fetchImpl, storage });
-    const [a, b] = await Promise.all([concurrent.ensureSession(), concurrent.ensureSession()]);
-    assert(a?.accessToken === 'at-x' && b?.accessToken === 'at-x', '并发刷新共享同一结果');
-    assert(
-      calls.filter((c) => c.url.includes('grant_type=refresh_token')).length === 1,
-      '并发只打一次刷新端点'
-    );
-  }
   ok('错误映射：401/403→auth、404→not_found、409→conflict、5xx→unknown、断网→network');
 }
 
-// 邮箱+密码登录（多端同步）
-{
-  const storage = memoryStorage();
-  const { fetchImpl, calls } = makeFetch([
-    { method: 'POST', match: (u) => u.includes('grant_type=password'), body: sessionBody },
-  ]);
-  const rest = new SupabaseRest(cfg, { fetchImpl, storage });
-  const session = await rest.signInWithPassword('me@example.com', 'secret123');
-  assert(session.userId === UID && session.accessToken === 'at-1', '密码登录建立会话');
-  assert(calls[0].url.includes('grant_type=password'), '走 token?grant_type=password 端点');
-  assert(JSON.stringify(calls[0].body).includes('secret123'), '载荷带密码');
-  assert(storage.dump()['phc_supabase_session_v1'] !== undefined, '会话持久化（换设备各登一次即可）');
-
-  // 密码错误 → auth（而不是笼统的 unknown）
-  const bad = makeFetch([
-    { method: 'POST', match: (u) => u.includes('grant_type=password'), status: 400, body: { error: 'invalid_grant', error_description: 'Invalid login credentials' } },
-  ]);
-  try {
-    await new SupabaseRest(cfg, { fetchImpl: bad.fetchImpl, storage: memoryStorage() }).signInWithPassword('me@example.com', 'wrong');
-    assert(false, '密码错误应当抛出');
-  } catch (err) {
-    assert(err instanceof SupabaseError && err.kind === 'auth' && /密码/.test(err.message), '密码错误 → auth 且文案可读');
-  }
-
-  // 仓库：signIn 带密码走密码登录；不带密码仍走 magic link
-  const repoRoutes = makeFetch([
-    { method: 'POST', match: (u) => u.includes('grant_type=password'), body: sessionBody },
-    { method: 'POST', match: (u) => u.includes('/auth/v1/otp'), body: {} },
-  ]);
-  const repo = new SupabaseHealthRepository(cfg, {
-    fetchImpl: repoRoutes.fetchImpl,
-    storage: memoryStorage(),
-  });
-  const user = await repo.signIn('me@example.com', 'secret123');
-  assert(user.id === UID, '仓库 signIn 带密码 → 直接返回已登录身份');
-  assert(repoRoutes.calls.some((c) => c.url.includes('grant_type=password')), '带密码时用密码端点');
-
-  const repo2Routes = makeFetch([
-    { method: 'POST', match: (u) => u.includes('/auth/v1/otp'), body: {} },
-  ]);
-  const repo2 = new SupabaseHealthRepository(cfg, {
-    fetchImpl: repo2Routes.fetchImpl,
-    storage: memoryStorage(),
-  });
-  const pending = await repo2.signIn('me@example.com', '');
-  assert(pending.id === 'pending', '不带密码 → 发 magic link（返回待确认身份）');
-  assert(repo2Routes.calls.some((c) => c.url.includes('/auth/v1/otp')), '不带密码时用 OTP 端点');
-  ok('多端同步：邮箱+密码登录（不发邮件）,并与 magic link 共存');
-}
-
-// hasSession：区分「从未登录」与「有身份但失效」
+// hasAccount：账号只是标记,可区分「没打开过手记」与「已打开」
 {
   const fresh = new SupabaseRest(cfg, { fetchImpl: makeFetch([]).fetchImpl, storage: memoryStorage() });
-  assert(fresh.hasSession() === false, '从未登录 → hasSession=false（先到账号门注册/登录）');
+  assert(fresh.hasAccount() === false, '无标记 → hasAccount=false（先到账号门）');
 
-  const stored = new SupabaseRest(cfg, {
-    fetchImpl: makeFetch([]).fetchImpl,
-    storage: authedStorage(Date.now() - 10_000), // 已过期,但仍算「有身份」
-  });
-  assert(stored.hasSession() === true, '有过身份（哪怕已过期）→ hasSession=true（不得静默换会话）');
+  const stored = new SupabaseRest(cfg, { fetchImpl: makeFetch([]).fetchImpl, storage: accountStorage() });
+  assert(stored.hasAccount() === true, '本机存有标记 → hasAccount=true（直接进手记）');
 
   const repo = new SupabaseHealthRepository(cfg, { fetchImpl: makeFetch([]).fetchImpl, storage: memoryStorage() });
-  assert(repo.hasSession() === false, '仓库透传 hasSession');
-  ok('身份状态：有无身份可区分（静默进入 vs 提示登录）');
-}
-
-// 第三方登录授权地址
-{
-  const rest = new SupabaseRest(cfg, { fetchImpl: makeFetch([]).fetchImpl, storage: memoryStorage() });
-  const url = rest.authorizeUrl('google', 'https://app.example.com');
-  assert(url.startsWith('https://demo.supabase.co/auth/v1/authorize?'), 'OAuth 授权地址指向 GoTrue');
-  assert(url.includes('provider=google') && url.includes('redirect_to=https'), '授权地址带 provider 与回跳');
-  ok('第三方登录：授权地址构造正确（回跳令牌仍由 hash 解析接住）');
-}
-
-// 限流（429）必须映射为 rate_limited,而不是笼统的 unknown
-{
-  const { fetchImpl } = makeFetch([
-    { method: 'POST', match: (u) => u.includes('/auth/v1/otp'), status: 429, body: { error_code: 'over_email_send_rate_limit' } },
-  ]);
-  const rest = new SupabaseRest(cfg, { fetchImpl, storage: memoryStorage() });
-  try {
-    await rest.sendMagicLink('me@example.com', 'https://app.example.com');
-    assert(false, '429 应当抛出');
-  } catch (err) {
-    assert(err instanceof SupabaseError && err.kind === 'rate_limited', '429 → rate_limited');
-  }
-  ok('限流：429 映射为 rate_limited（页面据此给出可执行建议）');
+  assert(repo.hasAccount() === false, '仓库透传 hasAccount');
+  ok('身份状态：有无归属标记可区分（账号门 vs 直接进手记）');
 }
 
 // 查询串构造
 {
-  const session: SupabaseSession = { accessToken: 'at', refreshToken: 'rt', expiresAt: Date.now() + 3_600_000, userId: UID, email: null };
-  const storage = memoryStorage();
-  storage.setItem('phc_supabase_session_v1', JSON.stringify(session));
+  const storage = accountStorage();
   const { fetchImpl, calls } = makeFetch([{ method: 'GET', match: () => true, body: [] }]);
   const rest = new SupabaseRest(cfg, { fetchImpl, storage });
   await rest.select('weight_records', `select=*&user_id=eq.${UID}&measured_on=gte.2026-08-27&order=measured_on.asc`);
   assert(calls[0].url.includes('user_id=eq.user-1'), '查询带 user_id 过滤（RLS 之外再加一道）');
-  assert(calls[0].headers.Authorization === 'Bearer at', '查询带 Bearer 令牌');
+  assert(calls[0].headers.Authorization === 'Bearer anon-key', '查询带 Bearer（公开 anon key）');
   ok('数据请求：URL 过滤与鉴权头正确');
 }
 
 // ---------------- 4. 仓库层 ----------------
 
-// 未登录：必须抛 auth，绝不静默返回空数据
+// 无标记（未打开手记）：必须抛 auth，绝不静默返回空数据
 {
   const { fetchImpl } = makeFetch([]);
   const repo = new SupabaseHealthRepository(cfg, { fetchImpl, storage: memoryStorage(), clock: () => NOW });
@@ -449,22 +319,18 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
   ]) {
     try {
       await call();
-      assert(false, '未登录时数据方法必须抛错');
+      assert(false, '无标记时数据方法必须抛错');
     } catch (err) {
-      assert(err instanceof RepositoryError && err.code === 'auth', '未登录 → RepositoryError(auth)');
+      assert(err instanceof RepositoryError && err.code === 'auth', '无标记 → RepositoryError(auth)');
     }
   }
-  assert((await repo.getCurrentUser()) === null, '未登录时 getCurrentUser 返回 null');
-  ok('未登录：一切数据方法抛 auth（页面据此显示登录页）');
+  assert((await repo.getCurrentUser()) === null, '无标记时 getCurrentUser 返回 null');
+  ok('无标记：一切数据方法抛 auth（页面据此显示账号门）');
 }
 
-// 已登录：取回 TodayData 且与本地算出的派生值一致
+// 已打开手记：取回 TodayData 且与本地算出的派生值一致
 {
-  const storage = memoryStorage();
-  storage.setItem(
-    'phc_supabase_session_v1',
-    JSON.stringify({ accessToken: 'at', refreshToken: 'rt', expiresAt: NOW.getTime() + 3_600_000, userId: UID, email: 'me@example.com' })
-  );
+  const storage = accountStorage('手记甲');
   const seed = createSeedData(NOW);
   const routes: Route[] = [
     { method: 'GET', match: (u) => u.includes('/profiles'), body: [{ user_id: UID, ...profileToRow(UID, seeded) }] },
@@ -479,7 +345,6 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
     fetchImpl,
     storage,
     clock: () => NOW,
-    now: () => NOW.getTime(),
   });
   const today = await repo.getToday();
   assert(today.profileStatus === 'complete', '云端档案齐备 → complete');
@@ -488,17 +353,13 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
   assert(today.nutrition.calories.target === localToday.nutrition.calories.target, '目标与本地路径一致');
   assert(today.body.bmi === localToday.body.bmi, 'BMI 与本地路径一致');
   assert(today.training.decision.mode === localToday.training.decision.mode, '训练决策与本地路径一致');
-  assert((await repo.getCurrentUser())?.email === 'me@example.com', '已登录返回身份');
-  ok('已登录：云端记录 → 与本地完全一致的 TodayData');
+  assert((await repo.getCurrentUser())?.name === '手记甲', '已打开手记 → 返回归属身份');
+  ok('已打开手记：云端记录 → 与本地完全一致的 TodayData');
 }
 
 // 同日体重：走 PATCH 而非新增；档案走 upsert；云端拒绝「复其初」
 {
-  const storage = memoryStorage();
-  storage.setItem(
-    'phc_supabase_session_v1',
-    JSON.stringify({ accessToken: 'at', refreshToken: 'rt', expiresAt: NOW.getTime() + 3_600_000, userId: UID, email: null })
-  );
+  const storage = accountStorage();
   const routes: Route[] = [
     { method: 'GET', match: (u) => u.includes('/profiles'), body: [{ user_id: UID, ...profileToRow(UID, seeded) }] },
     { method: 'GET', match: (u) => u.includes('/weight_records'), body: [{ id: 'w-existing' }] },
@@ -512,7 +373,6 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
     fetchImpl,
     storage,
     clock: () => NOW,
-    now: () => NOW.getTime(),
   });
 
   const updated = await repo.addWeight(57);
@@ -549,64 +409,14 @@ const cfg = { url: 'https://demo.supabase.co', anonKey: 'anon-key' };
   ok('写入语义：同日 PATCH、档案 upsert、删除限本人、拒绝清库');
 }
 
-// ---------------- 5. 注册与批量写入（账号与合并的传输层） ----------------
-
-// 注册：后台已关 Confirm email → 当场拿到会话
-{
-  const storage = memoryStorage();
-  const { fetchImpl, calls } = makeFetch([
-    { method: 'POST', match: (u) => u.includes('/auth/v1/signup'), body: sessionBody },
-  ]);
-  const rest = new SupabaseRest(cfg, { fetchImpl, storage });
-  const result = await rest.signUpWithPassword('me@example.com', 'secret123');
-  assert(result.status === 'signed_in', '带回会话的注册 → 当场 signed_in');
-  const call = calls[0];
-  assert(call.url === 'https://demo.supabase.co/auth/v1/signup', '注册打 signup 端点（不是 otp,不发邮件）');
-  assert((call.body as { email: string }).email === 'me@example.com', '载荷带邮箱');
-  assert((call.body as { password: string }).password === 'secret123', '载荷带密码（密码注册,非 magic link）');
-  assert(storage.dump()['phc_supabase_session_v1'] !== undefined, '会话写入本地存储');
-  ok('注册（自动确认）：signup 端点 + 密码载荷 + 会话落地');
-}
-
-// 注册：仍需确认邮件 → 只建用户、不给会话
-{
-  const storage = memoryStorage();
-  const { fetchImpl } = makeFetch([
-    { method: 'POST', match: (u) => u.includes('/auth/v1/signup'), body: { id: UID, confirmation_sent_at: '2026-09-25T12:00:00Z' } },
-  ]);
-  const rest = new SupabaseRest(cfg, { fetchImpl, storage });
-  const result = await rest.signUpWithPassword('me@example.com', 'secret123');
-  assert(result.status === 'confirmation_required', '无会话的注册 → confirmation_required');
-  assert(storage.dump()['phc_supabase_session_v1'] === undefined, '不写会话（还没确认,不能假装已登录）');
-  ok('注册（需确认邮件）：pending 态且不落会话');
-}
-
-// 注册：邮箱已存在 → email_taken（页面据此提示改用登录）
-{
-  const { fetchImpl } = makeFetch([
-    {
-      method: 'POST',
-      match: (u) => u.includes('/auth/v1/signup'),
-      status: 422,
-      body: { code: 422, error_code: 'user_already_exists', msg: 'User already registered' },
-    },
-  ]);
-  const rest = new SupabaseRest(cfg, { fetchImpl, storage: memoryStorage() });
-  try {
-    await rest.signUpWithPassword('me@example.com', 'secret123');
-    assert(false, '邮箱已注册应当抛错');
-  } catch (err) {
-    assert(err instanceof SupabaseError && err.kind === 'email_taken', '422 user_already_registered → email_taken');
-  }
-  ok('注册：邮箱已存在 → email_taken（不是笼统的 auth）');
-}
+// ---------------- 5. 批量写入的传输层 ----------------
 
 // 批量插入：数组体 + return=representation（合并走它,一次一张表）
 {
   const { fetchImpl, calls } = makeFetch([
     { method: 'POST', match: (u) => u.includes('/rest/v1/meals'), body: [] },
   ]);
-  const rest = new SupabaseRest(cfg, { fetchImpl, storage: authedStorage() });
+  const rest = new SupabaseRest(cfg, { fetchImpl, storage: accountStorage() });
   const rows = [
     { user_id: UID, eaten_on: '2026-09-25', name: '鸡腿饭' },
     { user_id: UID, eaten_on: '2026-09-26', name: '燕麦粥' },

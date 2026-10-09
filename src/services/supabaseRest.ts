@@ -1,34 +1,29 @@
 /**
- * Supabase REST/Auth 客户端（零依赖,纯 fetch）
+ * Supabase PostgREST 客户端（零依赖,纯 fetch）
  *
  * 为什么不用 @supabase/supabase-js：
- *   - 本项目只需要「邮箱 magic link + PostgREST 增删改查」两件事，官方客户端带来的
+ *   - 本项目只需要「按手记名取行 + PostgREST 增删改查」两件事，官方客户端带来的
  *     体积与依赖维护成本大于收益；
  *   - 云端构建（Cloudflare Pages）目前以 `npm ci` 安装，任何新增依赖都必须同步锁文件,
  *     零依赖可以让部署保持确定性。
  *
- * 安全边界：anon key 是公开键,真正的隔离在数据库 RLS（auth.uid() = user_id）。
- * 会话保存在 localStorage,过期前自动刷新；所有请求都带 Bearer access_token。
+ * 归属方式：账号只是标记,不是防线——手记名确定性地派生 user_id,各表行按它分数据。
+ * 没有 GoTrue、没有密码与邮件验证、没有会话与令牌刷新；请求头一律 apikey + Bearer
+ * （均为公开 anon key）。同名即同库,隔离只到「标记」这一层,见 docs/deploy.md §2。
  */
+
+import { displayName, markerUserId } from './accountMarker';
 
 export interface SupabaseConfig {
   url: string;
   anonKey: string;
 }
 
-export interface SupabaseSession {
-  accessToken: string;
-  refreshToken: string;
-  /** 毫秒时间戳 */
-  expiresAt: number;
+/** 手记身份：手记名派生的归属标记（与各表 user_id 同源），存本机 localStorage。 */
+export interface SupabaseAccount {
   userId: string;
-  email: string | null;
+  name: string;
 }
-
-/** 注册结果：关闭「Confirm email」时当场拿到会话；否则只建立用户、等确认邮件。 */
-export type SignUpResult =
-  | { status: 'signed_in'; session: SupabaseSession }
-  | { status: 'confirmation_required' };
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -42,10 +37,8 @@ export type SupabaseErrorKind =
   | 'conflict'
   | 'not_found'
   | 'rate_limited'
-  /** 服务端能力未开启（如邮箱注册被关掉） */
+  /** 服务端能力未开启 */
   | 'not_implemented'
-  /** 注册用的邮箱已存在（422 user_already_registered） */
-  | 'email_taken'
   | 'unknown';
 
 export class SupabaseError extends Error {
@@ -60,18 +53,16 @@ export class SupabaseError extends Error {
   }
 }
 
-const SESSION_KEY = 'phc_supabase_session_v1';
-const REFRESH_MARGIN_MS = 60_000;
+const ACCOUNT_KEY = 'phc_account_v1';
 
 /** PostgREST 过滤片段，值一律由调用方给出常量（不接受用户输入拼接）。 */
 export type Query = string;
 
 function mapStatus(status: number, body: string): SupabaseError {
-  if (status === 401 || status === 403) return new SupabaseError('auth', `未登录或会话过期（${status}）`, status);
+  if (status === 401 || status === 403) return new SupabaseError('auth', `未获授权（${status}）：检查 RLS 策略与 anon key`, status);
   if (status === 404) return new SupabaseError('not_found', `记录不存在（404）`, status);
   if (status === 429 || /rate limit|too many requests/i.test(body)) {
-    // Supabase 内置邮件发送器有小时级限额；这不是应用故障,要让用户看到可执行的建议
-    return new SupabaseError('rate_limited', '发信过于频繁：Supabase 内置邮件已达小时限额', status);
+    return new SupabaseError('rate_limited', `请求过于频繁（${status}）：稍后重试`, status);
   }
   if (status === 409 || /duplicate key|unique constraint/i.test(body)) {
     return new SupabaseError('conflict', `冲突：记录已存在（${status}）`, status);
@@ -82,89 +73,96 @@ function mapStatus(status: number, body: string): SupabaseError {
 export interface SupabaseRestOptions {
   fetchImpl?: typeof fetch;
   storage?: StorageLike;
-  /** 注入时钟,便于测试会话过期逻辑。 */
-  now?: () => number;
 }
 
 export class SupabaseRest {
   private readonly config: SupabaseConfig;
   private readonly fetchImpl: typeof fetch;
   private readonly storage: StorageLike | null;
-  private readonly now: () => number;
-  private session: SupabaseSession | null = null;
-  private listeners = new Set<(session: SupabaseSession | null) => void>();
-  /** 进行中的刷新：并发的 getToday 等请求共用同一次,不重复打刷新端点。 */
-  private refreshInflight: Promise<SupabaseSession | null> | null = null;
+  private account: SupabaseAccount | null = null;
+  private listeners = new Set<(account: SupabaseAccount | null) => void>();
 
   constructor(config: SupabaseConfig, options: SupabaseRestOptions = {}) {
     this.config = config;
     this.fetchImpl = options.fetchImpl ?? ((...args) => fetch(...args));
     this.storage = options.storage ?? (typeof localStorage === 'undefined' ? null : localStorage);
-    this.now = options.now ?? (() => Date.now());
-    this.session = this.readStoredSession();
+    this.account = this.readStoredAccount();
   }
 
-  // ---------------- 会话 ----------------
+  // ---------------- 手记身份（本机标记,无服务端会话） ----------------
 
-  private readStoredSession(): SupabaseSession | null {
+  private readStoredAccount(): SupabaseAccount | null {
     if (!this.storage) return null;
     try {
-      const raw = this.storage.getItem(SESSION_KEY);
+      const raw = this.storage.getItem(ACCOUNT_KEY);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as SupabaseSession;
-      return parsed.accessToken && parsed.refreshToken ? parsed : null;
+      const parsed = JSON.parse(raw) as SupabaseAccount;
+      return parsed.userId ? parsed : null;
     } catch {
       return null;
     }
   }
 
-  private writeSession(session: SupabaseSession | null): void {
-    this.session = session;
+  /** 打开手记：手记名 → 归属标记,落盘本机并通知订阅者（不联网、不验证）。 */
+  enterByName(rawName: string): SupabaseAccount {
+    const account: SupabaseAccount = { userId: markerUserId(rawName), name: displayName(rawName) };
+    this.account = account;
     if (this.storage) {
       try {
-        if (session) this.storage.setItem(SESSION_KEY, JSON.stringify(session));
-        else this.storage.removeItem(SESSION_KEY);
+        this.storage.setItem(ACCOUNT_KEY, JSON.stringify(account));
       } catch {
-        // 存储不可用（隐私模式）时仅保留内存会话
+        // 存储不可用（隐私模式）时仅保留内存身份
       }
     }
-    for (const listener of this.listeners) listener(session);
+    for (const listener of this.listeners) listener(account);
+    return account;
   }
 
-  getSession(): SupabaseSession | null {
-    return this.session;
+  /** 退出：只清本机标记,云端数据不动。 */
+  signOut(): void {
+    this.account = null;
+    if (this.storage) {
+      try {
+        this.storage.removeItem(ACCOUNT_KEY);
+      } catch {
+        // 存储不可用时无须处理：本机已无从读到标记
+      }
+    }
+    for (const listener of this.listeners) listener(null);
   }
 
-  /** 本机是否存有会话（可能是过期但可刷新的）。
-   *  用于区分「从未登录 → 可静默建立身份」与「曾有身份但失效 → 不得静默换新身份」。 */
-  hasSession(): boolean {
-    return this.session !== null;
+  getAccount(): SupabaseAccount | null {
+    return this.account;
   }
 
-  onAuthChange(listener: (session: SupabaseSession | null) => void): () => void {
+  hasAccount(): boolean {
+    return this.account !== null;
+  }
+
+  onAccountChange(listener: (account: SupabaseAccount | null) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
-  private headers(withAuth: boolean): Record<string, string> {
-    const headers: Record<string, string> = {
+  /** 请求头：apikey + Bearer（均为公开 anon key;数据不设防,归属靠行上的 user_id 标记）。 */
+  private headers(): Record<string, string> {
+    return {
       apikey: this.config.anonKey,
+      Authorization: `Bearer ${this.config.anonKey}`,
       'Content-Type': 'application/json',
     };
-    if (withAuth && this.session) headers.Authorization = `Bearer ${this.session.accessToken}`;
-    return headers;
   }
 
   private async request(
     path: string,
-    init: { method?: string; body?: unknown; headers?: Record<string, string>; auth?: boolean } = {}
+    init: { method?: string; body?: unknown; headers?: Record<string, string> } = {}
   ): Promise<Response> {
-    const { method = 'GET', body, headers = {}, auth = true } = init;
+    const { method = 'GET', body, headers = {} } = init;
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.config.url}${path}`, {
         method,
-        headers: { ...this.headers(auth), ...headers },
+        headers: { ...this.headers(), ...headers },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (err) {
@@ -180,224 +178,7 @@ export class SupabaseRest {
     return JSON.parse(text) as T;
   }
 
-  // ---------------- 认证（magic link） ----------------
-
-  /** 认证端点的会话载荷 → SupabaseSession；缺 access/refresh/user.id 即视为「没有会话」。 */
-  private toSession(payload: unknown): SupabaseSession | null {
-    const data = payload as {
-      access_token?: string;
-      refresh_token?: string;
-      expires_in?: number;
-      user?: { id: string; email?: string | null };
-    } | null;
-    if (!data?.access_token || !data.refresh_token || !data.user?.id) return null;
-    return {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      // Supabase 总会返回 expires_in；缺失时按 1 小时处理（保守,到期会再刷新）
-      expiresAt: this.now() + (data.expires_in ?? 3600) * 1000,
-      userId: data.user.id,
-      email: data.user.email ?? null,
-    };
-  }
-
-  private parseJsonSafe(text: string): unknown {
-    if (!text) return null;
-    try {
-      return JSON.parse(text);
-    } catch {
-      return null;
-    }
-  }
-
-  /** 发送登录邮件；链接会跳回 redirectTo 并在 hash 里带回令牌。 */
-  async sendMagicLink(email: string, redirectTo: string): Promise<void> {
-    const response = await this.request('/auth/v1/otp', {
-      method: 'POST',
-      auth: false,
-      body: { email, create_user: true, gotrue_meta_security: {}, options: { email_redirect_to: redirectTo } },
-    });
-    if (!response.ok) throw mapStatus(response.status, await response.text());
-  }
-
-  /**
-   * 第三方登录（Google / GitHub …）的授权地址。
-   * 不带 code_challenge → GoTrue 走隐式流,回跳时令牌同样落在 hash 里,
-   * 因此可直接复用 completeMagicLink 的解析逻辑,无需额外依赖。
-   */
-  authorizeUrl(provider: string, redirectTo: string): string {
-    const params = new URLSearchParams({ provider, redirect_to: redirectTo });
-    return `${this.config.url}/auth/v1/authorize?${params.toString()}`;
-  }
-
-  /**
-   * 邮箱 + 密码登录：POST /auth/v1/token?grant_type=password。
-   * 多端同步的正路：一个账号在每台设备登一次,之后会话自动续期,不发邮件、不受发信限额。
-   */
-  async signInWithPassword(email: string, password: string): Promise<SupabaseSession> {
-    const response = await this.request('/auth/v1/token?grant_type=password', {
-      method: 'POST',
-      auth: false,
-      body: { email, password },
-    });
-    const text = await response.text();
-    if (!response.ok) {
-      if (/invalid login credentials|invalid_grant/i.test(text)) {
-        throw new SupabaseError('auth', '邮箱或密码不正确', response.status);
-      }
-      if (/email not confirmed/i.test(text)) {
-        throw new SupabaseError(
-          'auth',
-          '该账号尚未确认：Supabase → Authentication → Users 里把它标为已确认',
-          response.status
-        );
-      }
-      throw mapStatus(response.status, text);
-    }
-    const session = this.toSession(this.parseJsonSafe(text));
-    if (!session) throw new SupabaseError('unknown', '密码登录未返回会话');
-    this.writeSession(session);
-    return session;
-  }
-
-  /**
-   * 邮箱 + 密码注册：POST /auth/v1/signup。
-   * 两种结果都由后台的邮箱确认设置决定：
-   *   - 已关闭 Confirm email（或用户已 Auto Confirm）→ 直接返回会话，当场可写数据；
-   *   - 仍需确认 → 只返回用户、不给会话，调用方按「查收确认邮件」提示。
-   * 邮箱已存在（422）单独映射成 email_taken，好让页面给出「改用登录」的指引。
-   */
-  async signUpWithPassword(email: string, password: string): Promise<SignUpResult> {
-    const response = await this.request('/auth/v1/signup', {
-      method: 'POST',
-      auth: false,
-      body: { email, password, data: {}, gotrue_meta_security: {} },
-    });
-    const text = await response.text();
-    if (!response.ok) {
-      if (/already (registered|exists)|user_already_exists|email_exists/i.test(text)) {
-        throw new SupabaseError('email_taken', '该邮箱已注册', response.status);
-      }
-      if (/password.*(short|weak)|should be at least/i.test(text)) {
-        throw new SupabaseError('auth', '密码太短：至少 6 位', response.status);
-      }
-      throw mapStatus(response.status, text);
-    }
-    const session = this.toSession(this.parseJsonSafe(text));
-    if (!session) return { status: 'confirmation_required' };
-    this.writeSession(session);
-    return { status: 'signed_in', session };
-  }
-
-  /** 解析 magic link 回跳地址中的 hash（隐式流）并保存会话。 */
-  async completeMagicLink(hash: string): Promise<SupabaseSession | null> {
-    const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
-    if (!accessToken || !refreshToken) return null;
-    const expiresIn = Number(params.get('expires_in') ?? '3600');
-    const user = await this.fetchUser(accessToken);
-    if (!user) return null;
-    const session: SupabaseSession = {
-      accessToken,
-      refreshToken,
-      expiresAt: this.now() + expiresIn * 1000,
-      userId: user.id,
-      email: user.email,
-    };
-    this.writeSession(session);
-    return session;
-  }
-
-  private async fetchUser(accessToken: string): Promise<{ id: string; email: string | null } | null> {
-    const response = await this.request('/auth/v1/user', {
-      auth: false,
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!response.ok) return null;
-    const user = (await response.json().catch(() => null)) as { id?: string; email?: string | null } | null;
-    if (!user) return null;
-    return user.id ? { id: user.id, email: user.email ?? null } : null;
-  }
-
-  /**
-   * 刷新令牌（并发去重：同时到期的多个请求只打一次端点）。
-   * 只有明确的令牌失效（400/401）才注销会话；网关 5xx、限流 429、空响应体等
-   * 瞬时故障保留会话——旧实现对任何非 2xx 都清会话，一次网络抖动就把用户
-   * 静默登出，再读目标时只拿到空页（假「无数据」）。
-   */
-  async refresh(): Promise<SupabaseSession | null> {
-    if (!this.session) return null;
-    if (this.refreshInflight) return this.refreshInflight;
-    const inflight = this.performRefresh().finally(() => {
-      if (this.refreshInflight === inflight) this.refreshInflight = null;
-    });
-    this.refreshInflight = inflight;
-    return inflight;
-  }
-
-  private async performRefresh(): Promise<SupabaseSession | null> {
-    const current = this.session;
-    if (!current) return null;
-    const response = await this.request('/auth/v1/token?grant_type=refresh_token', {
-      method: 'POST',
-      auth: false,
-      body: { refresh_token: current.refreshToken },
-    });
-    if (!response.ok) {
-      if (response.status === 400 || response.status === 401) {
-        // 明确的 invalid_grant：刷新令牌确已失效，止住重试
-        this.writeSession(null);
-        return null;
-      }
-      // 5xx / 429 / 断网等瞬时故障：保留会话（下游若令牌真过期会如实报 auth）
-      return this.session;
-    }
-    const data = (await response.json().catch(() => null)) as {
-      access_token?: string;
-      refresh_token?: string;
-      expires_in?: number;
-      user?: { id: string; email?: string | null };
-    } | null;
-    if (!data?.access_token || !data.refresh_token) {
-      // 空体/半截响应（代理或网关异常）→ 不清会话,也不把整页打崩
-      return this.session;
-    }
-    const session: SupabaseSession = {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      // Supabase 总会返回 expires_in；缺失时按 1 小时处理（保守,到期会再刷新）
-      expiresAt: this.now() + (data.expires_in ?? 3600) * 1000,
-      userId: data.user?.id ?? current.userId,
-      email: data.user?.email ?? current.email,
-    };
-    this.writeSession(session);
-    return session;
-  }
-
-  /** 返回可用的会话（必要时先刷新）；未登录返回 null。 */
-  async ensureSession(): Promise<SupabaseSession | null> {
-    if (!this.session) return null;
-    if (this.session.expiresAt - this.now() > REFRESH_MARGIN_MS) return this.session;
-    return this.refresh();
-  }
-
-  async getUser(): Promise<{ id: string; email: string | null } | null> {
-    const session = await this.ensureSession();
-    if (!session) return null;
-    return { id: session.userId, email: session.email };
-  }
-
-  async signOut(): Promise<void> {
-    const session = this.session;
-    this.writeSession(null);
-    if (!session) return;
-    await this.request('/auth/v1/logout', {
-      method: 'POST',
-      auth: false,
-      headers: { Authorization: `Bearer ${session.accessToken}` },
-    }).catch(() => undefined);
-  }
+  // （GoTrue 认证段已随「账号只作标记」删除：无 magic link、无密码、无令牌刷新。）
 
   // ---------------- 数据（PostgREST） ----------------
 
@@ -405,8 +186,7 @@ export class SupabaseRest {
     path: string,
     init: { method?: string; body?: unknown; headers?: Record<string, string> } = {}
   ): Promise<T> {
-    const session = await this.ensureSession();
-    if (!session) throw new SupabaseError('auth', '尚未登录');
+    if (!this.account) throw new SupabaseError('auth', '尚未打开手记（无归属标记）');
     const response = await this.request(path, init);
     return this.expectJson<T>(response);
   }
@@ -466,28 +246,4 @@ export class SupabaseRest {
   async remove(table: string, query: Query): Promise<void> {
     await this.dataRequest<unknown>(`/rest/v1/${table}?${query}`, { method: 'DELETE' });
   }
-}
-
-/** 从 window.location.hash 读取 magic link 回跳令牌；读完即清掉地址栏里的令牌。 */
-export function readMagicLinkHash(): string {
-  if (typeof window === 'undefined') return '';
-  return window.location.hash ?? '';
-}
-
-/** magic link 失败时 GoTrue 会把原因放在 hash 里（如 otp_expired）；读出来给登录页显示。 */
-export function readAuthErrorFromHash(): string | null {
-  if (typeof window === 'undefined') return null;
-  const hash = window.location.hash;
-  if (!hash.includes('error')) return null;
-  const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
-  const code = params.get('error_code') ?? params.get('error');
-  const description = params.get('error_description');
-  if (!code && !description) return null;
-  return [code, description?.replace(/\+/g, ' ')].filter(Boolean).join('：');
-}
-
-export function clearMagicLinkHash(): void {
-  if (typeof window === 'undefined') return;
-  const { pathname, search } = window.location;
-  window.history.replaceState(null, '', `${pathname}${search}`);
 }

@@ -28,10 +28,10 @@ import { normalizeEstimateMinutes } from './domain/tasks';
 import { validateWeightMeasurement } from './domain/weight';
 import { normalizeTrainingMinutesBudget } from './domain/training';
 import { healthRepository, repositoryKind } from './services/repository';
-import { AuthGate, type AuthMode } from './components/AuthGate';
+import { AccountGate } from './components/AccountGate';
 import { SectionNav } from './components/SectionNav';
 import { PAGE_SECTIONS } from './data/pageSections';
-import { toRepositoryError, type AuthUser } from './services/healthRepository';
+import { toRepositoryError, type Account } from './services/healthRepository';
 import { shouldAutoRefresh, REFRESH_MIN_INTERVAL_MS } from './services/refreshPolicy';
 import {
   CreateDailyStateInput,
@@ -67,8 +67,8 @@ export default function App() {
   const [authStage, setAuthStage] = useState<'ready' | 'gate'>('ready');
   /** 静默进入失败的原因码：决定提示怎么修。 */
   const [authReason, setAuthReason] = useState<string | null>(null);
-  /** 当前身份（云端）：email 非空即已登录账号。 */
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  /** 当前身份（云端）：手记名标记——非空即已打开手记。 */
+  const [account, setAccount] = useState<Account | null>(null);
 
   // Modals
   const [recordSheetOpen, setRecordSheetOpen] = useState(false);
@@ -135,7 +135,11 @@ export default function App() {
   /** 有不可打断的事在进行（弹层开着 / 写入未落定 / 首屏载入）→ 不自动重取。 */
   const refreshBlockedRef = useRef(true);
 
-  const loadData = useCallback(async () => {
+  /**
+   * 取数。`throwOnError` 供「打开手记」之门用：失败必须抛回门上给对症告警,
+   * 绝不能吞掉后照样提示「已开卷」（否则断网时用户看不见任何提示）。
+   */
+  const loadData = useCallback(async (throwOnError = false) => {
     try {
       setLoadError(null);
       const today = await healthRepository.getToday();
@@ -145,6 +149,7 @@ export default function App() {
     } catch (err) {
       const error = toRepositoryError(err);
       console.error('Failed to load health diary:', error);
+      if (throwOnError) throw error;
       if (error.code === 'auth' && repositoryKind === 'supabase') {
         // 有身份但取数失败（令牌失效等）→ 提示；**不静默新建身份**，否则新身份看不到旧数据
         setAuthReason('auth');
@@ -162,15 +167,15 @@ export default function App() {
   }, []);
 
   /**
-   * 启动流程：本机模式直接取数；云端模式有会话才取数,无会话一律先到账号门
-   * （新用户注册、老用户登录）——数据只存于账号,不再静默建身份。
+   * 启动流程：本机模式直接取数；云端模式已有归属标记才取数,没有一律先到账号门
+   * （写下手记名即打开）——数据按标记分册,不静默建身份。
    */
   useEffect(() => {
     if (repositoryKind !== 'supabase') {
       void loadData();
       return;
     }
-    if (healthRepository.hasSession()) {
+    if (healthRepository.hasAccount()) {
       void loadData();
       return;
     }
@@ -178,28 +183,28 @@ export default function App() {
     setAuthStage('gate');
   }, [loadData]);
 
-  // 云端登录态变化（登录成功 / 退出）→ 立即重新取数，避免停在旧数据上
-  /** 最近一次成功载入的数据（供下面的登录态回调判断「有无内容可显」）。 */
+  // 云端身份变化（打开手记 / 退出）→ 立即重新取数，避免停在旧数据上
+  /** 最近一次成功载入的数据（供下面的身份回调判断「有无内容可显」）。 */
   const todayDataRef = useRef<TodayData | null>(null);
   useEffect(() => {
     todayDataRef.current = todayData;
   }, [todayData]);
 
-  // 首次挂载：认领当前身份（只在云端模式有意义）
+  // 首次挂载：认领当前归属标记（只在云端模式有意义）
   useEffect(() => {
     if (repositoryKind !== 'supabase') return;
     void healthRepository
       .getCurrentUser()
-      .then((user) => setAuthUser(user))
+      .then((acct) => setAccount(acct))
       .catch(() => undefined);
   }, []);
 
   useEffect(() => {
-    const unsubscribe = healthRepository.onAuthChange((user) => {
-      setAuthUser(user);
-      if (user) {
-        // 只有「还没有数据」时才进全屏载入：令牌自动刷新时手记已有内容,
-        // 不切载入页才不会把用户正开着的录事件与正在输入的内容一并掀掉。
+    const unsubscribe = healthRepository.onAccountChange((acct) => {
+      setAccount(acct);
+      if (acct) {
+        // 只有「还没有数据」时才进全屏载入：不切载入页才不会把
+        // 用户正开着的录事件与正在输入的内容一并掀掉。
         if (todayDataRef.current === null) setIsLoading(true);
         void loadData();
       } else if (repositoryKind === 'supabase') {
@@ -279,34 +284,23 @@ export default function App() {
   }, [todayData]);
 
   /**
-   * 账号门：新用户注册、老用户登录（邮箱+密码，不发邮件、不受发信限额）。
-   * 成功即取数进手记；失败把错误码交给账号门作对症提示。
+   * 账号门：手记名即账号（同名同库,无密码无邮件）。写下标记即取数进手记；
+   * 失败把错误码交给账号门作对症提示。
    */
-  const handleAuth = async (email: string, password: string, mode: AuthMode): Promise<boolean> => {
+  const handleEnter = async (name: string): Promise<void> => {
+    setAuthReason(null);
     try {
-      const user =
-        mode === 'signup'
-          ? await healthRepository.signUp(email, password)
-          : await healthRepository.signIn(email, password);
-      if (user.id === 'pending') {
-        // 需确认邮件：会话未建立,留在账号门等点开邮件
-        setAuthReason(null);
-        showToast('确认邮件已发出 · 点开邮件即完成注册');
-        return true;
-      }
-      setAuthReason(null);
-      await loadData();
-      showToast(mode === 'signup' ? '账号已创建 · 手记已开卷' : '已登录 · 手记已开卷');
-      return true;
+      await healthRepository.enterByName(name);
+      await loadData(true);
+      showToast('手记已开卷');
     } catch (err) {
       const error = toRepositoryError(err);
-      console.error('[App] 登录/注册未成:', error);
+      console.error('[App] 打开手记未成:', error);
       setAuthReason(error.code);
-      return false;
     }
   };
 
-  /** 退出账号：会话清空即回到账号门（重新登录才给数据）；云端与本机数据都不动。 */
+  /** 退出：清掉本机标记即回到账号门；云端与本机数据都不动。 */
   const handleSignOut = async (): Promise<void> => {
     try {
       await healthRepository.signOut();
@@ -470,8 +464,8 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
-        {/* 账号门：云端无会话时的唯一入口——新用户注册、老用户登录 */}
-        <AuthGate reason={authReason} onAuth={handleAuth} />
+        {/* 账号门：云端无归属标记时的唯一入口——写下手记名即打开 */}
+        <AccountGate reason={authReason} onEnter={handleEnter} />
       </div>
       </MotionConfig>
     );
@@ -655,13 +649,11 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            {repositoryKind === 'supabase' && authUser && (
+            {repositoryKind === 'supabase' && account && (
               <>
-                {authUser.email && (
-                  <span className="text-ink3 max-w-[16ch] truncate" title={authUser.email}>
-                    {authUser.email}
-                  </span>
-                )}
+                <span className="text-ink3 max-w-[16ch] truncate" title={account.name}>
+                  {account.name}
+                </span>
                 <button onClick={() => void handleSignOut()} className="btn-link">
                   <span>退出</span>
                 </button>

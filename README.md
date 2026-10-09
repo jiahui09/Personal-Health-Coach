@@ -60,7 +60,7 @@ npm run build      # 生产构建
 ## 数据存哪里
 
 - **本地模式（默认）**：数据只在本机浏览器；页脚「复其初」一键恢复演示数据。
-- **云端同步模式**：填上两项环境变量后改走 Supabase——**先注册（新用户）或登录（老用户）才进手记**（邮箱+密码，页内完成、不发邮件），数据按账号隔离，换设备登录即同见，切回页面自动重取；6 张表全部启用行级安全（RLS），每行数据只能被本人读写。
+- **云端同步模式**：填上两项环境变量后改走 Supabase——**先写下手记名才进手记**（手记名即账号：无密码、无邮件、无验证），数据按手记名分册，换设备写同一个名字即同见，切回页面自动重取；如实说明：`user_id` 只是归属标记、不是防线，知其名者见其册。
 - 部署到 Cloudflare Pages 的逐步操作见 [docs/deploy.md](docs/deploy.md)，建表脚本见 [supabase/schema.sql](supabase/schema.sql)；上线前可运行 [`node scripts/verify-supabase.mjs`](scripts/verify-supabase.mjs) 自检。
 
 ## 技术栈与结构

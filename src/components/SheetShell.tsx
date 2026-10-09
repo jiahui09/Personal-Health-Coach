@@ -1,4 +1,5 @@
 // 录事三表共用之壳：墨线版框、章节题式题头、照准提交脚注、亮勾阖之。
+// 零偏移：提示/草稿/遮罩告知一律收在提交按钮之下 —— 出现与否,按钮与上方表单一拍不动。
 // INPUT / Group / chipClass 与录事类型同源共出，三表不再各自持一份。
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
@@ -57,7 +58,7 @@ interface SheetShellProps {
   onClose: () => void;
   /** 本表提交：存上返回 true（壳亮勾 700ms 后阖之）；未存上返回 false（壳保持开启，提示已由 App 弹出）。 */
   onSubmit: () => Promise<boolean>;
-  /** 本表提示句（空录之戒、折算不出等），显示于提交脚注之上。 */
+  /** 本表提示句（空录之戒、折算不出等），显示于提交脚注之下（按钮因此永不移位）。 */
   hint?: string | null;
   /** 主确认文案；越常体重二次确认时为「仍要录之」。 */
   submitLabel?: string;
@@ -242,13 +243,29 @@ export const SheetShell: React.FC<SheetShellProps> = ({
 
             {/* Action Button */}
             <div className="pt-2">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSavedFeedback ? (
+                  <>
+                    <Check className="w-4 h-4 text-accentbright" />
+                    <span>已录于册</span>
+                  </>
+                ) : isSubmitting ? (
+                  <span>存中…</span>
+                ) : (
+                  <span>{submitLabel}</span>
+                )}
+              </button>
               {guardNotice && (
-                <p role="status" className="mb-2 text-[12px] text-ink2 leading-relaxed">
+                <p role="status" className="mt-2.5 text-[12px] text-ink2 leading-relaxed">
                   表中已有录文——点遮罩不阖；按 Esc 或右上角「阖之」离表，残稿留于本机。
                 </p>
               )}
               {hadDraft && (
-                <div className="mb-2 flex items-center justify-between gap-2 text-[12px] text-ink3">
+                <div className="mt-2.5 flex items-center justify-between gap-2 text-[12px] text-ink3">
                   <span>已回填上次残稿；照准存上即焚。</span>
                   <button
                     type="button"
@@ -273,26 +290,10 @@ export const SheetShell: React.FC<SheetShellProps> = ({
                 </div>
               )}
               {hint && (
-                <p role="status" className="mb-2 text-[12px] text-danger">
+                <p role="status" className="mt-2.5 text-[12px] text-danger">
                   {hint}
                 </p>
               )}
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSavedFeedback ? (
-                  <>
-                    <Check className="w-4 h-4 text-accentbright" />
-                    <span>已录于册</span>
-                  </>
-                ) : isSubmitting ? (
-                  <span>存中…</span>
-                ) : (
-                  <span>{submitLabel}</span>
-                )}
-              </button>
             </div>
           </form>
         </div>

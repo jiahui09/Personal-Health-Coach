@@ -85,7 +85,8 @@ export const TodayTasks: React.FC<TodayTasksProps> = ({
                         : 'border-control hover:border-ink bg-surface'
                     }`}
                   >
-                    {todo.status === 'done' && <Check className="w-3 h-3 stroke-[3]" />}
+                    {/* 勾与否都渲染勾图标（未勾 invisible）：基线恒定,勾选不再挪动本行与邻行（零偏移） */}
+                    <Check className={`w-3 h-3 stroke-[3] ${todo.status === 'done' ? '' : 'invisible'}`} />
                   </span>
                 </button>
                 <span

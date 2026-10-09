@@ -198,4 +198,20 @@ for (const f of ['MealSheet.tsx', 'WorkoutSheet.tsx', 'BodySheet.tsx']) {
   assert(comp(f).includes('SheetShell'), `${f} 共用同一壳（版框/题头/照准脚注单源）`);
 }
 
+// --- 11. 零偏移：标签/状态切换不得移动既有组件 ------------------------------
+// 录事壳：提示/草稿/遮罩告知一律收在「照准」按钮之下——出现与否,按钮与上方表单一拍不动
+const shell = comp('SheetShell.tsx');
+const shellSubmit = shell.indexOf('type="submit"');
+for (const marker of ['guardNotice && (', 'hadDraft && (', '{hint && (']) {
+  const at = shell.indexOf(marker);
+  assert(at > shellSubmit, `录事壳：${marker} 收在提交按钮之下（出现不移动按钮）`);
+}
+// 体征表：睡眠两式叠放于同一格,容器高恒等于较高者——切式时下方预览与按钮一拍不动
+const bodySheet = comp('BodySheet.tsx');
+assert(
+  (bodySheet.match(/col-start-1 row-start-1/g) ?? []).length >= 2,
+  '体征表：睡眠两式叠放同一格（未选中者 invisible 仍占位,切式零偏移）'
+);
+assert(bodySheet.includes('零偏移'), '体征表以零偏移为契约（注释留痕）');
+
 console.log('ALL LAYOUT CONTRACT TESTS PASSED.');

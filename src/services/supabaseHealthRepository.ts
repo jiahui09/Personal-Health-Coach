@@ -1,12 +1,13 @@
 /**
- * SupabaseHealthRepository — 浏览器直连 Supabase（Auth + PostgREST），零依赖。
+ * SupabaseHealthRepository — 浏览器直连 Supabase（PostgREST），零依赖。
  *
  * 与 MockHealthRepository 的关系：
  *   - 两者都只做「取原始记录 → 交给 services/todayAssembly.assembleToday → 返回 TodayData」；
  *   - 派生逻辑（BMI/代谢/目标/趋势/决策）完全共用，因此两条路径不可能算出不同结果
  *     （由 src/tests/supabaseContract.test.ts 的跨路径一致性用例锁定）。
  *
- * 未登录时所有数据方法抛 RepositoryError('auth')，页面据此显示登录页而不是空白。
+ * 未选归属标记时所有数据方法抛 RepositoryError('auth')，页面据此显示账号门而不是空白。
+ * 身份只是标记：手记名 → user_id（见 accountMarker.ts），没有 GoTrue、密码与邮件。
  */
 
 import {
@@ -22,16 +23,14 @@ import {
   WeightRecord,
   WorkoutRecord,
 } from '../types/health';
-import { AuthUser, HealthRepository, RepositoryError } from './healthRepository';
+import { Account, HealthRepository, RepositoryError } from './healthRepository';
 import { assembleToday } from './todayAssembly';
 import {
-  clearMagicLinkHash,
-  readMagicLinkHash,
+  SupabaseAccount,
   SupabaseError,
   SupabaseRest,
   type SupabaseConfig,
   type SupabaseRestOptions,
-  type SupabaseSession,
 } from './supabaseRest';
 import {
   mealFromRow,
@@ -66,8 +65,6 @@ function toRepositoryError(err: unknown): RepositoryError {
         ? 'rate_limited'
         : err.kind === 'not_implemented'
         ? 'not_implemented'
-        : err.kind === 'email_taken'
-        ? 'email_taken'
         : err.kind === 'conflict'
         ? 'conflict'
         : err.kind === 'not_found'
@@ -94,108 +91,62 @@ export interface SupabaseHealthRepositoryOptions extends SupabaseRestOptions {
 export class SupabaseHealthRepository implements HealthRepository {
   private readonly rest: SupabaseRest;
   private readonly clock: () => Date;
-  private readonly authListeners = new Set<(user: AuthUser | null) => void>();
+  private readonly accountListeners = new Set<(account: Account | null) => void>();
   private cachedProfile: UserProfile | null = null;
 
   constructor(config: SupabaseConfig, options: SupabaseHealthRepositoryOptions = {}) {
     this.rest = new SupabaseRest(config, options);
     this.clock = options.clock ?? (() => new Date());
-
-    // magic link 回跳：把 hash 里的令牌换成本地会话,然后清掉地址栏里的令牌
-    const hash = readMagicLinkHash();
-    if (hash.includes('access_token=')) {
-      void this.rest
-        .completeMagicLink(hash)
-        .then((session) => {
-          if (session) this.emitAuth(session);
-          clearMagicLinkHash();
-        })
-        .catch(() => clearMagicLinkHash());
-    }
-    // 失败回跳（如链接过期）不清 hash：交给登录页读出原因后再清,否则用户只看到「又回到登录页」
   }
 
-  private emitAuth(session: SupabaseSession | null): void {
-    const user: AuthUser | null = session
-      ? { id: session.userId, email: session.email, isDemo: false }
-      : null;
-    for (const listener of this.authListeners) listener(user);
+  private emitAccount(account: SupabaseAccount | null): void {
+    const user: Account | null = account ? { id: account.userId, name: account.name, isDemo: false } : null;
+    for (const listener of this.accountListeners) listener(user);
   }
 
-  private async requireUserId(): Promise<string> {
-    const session = await this.rest.ensureSession();
-    if (!session) throw new RepositoryError('auth', '尚未登录：请先用邮箱收取登录链接');
-    return session.userId;
+  private requireUserId(): string {
+    const account = this.rest.getAccount();
+    if (!account) throw new RepositoryError('auth', '尚未打开手记：请先写下手记名');
+    return account.userId;
   }
 
   // ================= Identity =================
 
-  async getCurrentUser(): Promise<AuthUser | null> {
-    const user = await guard(() => this.rest.getUser());
-    return user ? { id: user.id, email: user.email, isDemo: false } : null;
+  async getCurrentUser(): Promise<Account | null> {
+    const account = this.rest.getAccount();
+    return account ? { id: account.userId, name: account.name, isDemo: false } : null;
   }
 
   /**
-   * 登录：给了密码 → 邮箱+密码直接建立会话（多端同步用这个）；
-   * 没给密码 → 发 magic link（点邮件后由 hash 建立会话）。
+   * 打开手记：手记名即账号——同名同库,不联网、不验证（标记只作归属,不设防）。
    */
-  async signIn(email: string, password: string): Promise<AuthUser> {
-    if (password) {
-      const session = await guard(() => this.rest.signInWithPassword(email, password));
-      this.cachedProfile = null;
-      this.emitAuth(session);
-      return { id: session.userId, email: session.email, isDemo: false };
-    }
-    const redirectTo = typeof window === 'undefined' ? '' : window.location.origin;
-    await guard(() => this.rest.sendMagicLink(email, redirectTo));
-    // 点击邮件后才真正建立会话；此处返回「待确认」身份，由 App 提示查收邮件
-    return { id: 'pending', email, isDemo: false };
-  }
-
-  /**
-   * 注册：邮箱+密码建号（POST /auth/v1/signup）。
-   * 后台关闭 Confirm email（或 Auto Confirm）→ 当场建会话返回身份；
-   * 仍需确认 → 返回待确认身份（id='pending'），由页面提示查收确认邮件。
-   */
-  async signUp(email: string, password: string): Promise<AuthUser> {
-    const result = await guard(() => this.rest.signUpWithPassword(email, password));
-    if (result.status === 'confirmation_required') return { id: 'pending', email, isDemo: false };
+  async enterByName(name: string): Promise<Account> {
+    const account = this.rest.enterByName(name);
     this.cachedProfile = null;
-    this.emitAuth(result.session);
-    return { id: result.session.userId, email: result.session.email, isDemo: false };
+    this.emitAccount(account);
+    return { id: account.userId, name: account.name, isDemo: false };
   }
 
-  hasSession(): boolean {
-    return this.rest.hasSession();
-  }
-
-  /**
-   * 第三方登录：跳转到 provider 授权页；回跳后由构造函数里的 hash 解析接住。
-   * 用于绕开内置邮件的小时限额（前提：该 provider 已在 Supabase 里启用）。
-   */
-  async signInWithProvider(provider: string): Promise<void> {
-    if (typeof window === 'undefined') {
-      throw new RepositoryError('not_implemented', '第三方登录只能在浏览器里发起');
-    }
-    window.location.assign(this.rest.authorizeUrl(provider, window.location.origin));
+  hasAccount(): boolean {
+    return this.rest.hasAccount();
   }
 
   async signOut(): Promise<void> {
-    await guard(() => this.rest.signOut());
+    this.rest.signOut();
     this.cachedProfile = null;
-    this.emitAuth(null);
+    this.emitAccount(null);
   }
 
-  onAuthChange(listener: (user: AuthUser | null) => void): () => void {
-    this.authListeners.add(listener);
-    return () => this.authListeners.delete(listener);
+  onAccountChange(listener: (account: Account | null) => void): () => void {
+    this.accountListeners.add(listener);
+    return () => this.accountListeners.delete(listener);
   }
 
   // ================= Profile =================
 
   async getProfile(): Promise<UserProfile> {
     if (this.cachedProfile) return this.cachedProfile;
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const rows = await guard(() =>
       this.rest.select<Row>('profiles', `select=*&user_id=eq.${userId}&limit=1`)
     );
@@ -205,7 +156,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   }
 
   async updateProfile(patch: Partial<UserProfile>): Promise<UserProfile> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const current = await this.getProfile();
     const next: UserProfile = { ...current, ...patch };
     const rows = await guard(() =>
@@ -218,7 +169,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   // ================= Aggregated view =================
 
   async getToday(): Promise<TodayData> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const now = this.clock();
     const ctx = makeDayContext(now);
     const monthStart = ctx.last30Keys[0];
@@ -262,7 +213,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   // ================= Meals =================
 
   async getMeals(since?: string): Promise<MealRecord[]> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const filter = since ? `&eaten_on=gte.${since}` : '';
     const rows = await guard(() =>
       this.rest.select<Row>('meals', `select=*&user_id=eq.${userId}${filter}&order=eaten_on.desc`)
@@ -271,7 +222,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   }
 
   async addMeal(input: CreateMealInput): Promise<MealRecord> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const date = input.date ?? makeDayContext(this.clock()).todayKey;
     const row = mealToRow(userId, {
       date,
@@ -293,14 +244,14 @@ export class SupabaseHealthRepository implements HealthRepository {
   }
 
   async deleteMeal(id: string): Promise<void> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     await guard(() => this.rest.remove('meals', `id=eq.${id}&user_id=eq.${userId}`));
   }
 
   // ================= Workouts =================
 
   async getWorkouts(since?: string): Promise<WorkoutRecord[]> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const filter = since ? `&performed_on=gte.${since}` : '';
     const rows = await guard(() =>
       this.rest.select<Row>(
@@ -312,7 +263,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   }
 
   async addWorkout(input: CreateWorkoutInput): Promise<WorkoutRecord> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const date = input.date ?? makeDayContext(this.clock()).todayKey;
     const row = workoutToRow(userId, {
       date,
@@ -333,7 +284,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   }
 
   async completeTodayWorkout(): Promise<void> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const today = makeDayContext(this.clock()).todayKey;
     const existing = await guard(() =>
       this.rest.select<Row>(
@@ -365,7 +316,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   // ================= Daily State =================
 
   async getDailyState(date?: string): Promise<DailyState | null> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const target = date ?? makeDayContext(this.clock()).todayKey;
     const rows = await guard(() =>
       this.rest.select<Row>(
@@ -377,7 +328,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   }
 
   async getDailyStates(since?: string): Promise<DailyState[]> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const filter = since ? `&on_date=gte.${since}` : '';
     const rows = await guard(() =>
       this.rest.select<Row>('daily_states', `select=*&user_id=eq.${userId}${filter}&order=on_date.asc`)
@@ -386,7 +337,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   }
 
   async saveDailyState(input: CreateDailyStateInput): Promise<DailyState> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const now = this.clock();
     const date = input.date ?? makeDayContext(now).todayKey;
     const current = await this.getDailyState(date);
@@ -413,7 +364,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   // ================= Weights =================
 
   async getWeightHistory(since?: string): Promise<WeightRecord[]> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const filter = since ? `&measured_on=gte.${since}` : '';
     const rows = await guard(() =>
       this.rest.select<Row>(
@@ -430,7 +381,7 @@ export class SupabaseHealthRepository implements HealthRepository {
     date?: string,
     options: { time?: string; source?: WeightRecord['source'] } = {}
   ): Promise<WeightRecord> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const target = date ?? makeDayContext(this.clock()).todayKey;
     const existing = await guard(() =>
       this.rest.select<Row>(
@@ -470,7 +421,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   // ================= Todos =================
 
   async getTodos(since?: string): Promise<TodoItem[]> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const filter = since ? `&on_date=gte.${since}` : '';
     const rows = await guard(() =>
       this.rest.select<Row>('todos', `select=*&user_id=eq.${userId}${filter}&order=on_date.desc`)
@@ -479,7 +430,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   }
 
   async addTodo(input: CreateTodoInput): Promise<TodoItem> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const row = todoToRow(userId, {
       title: input.title,
       date: makeDayContext(this.clock()).todayKey,
@@ -495,7 +446,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   }
 
   async toggleTodo(id: string): Promise<TodoItem> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     const rows = await guard(() =>
       this.rest.select<Row>('todos', `select=*&user_id=eq.${userId}&id=eq.${id}&limit=1`)
     );
@@ -513,7 +464,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   }
 
   async updateTodo(id: string, patch: { estimatedMinutes?: number | null }): Promise<TodoItem> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     if (!('estimatedMinutes' in patch)) {
       // 目前唯一可改字段即预计时长；空 patch 原样返回，不做无意义往返
       const rows = await guard(() =>
@@ -536,7 +487,7 @@ export class SupabaseHealthRepository implements HealthRepository {
   }
 
   async deleteTodo(id: string): Promise<void> {
-    const userId = await this.requireUserId();
+    const userId = this.requireUserId();
     await guard(() => this.rest.remove('todos', `id=eq.${id}&user_id=eq.${userId}`));
   }
 

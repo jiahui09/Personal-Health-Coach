@@ -2,7 +2,10 @@
 --
 -- 用法：Supabase Dashboard → SQL Editor → 粘贴执行（一次即可）。
 -- 设计原则：
---   1. 全表 user_id uuid，RLS 只允许 auth.uid() = user_id（多设备共享同一账号，互不可见）。
+--   1. 全表 user_id uuid = 归属标记：由手记名确定性派生（前端 accountMarker.ts），
+--      同名即同册。RLS 仅强制「行必须有标记」——没有 GoTrue、没有密码,数据不设防：
+--      拿到 anon key 与某个手记名的人即可读该册。这是产品取舍（数据不值钱,要的是省事），
+--      不是遗漏；若要真正隔离,把策略改回 auth.uid() = user_id 并接回 Supabase Auth。
 --   2. 只存「原始记录」：体重、每日体征、膳食、训练、待办、体征档。
 --      统计（BMI / RMR / TDEE / 目标热量与蛋白 / 抗阻周目标 / 趋势与情景外推）一律由
 --      客户端 domain/ 纯函数现算，不落库 —— 避免派生值与原始值漂移。
@@ -130,9 +133,9 @@ alter table public.todos             enable row level security;
 -- profiles：user_id 即主键
 drop policy if exists profiles_owner on public.profiles;
 create policy profiles_owner on public.profiles
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all using (true) with check (user_id is not null);
 
--- 其余五表：同一套四条策略（select / insert / update / delete）
+-- 其余五表：同一套策略——不问「你是谁」,只问「行有没有归属标记」
 do $$
 declare t text;
 begin
@@ -140,7 +143,7 @@ begin
   loop
     execute format('drop policy if exists %I_owner on public.%I', t, t);
     execute format(
-      'create policy %I_owner on public.%I for all using (auth.uid() = user_id) with check (auth.uid() = user_id)',
+      'create policy %I_owner on public.%I for all using (true) with check (user_id is not null)',
       t, t
     );
   end loop;
@@ -152,8 +155,9 @@ end $$;
 -- 1) 表与策略是否齐备：
 --    select tablename, rowsecurity from pg_tables where schemaname = 'public';
 --    select tablename, policyname from pg_policies where schemaname = 'public';
--- 2) 越权测试（应返回空,而不是他人的行）：
---    以 A 账号写入一条体重后,用 B 账号执行
---    curl "$VITE_SUPABASE_URL/rest/v1/weight_records?select=*" \
---         -H "apikey: $VITE_SUPABASE_ANON_KEY" -H "Authorization: Bearer <B 的 access_token>"
---    → 期望 []（若返回 A 的行,说明 RLS 未生效,立即停止部署）
+-- 2) 按标记分数据（标记即 user_id,过滤是应用层加的,不是防线）：
+--    写入一条 user_id = A 的行后,查询
+--    curl "$VITE_SUPABASE_URL/rest/v1/weight_records?user_id=eq.<A>&select=*" \
+--         -H "apikey: $VITE_SUPABASE_ANON_KEY" -H "Authorization: Bearer $VITE_SUPABASE_ANON_KEY"
+--    → A 的查询见到 A 的行；换成 B 的标记查 → 0 行。
+--    无标记的行（user_id is null）一律被 WITH CHECK 拒收。

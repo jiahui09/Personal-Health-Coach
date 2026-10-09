@@ -24,22 +24,23 @@ import {
   WorkoutRecord,
 } from '../types/health';
 
-/** Authenticated principal. `id` becomes `user_id` on every row (RLS scope). */
-export interface AuthUser {
+/** 手记身份：账号只是归属标记（手记名 → user_id）,不设密码与邮件。 */
+export interface Account {
+  /** 落到各行 user_id 列的归属标记。 */
   id: string;
-  email: string | null;
+  /** 手记名（显示用;同名即同库）。 */
+  name: string;
   /** True for the local, storage-only user served by MockHealthRepository. */
   isDemo: boolean;
 }
 
 export type RepositoryErrorCode =
   | 'network' // transport failure: offline, DNS, CORS, 5xx
-  | 'auth' // signed out / token expired / bad credentials
-  | 'rate_limited' // provider throttling (e.g. Supabase built-in mailer hourly quota)
+  | 'auth' // 尚未打开手记（无归属标记）,或请求被 RLS/键策略拒绝
+  | 'rate_limited' // provider throttling (HTTP 429)
   | 'conflict' // concurrent write, unique constraint violated
   | 'not_found' // row missing or owned by someone else
   | 'not_implemented' // backend stub not wired yet
-  | 'email_taken' // sign-up with an address that already has an account
   | 'unknown';
 
 /** Single error vocabulary so the UI can map a failure to a message and a retry. */
@@ -61,26 +62,26 @@ export function toRepositoryError(err: unknown): RepositoryError {
 }
 
 export interface HealthRepository {
-  // ---- Identity (scopes every row, enables RLS) ----
-  getCurrentUser(): Promise<AuthUser | null>;
-  signIn(email: string, password: string): Promise<AuthUser>;
-  signUp(email: string, password: string): Promise<AuthUser>;
+  // ---- Identity (scopes every row by the account marker) ----
+  getCurrentUser(): Promise<Account | null>;
+  /**
+   * 打开手记：手记名即账号——无密码、无邮件、无验证。
+   * 同一个名字在任何设备派生同一个 user_id,因此「同名即同库」。
+   */
+  enterByName(name: string): Promise<Account>;
   signOut(): Promise<void>;
   /** Returns an unsubscribe function. */
-  onAuthChange(listener: (user: AuthUser | null) => void): () => void;
+  onAccountChange(listener: (account: Account | null) => void): () => void;
 
   // ---- Profile ----
   getProfile(): Promise<UserProfile>;
   updateProfile(patch: Partial<UserProfile>): Promise<UserProfile>;
 
-  /** 第三方登录（云端实现才有意义；本地实现直接拒绝）。 */
-  signInWithProvider(provider: string): Promise<void>;
-
   /**
-   * 本机是否已有云端身份。
-   * 真 → 有会话（过期自动续）；假 → 从未登录,先到账号门注册 / 登录。
+   * 本机是否已选好归属标记。
+   * 真 → 直接读写该名下的数据；假 → 先到账号门写下手记名。
    */
-  hasSession(): boolean;
+  hasAccount(): boolean;
 
   // ---- Aggregated view ----
   getToday(): Promise<TodayData>;

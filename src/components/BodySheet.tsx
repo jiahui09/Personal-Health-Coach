@@ -209,7 +209,13 @@ export const BodySheet: React.FC<BodySheetProps> = ({ isOpen, onClose, onSave, d
           </div>
 
           <div className="mt-2 space-y-2.5">
-            {sleepMode === 'interval' ? (
+            {/* 两式叠放于同一格：容器高恒等于较高者——切式时下方预览与「照准」一拍不动（零偏移）。
+                未选中的一面用 invisible 而非条件卸载：仍占位,状态也不丢。 */}
+            <div className="grid">
+              <div
+                className={`col-start-1 row-start-1 ${sleepMode === 'interval' ? '' : 'invisible'}`}
+                aria-hidden={sleepMode !== 'interval'}
+              >
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="rs-sleep-start" className="block text-ink3 mb-1 text-[12px]">就寝</label>
@@ -238,8 +244,11 @@ export const BodySheet: React.FC<BodySheetProps> = ({ isOpen, onClose, onSave, d
                   />
                 </div>
               </div>
-            ) : (
-              <div>
+              </div>
+              <div
+                className={`col-start-1 row-start-1 ${sleepMode === 'duration' ? '' : 'invisible'}`}
+                aria-hidden={sleepMode !== 'duration'}
+              >
                 <label htmlFor="rs-sleep-minutes" className="block text-ink3 mb-1 text-[12px]">手录眠时（分钟）</label>
                 <input
                   id="rs-sleep-minutes"
@@ -254,7 +263,7 @@ export const BodySheet: React.FC<BodySheetProps> = ({ isOpen, onClose, onSave, d
                   className={`${INPUT} tabular-nums`}
                 />
               </div>
-            )}
+            </div>
 
             <p className="text-[12px] text-ink3 tabular-nums">
               {sleepMode === 'interval'

@@ -39,7 +39,7 @@ const presentationFiles: [string, string][] = [
   ['MealSheet.tsx', comp('MealSheet.tsx')],
   ['WorkoutSheet.tsx', comp('WorkoutSheet.tsx')],
   ['BodySheet.tsx', comp('BodySheet.tsx')],
-  ['AuthGate.tsx', comp('AuthGate.tsx')],
+  ['AccountGate.tsx', comp('AccountGate.tsx')],
   ['SectionNav.tsx', comp('SectionNav.tsx')],
   ['DotScale.tsx', comp('DotScale.tsx')],
 ];

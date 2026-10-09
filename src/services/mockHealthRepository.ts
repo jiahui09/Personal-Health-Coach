@@ -34,7 +34,7 @@ import {
   migrateWeights,
   migrateWorkouts,
 } from '../domain';
-import { AuthUser, HealthRepository, RepositoryError } from './healthRepository';
+import { Account, HealthRepository, RepositoryError } from './healthRepository';
 import { assembleToday } from './todayAssembly';
 import { clockTimeOf } from '../utils/calendar';
 
@@ -143,43 +143,35 @@ export class MockHealthRepository implements HealthRepository {
   }
 
   // ================= Identity (demo auth) =================
-  private authListeners = new Set<(user: AuthUser | null) => void>();
+  private accountListeners = new Set<(account: Account | null) => void>();
 
-  private ensureAuth(): AuthUser {
-    const stored = getStorage<{ id: string; email: string | null } | null>(STORAGE_KEYS.AUTH, null);
-    if (stored) return { ...stored, isDemo: true };
-    const created = { id: `local-${newId()}`, email: null as string | null };
+  /** 本机模式的「手记名」只作显示（数据本就在本机,无须归属标记）：不设门、不校验。 */
+  private ensureAccount(): Account {
+    const stored = getStorage<{ id: string; name: string | null } | null>(STORAGE_KEYS.AUTH, null);
+    if (stored) return { ...stored, name: stored.name ?? '本机手记', isDemo: true };
+    const created = { id: `local-${newId()}`, name: '本机手记' };
     setStorage(STORAGE_KEYS.AUTH, created);
     return { ...created, isDemo: true };
   }
 
-  private emitAuth(user: AuthUser | null): void {
-    for (const listener of this.authListeners) listener(user);
+  private emitAccount(account: Account | null): void {
+    for (const listener of this.accountListeners) listener(account);
   }
 
-  async getCurrentUser(): Promise<AuthUser> {
-    return this.ensureAuth();
+  async getCurrentUser(): Promise<Account> {
+    return this.ensureAccount();
   }
 
-  async signIn(email: string, _password: string): Promise<AuthUser> {
-    const user: AuthUser = { ...this.ensureAuth(), email };
-    setStorage(STORAGE_KEYS.AUTH, { id: user.id, email });
-    this.emitAuth(user);
-    return user;
+  async enterByName(name: string): Promise<Account> {
+    const account: Account = { ...this.ensureAccount(), name: name.trim() || '本机手记' };
+    setStorage(STORAGE_KEYS.AUTH, { id: account.id, name: account.name });
+    this.emitAccount(account);
+    return account;
   }
 
-  async signUp(email: string, password: string): Promise<AuthUser> {
-    return this.signIn(email, password);
-  }
-
-  /** 本地模式没有账号体系：不静默成功,直接说明。 */
-  async signInWithProvider(_provider: string): Promise<void> {
-    throw new RepositoryError('not_implemented', '本地模式无需登录（第三方登录仅云端可用）');
-  }
-
-  /** 本地模式没有云端身份。 */
-  hasSession(): boolean {
-    return false;
+  /** 本机模式不设门：数据就在本机,始终「已选好归属标记」。 */
+  hasAccount(): boolean {
+    return true;
   }
 
   async signOut(): Promise<void> {
@@ -188,12 +180,12 @@ export class MockHealthRepository implements HealthRepository {
     } catch (err) {
       console.warn('[MockHealthRepository] Failed clearing auth key:', err);
     }
-    this.emitAuth(null);
+    this.emitAccount(null);
   }
 
-  onAuthChange(listener: (user: AuthUser | null) => void): () => void {
-    this.authListeners.add(listener);
-    return () => this.authListeners.delete(listener);
+  onAccountChange(listener: (account: Account | null) => void): () => void {
+    this.accountListeners.add(listener);
+    return () => this.accountListeners.delete(listener);
   }
 
   async getProfile(): Promise<UserProfile> {
