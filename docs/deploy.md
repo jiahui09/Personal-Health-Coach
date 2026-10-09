@@ -219,6 +219,9 @@ curl -sI http://你的域名  | head -3   # 301 跳 https
    它建 6 张表：`profiles / weight_records / daily_states / meals / workout_sessions / todos`，
    并对每张表开启 RLS：只强制「行必须带归属标记 `user_id`」——没有 GoTrue、没有密码,
    隔离边界见第 2 节的如实说明。
+   脚本整体**幂等**：曾用旧「账号版」schema 建过的库,把**全文重跑一遍**即可修好——
+   去掉 `references auth.users` 外键（手记名标记不是 auth.users 的行,留着外键任何写入都撞 23503）、
+   补齐 `training_minutes_budget` / `meals.fat_g` / `meals.items` 等列（缺列则立档等录入报 400）。
 3. **Project Settings → API**：复制 `Project URL` 与 `anon public key`
    （Authentication 里什么都不用开：没有 provider、没有确认邮件）。
 
@@ -267,7 +270,9 @@ node scripts/verify-supabase.mjs
 ```
 
 它依次检查：URL 格式 → 网关在线（无 key 被拒）→ **六张表都存在且可读** → **按标记分册**
-（探针标记写一行：`eq.<本标记>` 见得到、`eq.<他标记>` 是空册,用完即删）→ **无标记的行被拒**。
+（探针标记写一行：`eq.<本标记>` 见得到、`eq.<他标记>` 是空册,用完即删）→ **无标记的行被拒**
+→ **写入路径逐条真写**（立档 upsert+合并、每日体征合并、体重/训练/待办插入——写进 → 读出 → 删净；
+若这里报 409/400,多半是老外键或缺列,重跑 `schema.sql` 全文）。
 任何一项 FAIL 都会给出对应处置，全 PASS 才继续部署。
 
 ### 4c. 多端同步（手机 + 电脑共用同一份数据）
@@ -318,7 +323,8 @@ node scripts/verify-supabase.mjs
 | 现象 | 原因 | 处置 |
 |---|---|---|
 | 提示「网络不可达」 | URL 写错或没联网 | 核对 `VITE_SUPABASE_URL` 是否 `https://xxx.supabase.co`（含 https、无尾斜杠） |
-| 提示「标记未获放行」 | 旧策略（`auth.uid() = user_id`）还挂着,或 anon key 不对 | 重跑 `supabase/schema.sql` 的 policy 段（第 2 节自测脚本会替你把关） |
+| 提示「标记未获放行」 | 旧策略（`auth.uid() = user_id`）还挂着,或 anon key 不对 | SQL Editor **全文重跑** `supabase/schema.sql`（幂等,含 policy 段） |
+| **立档等录入动作失败**（toast「体征档之录未成」等） | 老外键 `references auth.users` 未去（撞 23503）,或缺列 `training_minutes_budget`（撞 400） | SQL Editor **全文重跑** `supabase/schema.sql`（幂等,含去外键补丁段）,再跑 4b 自检确认「写入路径」全绿 |
 | 账号门「请求过于频繁」 | 服务端 429（罕见,一般来自网关） | 稍后重试 |
 | 写入报 409 / 冲突 | 同日重复写（如体重同日两条） | 同日体重走的是「更新当日之数」，一般不会冲突；若自定义过 schema 需核对主键 |
 | 看到了不是自己那册的数据 | 手记名写错成了别人的名字,或 `user_id` 过滤失效 | 前者换回自己的手记名；后者停止使用并重跑第 2 节自测与 `schema.sql` 的 policy 段 |

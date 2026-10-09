@@ -3,7 +3,8 @@
 -- 用法：Supabase Dashboard → SQL Editor → 粘贴执行（一次即可）。
 -- 设计原则：
 --   1. 全表 user_id uuid = 归属标记：由手记名确定性派生（前端 accountMarker.ts），
---      同名即同册。RLS 仅强制「行必须有标记」——没有 GoTrue、没有密码,数据不设防：
+--      同名即同册；标记不引 auth.users（本模型没有 GoTrue,引用即写入全败）。
+--      RLS 仅强制「行必须有标记」——没有 GoTrue、没有密码,数据不设防：
 --      拿到 anon key 与某个手记名的人即可读该册。这是产品取舍（数据不值钱,要的是省事），
 --      不是遗漏；若要真正隔离,把策略改回 auth.uid() = user_id 并接回 Supabase Auth。
 --   2. 只存「原始记录」：体重、每日体征、膳食、训练、待办、体征档。
@@ -18,7 +19,7 @@ create extension if not exists pgcrypto;
 
 -- ---------- 1. 体征档（Raw：你告诉我的原始事实） ----------
 create table if not exists public.profiles (
-  user_id        uuid primary key references auth.users (id) on delete cascade,
+  user_id        uuid primary key,
   name           text,
   sex            text check (sex in ('female', 'male', 'other')),
   birth_year     integer check (birth_year between 1900 and 2200),
@@ -32,12 +33,12 @@ create table if not exists public.profiles (
 
 -- ---------- 2. 体重（同日可多条 → 当日代表值取最新一条） ----------
 -- 每日训练时间预算（分钟；工程字段，可空——未设按政策默认 30 分）
-alter table if not exists public.profiles add column if not exists training_minutes_budget smallint
+alter table public.profiles add column if not exists training_minutes_budget smallint
   check (training_minutes_budget is null or (training_minutes_budget >= 10 and training_minutes_budget <= 180));
 
 create table if not exists public.weight_records (
   id          uuid primary key default gen_random_uuid(),
-  user_id     uuid not null references auth.users (id) on delete cascade,
+  user_id     uuid not null,
   measured_on date not null,
   measured_at time,
   weight_kg   numeric(5, 2) not null check (weight_kg > 0 and weight_kg < 500),
@@ -50,7 +51,7 @@ create index if not exists weight_records_user_day_idx
 
 -- ---------- 3. 每日体征（睡眠为判别联合：区间 or 手录眠时） ----------
 create table if not exists public.daily_states (
-  user_id            uuid not null references auth.users (id) on delete cascade,
+  user_id            uuid not null,
   on_date            date not null,
   sleep_start        time,            -- interval 分支
   sleep_wake         time,            -- interval 分支
@@ -69,7 +70,7 @@ create table if not exists public.daily_states (
 -- ---------- 4. 膳食（实际入账；建议膳须确认后才写入） ----------
 create table if not exists public.meals (
   id                 uuid primary key default gen_random_uuid(),
-  user_id            uuid not null references auth.users (id) on delete cascade,
+  user_id            uuid not null,
   eaten_on           date not null,
   eaten_at           time not null default '00:00',
   category           text not null check (category in ('breakfast', 'lunch', 'dinner', 'snack')),
@@ -82,14 +83,14 @@ create table if not exists public.meals (
   created_at         timestamptz not null default now()
 );
 -- 库选增量（可空）：旧记录无此二者时保持 null，读回时如实缺席
-alter table if not exists public.meals add column if not exists fat_g  numeric(6, 1) check (fat_g >= 0);
-alter table if not exists public.meals add column if not exists items  jsonb;
+alter table public.meals add column if not exists fat_g  numeric(6, 1) check (fat_g >= 0);
+alter table public.meals add column if not exists items  jsonb;
 create index if not exists meals_user_day_idx on public.meals (user_id, eaten_on desc);
 
 -- ---------- 5. 训练（类别是结构化事实,抗阻统计只认它） ----------
 create table if not exists public.workout_sessions (
   id               uuid primary key default gen_random_uuid(),
-  user_id          uuid not null references auth.users (id) on delete cascade,
+  user_id          uuid not null,
   performed_on     date not null,
   performed_at     time not null default '00:00',
   title            text not null,
@@ -109,7 +110,7 @@ create index if not exists workout_sessions_user_day_idx
 -- ---------- 6. 今日之事（待办；完成与否只看 status） ----------
 create table if not exists public.todos (
   id                uuid primary key default gen_random_uuid(),
-  user_id           uuid not null references auth.users (id) on delete cascade,
+  user_id           uuid not null,
   on_date           date not null,
   title             text not null,
   estimated_minutes integer check (estimated_minutes is null or estimated_minutes >= 0),
@@ -119,6 +120,19 @@ create table if not exists public.todos (
   created_at        timestamptz not null default now()
 );
 create index if not exists todos_user_day_idx on public.todos (user_id, on_date desc);
+
+-- ---------- 补丁：去 auth.users 外键（老库重跑本脚本即得修） ----------
+-- 旧「账号体系」版建的库带 <table>_user_id_fkey 外键：手记名标记不是 auth.users
+-- 的行,任何写入都撞 23503——立档、录体征、进食、待办等录入动作全部失败。
+-- 本段幂等：新库无此外键时 no-op。
+do $$
+declare t text;
+begin
+  foreach t in array array['profiles', 'weight_records', 'daily_states', 'meals', 'workout_sessions', 'todos']
+  loop
+    execute format('alter table public.%I drop constraint if exists %I', t, t || '_user_id_fkey');
+  end loop;
+end $$;
 
 -- ============================================================
 -- RLS：每张表都只认「本人」

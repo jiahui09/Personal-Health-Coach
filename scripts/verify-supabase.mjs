@@ -142,5 +142,86 @@ for (const table of TABLES) {
   }
 }
 
+// 5) 写入路径：立档与「等录入动作」逐条真写一遍（写进 → 读出 → 删净）
+//    老库若还带 auth.users 外键,这里必撞 409/23503：重跑 supabase/schema.sql 的补丁段
+{
+  const hint = (status) =>
+    status === 409 || status === 400
+      ? '多半是老外键 references auth.users 未去 → SQL Editor 重跑 supabase/schema.sql（含「补丁：去 auth.users 外键」段）后重试'
+      : status === 401 || status === 403
+        ? 'RLS 策略或 anon key 不对 → 重跑 schema.sql 的 policy 段'
+        : status === 404
+          ? '表不存在 → 先跑 supabase/schema.sql'
+          : '';
+
+  /** 写一条探针行、读回验证、用完即删；mergeRow 有值时按 on_conflict 再写一次以验 upsert。 */
+  const writeProbe = async (label, table, row, opts) => {
+    const { onConflict, filter, mergeRow } = opts ?? {};
+    const writeUrl = `${url}/rest/v1/${table}${onConflict ? `?on_conflict=${onConflict}` : ''}`;
+    const writeHeaders = {
+      ...authHeaders,
+      'Content-Type': 'application/json',
+      Prefer: onConflict ? 'resolution=merge-duplicates,return=representation' : 'return=representation',
+    };
+
+    const first = await fetch(writeUrl, { method: 'POST', headers: writeHeaders, body: JSON.stringify(row) })
+      .catch((err) => ({ status: 0, json: async () => ({ message: err.message }) }));
+    if (first.status !== 200 && first.status !== 201) {
+      fail(`${label} 写入`, `HTTP ${first.status}${first.status ? ` · ${JSON.stringify(await first.json().catch(() => ({}))).slice(0, 140)}` : ''} → ${hint(first.status)}`);
+      return;
+    }
+
+    let mergeOk = true;
+    if (mergeRow) {
+      const second = await fetch(writeUrl, { method: 'POST', headers: writeHeaders, body: JSON.stringify(mergeRow) })
+        .catch((err) => ({ status: 0 }));
+      mergeOk = second.status === 200 || second.status === 201;
+      if (!mergeOk) {
+        fail(`${label} upsert 合并`, `HTTP ${second.status} → ${hint(second.status)}`);
+        return;
+      }
+    }
+
+    const seenRows = await fetch(`${url}/rest/v1/${table}?${filter}&select=*`, { headers: authHeaders })
+      .then((r) => r.json().catch(() => null))
+      .catch(() => null);
+    const n = Array.isArray(seenRows) ? seenRows.length : -1;
+
+    const cleanup = await fetch(`${url}/rest/v1/${table}?${filter}`, { method: 'DELETE', headers: authHeaders })
+      .catch(() => ({ ok: false, status: 0 }));
+    const gone = await fetch(`${url}/rest/v1/${table}?${filter}&select=id`, { headers: authHeaders })
+      .then((r) => r.json().catch(() => null))
+      .catch(() => null);
+
+    if (n === 1 && Array.isArray(gone) && gone.length === 0) {
+      pass(`${label} 写入路径`, `${mergeRow ? 'upsert+合并' : 'insert'} → 读 1 行 → 删净（HTTP ${first.status}）`);
+    } else if (n !== 1) {
+      fail(`${label} 写入后读回`, `期望 1 行,实际 ${n} 行（写成功但读不到?查 user_id 过滤与 RLS）`);
+    } else {
+      fail(`${label} 探针未删净`, `DELETE 后仍见 ${Array.isArray(gone) ? gone.length : '?'} 行 → 到表里手工删 user_id=${PROBE_A} 的探针行`);
+    }
+  };
+
+  await writeProbe('立档（profiles）', 'profiles',
+    { user_id: PROBE_A, name: PROBE_NAME, sex: 'male', birth_year: 1990, height_cm: 175, activity_level: 'light', goal: 'maintain', goal_source: 'user' },
+    { onConflict: 'user_id', filter: `user_id=eq.${PROBE_A}&name=eq.${PROBE_NAME}`, mergeRow: { user_id: PROBE_A, name: PROBE_NAME, sex: 'male', birth_year: 1990, height_cm: 176, activity_level: 'light', goal: 'maintain', goal_source: 'user' } });
+
+  await writeProbe('每日体征（daily_states）', 'daily_states',
+    { user_id: PROBE_A, on_date: '1970-01-01', energy: 3 },
+    { onConflict: 'user_id,on_date', filter: `user_id=eq.${PROBE_A}&on_date=eq.1970-01-01`, mergeRow: { user_id: PROBE_A, on_date: '1970-01-01', energy: 3, soreness: 2 } });
+
+  await writeProbe('体重（weight_records）', 'weight_records',
+    { user_id: PROBE_A, measured_on: '1970-01-01', weight_kg: 70 },
+    { filter: `user_id=eq.${PROBE_A}&measured_on=eq.1970-01-01` });
+
+  await writeProbe('训练（workout_sessions）', 'workout_sessions',
+    { user_id: PROBE_A, performed_on: '1970-01-01', title: PROBE_NAME, duration_minutes: 30 },
+    { filter: `user_id=eq.${PROBE_A}&performed_on=eq.1970-01-01&title=eq.${PROBE_NAME}` });
+
+  await writeProbe('待办（todos）', 'todos',
+    { user_id: PROBE_A, on_date: '1970-01-01', title: PROBE_NAME },
+    { filter: `user_id=eq.${PROBE_A}&on_date=eq.1970-01-01&title=eq.${PROBE_NAME}` });
+}
+
 console.log(failed === 0 ? '\n云端配置自检通过：可以填环境变量并部署了。' : `\n${failed} 项未通过：先修好再上线。`);
 process.exit(failed === 0 ? 0 : 1);
