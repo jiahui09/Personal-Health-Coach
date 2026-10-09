@@ -322,9 +322,9 @@ node scripts/verify-supabase.mjs
 
 | 现象 | 原因 | 处置 |
 |---|---|---|
-| 提示「网络不可达」 | URL 写错或没联网 | 核对 `VITE_SUPABASE_URL` 是否 `https://xxx.supabase.co`（含 https、无尾斜杠） |
+| 提示「连不上 Supabase」（账号门）或「连不上云库」（页内 toast） | URL 写错或没联网 | 核对 `VITE_SUPABASE_URL` 是否 `https://xxx.supabase.co`（含 https、无尾斜杠） |
 | 提示「标记未获放行」 | 旧策略（`auth.uid() = user_id`）还挂着,或 anon key 不对 | SQL Editor **全文重跑** `supabase/schema.sql`（幂等,含 policy 段） |
-| **立档等录入动作失败**（toast「体征档之录未成」等） | 老外键 `references auth.users` 未去（撞 23503）,或缺列 `training_minutes_budget`（撞 400） | SQL Editor **全文重跑** `supabase/schema.sql`（幂等,含去外键补丁段）,再跑 4b 自检确认「写入路径」全绿 |
+| **立档等录入动作失败**（toast「体征档之录未成 · 云库结构未更新 · 到 SQL Editor 全文重跑 supabase/schema.sql 后重试」——失败 toast 会直接给出对症处置,不再甩英文码） | 老外键 `references auth.users` 未去（撞 23503）,或缺列 `training_minutes_budget`（撞 400） | 照 toast 所指：SQL Editor **全文重跑** `supabase/schema.sql`（幂等,含去外键补丁段）,再跑 4b 自检确认「写入路径」全绿 |
 | 账号门「请求过于频繁」 | 服务端 429（罕见,一般来自网关） | 稍后重试 |
 | 写入报 409 / 冲突 | 同日重复写（如体重同日两条） | 同日体重走的是「更新当日之数」，一般不会冲突；若自定义过 schema 需核对主键 |
 | 看到了不是自己那册的数据 | 手记名写错成了别人的名字,或 `user_id` 过滤失效 | 前者换回自己的手记名；后者停止使用并重跑第 2 节自测与 `schema.sql` 的 policy 段 |

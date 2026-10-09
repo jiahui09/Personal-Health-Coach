@@ -65,7 +65,7 @@ npm run build      # 生产构建
 
 ## 技术栈与结构
 
-React 19 · TypeScript · Vite · Tailwind CSS v4 · motion（动效）· lucide-react（图标）。连 Supabase 用原生 `fetch` 直连（PostgREST + GoTrue），零新增依赖。
+React 19 · TypeScript · Vite · Tailwind CSS v4 · motion（动效）· lucide-react（图标）。连 Supabase 用原生 `fetch` 直连（PostgREST；手记名即账号,无 GoTrue 会话、无密码），零新增依赖。
 
 ```
 src/
@@ -80,7 +80,7 @@ src/
 
 分层：`UI → HealthRepository（接口）→ 工厂 → 本地 / 云端实现`，换数据源只改工厂一处，页面无感。
 
-**质量门禁**：`npm run lint` · `npm test` · `npm run build`。文字对比度、触控目标、版式与展示口径均由测试锁定。构建产物约 552 KB JS（gzip 约 174 KB）。
+**质量门禁**：`npm run lint` · `npm test` · `npm run build`。文字对比度、触控目标、版式与展示口径均由测试锁定。构建产物约 537 KB JS（gzip 约 170 KB）。
 
 ## 文档
 

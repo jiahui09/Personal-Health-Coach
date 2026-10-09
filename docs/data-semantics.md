@@ -176,7 +176,7 @@ MealRecommendation（计划）-- 不自动进入 --> MealLog（只有「照准�
 |---|---|
 | `npm test`（12 套） | scientificAudit / journalContract / contrast / domain / body / migration / supabaseContract(17) / refreshPolicy / presentationContract / accountGate / mobileNav / layoutContract 全通过 |
 | `npx tsc --noEmit` | 通过 |
-| `npm run build` | 通过（552 KB / gzip 174 KB） |
+| `npm run build` | 通过（537 KB / gzip 170 KB） |
 | 浏览器端到端（收尾前最后跑） | 未建档不出人体数字 → 立档后 BMI/代谢/目标出现 → 食物库搜选回填（明细克数与 `estimatedFatG` 落库）→ 体征由时刻推得 7h20m、异常体重二次确认后**原样保存**并标待核 → 页面无方法学文案、同轴计量列全等 |
 | 版式几何探针 @1440/1023/768/640/390 | 全 PASS（配对行横线同 y、诸头左缘一致、同轴三列全等、溢出 0） |
 | 账号门冒烟 7/7 | 云端无标记必落「手记名」门（单输入、无密码无邮箱无标签）：无「同步到我的账号 / 继续上次合并 / 匿名」、无标记不出正文；写假 URL 下提交 → 就地 `role=alert`「连不上 Supabase」，输入不丢、不放行，且告警出现时输入框与按钮**零偏移**（告警收在按钮之下、卡片顶部锚定）；本机（mock）模式不出账号门 |
